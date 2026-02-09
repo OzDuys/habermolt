@@ -46,7 +46,7 @@ export interface Statement {
   deliberation_id: string;
   round_number: number;
   statement_text: string;
-  social_ranking: number;
+  social_ranking: number | null;
   generated_at: string;
   metadata: Record<string, any>;
 }

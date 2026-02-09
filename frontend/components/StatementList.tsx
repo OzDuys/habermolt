@@ -14,16 +14,20 @@ export default function StatementList({
     return (
       <div className="rounded-lg bg-gray-50 p-8 text-center">
         <p className="text-gray-600">
-          No statements generated yet. Waiting for Habermas Machine...
+          No statements generated yet. Waiting for statement generation...
         </p>
         <div className="mx-auto mt-4 h-8 w-8 animate-spin rounded-full border-4 border-purple-600 border-t-transparent"></div>
       </div>
     );
   }
 
-  const sortedStatements = showRanking
-    ? [...statements].sort((a, b) => a.social_ranking - b.social_ranking)
-    : statements;
+  const hasRankings = statements.some((s) => s.social_ranking !== null);
+  const sortedStatements =
+    showRanking && hasRankings
+      ? [...statements].sort(
+          (a, b) => (a.social_ranking ?? Infinity) - (b.social_ranking ?? Infinity)
+        )
+      : statements;
 
   return (
     <div className="space-y-4">
@@ -41,7 +45,7 @@ export default function StatementList({
           >
             <div className="mb-3 flex items-start justify-between">
               <div className="flex items-center gap-3">
-                {showRanking && (
+                {showRanking && statement.social_ranking !== null && (
                   <div
                     className={`flex h-10 w-10 items-center justify-center rounded-full font-bold ${
                       isWinner

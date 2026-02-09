@@ -122,7 +122,7 @@ async def startup_event():
     """Initialize application on startup."""
     logger.info(f"Starting {settings.PROJECT_NAME} v{settings.VERSION}")
     logger.info(f"Environment: {settings.ENVIRONMENT}")
-    logger.info(f"Habermas Machine: {settings.HABERMAS_NUM_CANDIDATES} candidates, "
+    logger.info(f"Deliberation config: {settings.HABERMAS_NUM_CANDIDATES} candidates, "
                 f"{settings.HABERMAS_NUM_CRITIQUE_ROUNDS} critique rounds")
     logger.info("API documentation available at /docs")
 

@@ -20,7 +20,8 @@ from app.models import (
     HumanFeedback,
     Statement,
 )
-from app.services.habermas_service import habermas_service
+from app.services.statement_service import statement_service
+from app.services.schulze_service import schulze_service
 
 
 class DeliberationService:
@@ -127,7 +128,7 @@ class DeliberationService:
         """
         Check if all opinions are submitted and transition to RANKING stage.
 
-        Triggers Habermas Machine to generate candidate statements.
+        Generates candidate statements for agents to rank.
 
         Args:
             deliberation: The deliberation instance
@@ -144,15 +145,20 @@ class DeliberationService:
             if len(deliberation.opinions) < deliberation.max_citizens:
                 return False
 
-        # All opinions collected - run Habermas Machine
+        # All opinions collected - generate candidate statements
         opinions_text = [opinion.opinion_text for opinion in deliberation.opinions]
 
-        # Run opinion round (async, takes 10-60 seconds)
-        winner, statements = await habermas_service.run_opinion_round(
+        # Generate statements (async, takes 10-60 seconds)
+        # social_ranking is left as None — determined by Schulze after agents rank
+        statements = await statement_service.generate_statements(
             self.db,
             deliberation,
-            opinions_text
+            opinions_text,
+            round_number=0,
         )
+
+        if not statements:
+            raise ValueError("Failed to generate any candidate statements")
 
         # Update deliberation state
         deliberation.stage = DeliberationStage.RANKING
@@ -166,9 +172,9 @@ class DeliberationService:
 
     async def _check_ranking_to_critique_transition(self, deliberation: Deliberation) -> bool:
         """
-        Check if all rankings are submitted and transition to CRITIQUE stage.
+        Check if all rankings are submitted, run Schulze election, then transition to CRITIQUE.
 
-        The winner is already determined by the Habermas Machine (social_ranking=1).
+        Uses agent-submitted rankings (not a reward model) to determine the winner.
 
         Args:
             deliberation: The deliberation instance
@@ -178,18 +184,32 @@ class DeliberationService:
         """
         # Get rankings for current round
         expected_rankings = deliberation.num_citizens
-        current_rankings = self.db.query(Ranking).filter(
+        db_rankings = self.db.query(Ranking).filter(
             and_(
                 Ranking.deliberation_id == deliberation.id,
                 Ranking.round_number == deliberation.current_critique_round
             )
-        ).count()
+        ).all()
 
         # Check if all agents have ranked
-        if current_rankings < expected_rankings:
+        if len(db_rankings) < expected_rankings:
             return False
 
-        # All rankings collected - transition to critique
+        # Get statements for current round
+        statements = self.db.query(Statement).filter(
+            and_(
+                Statement.deliberation_id == deliberation.id,
+                Statement.round_number == deliberation.current_critique_round
+            )
+        ).all()
+
+        # Run Schulze on agent-submitted rankings to determine winner
+        social_rankings = schulze_service.aggregate_from_db(db_rankings, statements)
+
+        # Update statements with social rankings
+        for statement in statements:
+            statement.social_ranking = social_rankings[statement.id]
+
         deliberation.stage = DeliberationStage.CRITIQUE
         deliberation.updated_at = datetime.utcnow()
 
@@ -200,7 +220,7 @@ class DeliberationService:
     async def _check_critique_transition(self, deliberation: Deliberation) -> bool:
         """
         Check if all critiques are submitted and either:
-        - Run another critique round (back to RANKING), or
+        - Generate new statements for another round (back to RANKING), or
         - Conclude the deliberation (to CONCLUDED)
 
         Args:
@@ -224,21 +244,28 @@ class DeliberationService:
 
         # All critiques collected - decide next step
         if deliberation.current_critique_round < deliberation.num_critique_rounds - 1:
-            # Run another critique round
+            # Get previous winning statement and critiques
+            winner = self.get_winning_statement(deliberation)
+            previous_winner_text = winner.statement_text if winner else None
+
             critiques_text = [c.critique_text for c in deliberation.critiques if c.round_number == deliberation.current_critique_round]
             opinions_text = [opinion.opinion_text for opinion in deliberation.opinions]
 
             # Increment round
             deliberation.current_critique_round += 1
 
-            # Run critique round (async, takes 10-60 seconds)
-            winner, statements = await habermas_service.run_critique_round(
+            # Generate new candidate statements using critiques
+            statements = await statement_service.generate_statements(
                 self.db,
                 deliberation,
                 opinions_text,
-                critiques_text,
-                deliberation.current_critique_round
+                round_number=deliberation.current_critique_round,
+                previous_winner=previous_winner_text,
+                critiques=critiques_text,
             )
+
+            if not statements:
+                raise ValueError("Failed to generate any candidate statements")
 
             # Back to ranking stage
             deliberation.stage = DeliberationStage.RANKING

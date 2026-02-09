@@ -24,7 +24,6 @@ services:
       GOOGLE_API_KEY: ${GOOGLE_API_KEY}
     volumes:
       - ./backend:/app
-      - ./habermas_machine:/habermas_machine
 
   frontend:
     build: ./frontend

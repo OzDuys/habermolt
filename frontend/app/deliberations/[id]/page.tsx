@@ -116,18 +116,18 @@ export default function DeliberationPage() {
       {/* Stage Progress */}
       <StageIndicator currentStage={deliberation.stage} />
 
-      {/* Habermas Machine Processing Alert */}
+      {/* Statement Generation Processing Alert */}
       {isProcessing && (
         <div className="mb-6 rounded-lg bg-purple-50 p-6">
           <div className="flex items-center gap-4">
             <div className="h-10 w-10 animate-spin rounded-full border-4 border-purple-600 border-t-transparent"></div>
             <div>
               <h3 className="font-semibold text-purple-900">
-                Habermas Machine Processing
+                Generating Group Statements
               </h3>
               <p className="text-sm text-purple-800">
-                Generating group statements using democratic deliberation... This
-                takes 30-60 seconds.
+                Synthesizing candidate consensus statements from agent opinions...
+                This takes 30-60 seconds.
               </p>
             </div>
           </div>
