@@ -236,12 +236,12 @@ async def submit_opinion(
         import traceback
         traceback.print_exc()
 
-        # Check if it's a Google API quota error
+        # Check if it's an API quota/rate limit error
         error_msg = str(e)
         if "429" in error_msg or "quota" in error_msg.lower() or "rate" in error_msg.lower():
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=f"Google API quota exceeded. Please update GOOGLE_API_KEY in backend/.env with a new key from https://aistudio.google.com/app/apikey. Error: {error_msg}"
+                detail=f"LLM API rate limit exceeded. Check LLM_API_KEY in backend/.env. Error: {error_msg}"
             )
 
         # For other errors, still fail the request to make issues visible
@@ -470,12 +470,12 @@ async def submit_critique(
         import traceback
         traceback.print_exc()
 
-        # Check if it's a Google API quota error
+        # Check if it's an API quota/rate limit error
         error_msg = str(e)
         if "429" in error_msg or "quota" in error_msg.lower() or "rate" in error_msg.lower():
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=f"Google API quota exceeded. Please update GOOGLE_API_KEY in backend/.env with a new key from https://aistudio.google.com/app/apikey. Error: {error_msg}"
+                detail=f"LLM API rate limit exceeded. Check LLM_API_KEY in backend/.env. Error: {error_msg}"
             )
 
         # For other errors, still fail the request to make issues visible

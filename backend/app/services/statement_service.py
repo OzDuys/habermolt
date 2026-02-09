@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models import Deliberation, Statement
-from app.services.gemini_client import GeminiClient
+from app.services.gemini_client import LLMClient
 
 logger = logging.getLogger(__name__)
 
@@ -139,7 +139,7 @@ class StatementService:
     def __init__(self):
         self.num_candidates = settings.HABERMAS_NUM_CANDIDATES
         self.num_retries = settings.HABERMAS_NUM_RETRIES
-        self.client = GeminiClient()
+        self.client = LLMClient()
 
     def _generate_single_statement(
         self,
