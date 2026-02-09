@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { api } from "@/lib/api";
-import type { DeliberationDetail, DeliberationResult } from "@/lib/types";
+import type { DeliberationDetail } from "@/lib/types";
+import ReactMarkdown from "react-markdown";
 import StageIndicator from "@/components/StageIndicator";
 import OpinionList from "@/components/OpinionList";
 import StatementList from "@/components/StatementList";
@@ -17,7 +18,7 @@ export default function DeliberationPage() {
   const id = params.id as string;
 
   const [data, setData] = useState<DeliberationDetail | null>(null);
-  const [result, setResult] = useState<DeliberationResult | null>(null);
+  const [result, setResult] = useState<DeliberationDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -289,73 +290,78 @@ export default function DeliberationPage() {
         )}
 
         {/* Finalized Stage */}
-        {deliberation.stage === "finalized" && result && (
-          <>
-            <section>
-              <h2 className="mb-4 text-2xl font-bold text-gray-900">
-                Final Consensus
-              </h2>
-              <div className="rounded-lg border-2 border-green-500 bg-green-50 p-8">
-                <div className="mb-3 flex items-center gap-2">
-                  <svg
-                    className="h-6 w-6 text-green-600"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M5 13l4 4L19 7"
-                    />
-                  </svg>
-                  <span className="font-semibold text-green-900">
-                    Deliberation Complete
-                  </span>
-                </div>
-                <p className="text-lg text-gray-800">
-                  {result.final_statement.statement_text}
-                </p>
-              </div>
-            </section>
+        {deliberation.stage === "finalized" && result && (() => {
+          const finalStatement = result.statements.find((s) => s.social_ranking === 1);
+          return (
+            <>
+              {finalStatement && (
+                <section>
+                  <h2 className="mb-4 text-2xl font-bold text-gray-900">
+                    Final Consensus
+                  </h2>
+                  <div className="rounded-lg border-2 border-green-500 bg-green-50 p-8">
+                    <div className="mb-3 flex items-center gap-2">
+                      <svg
+                        className="h-6 w-6 text-green-600"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M5 13l4 4L19 7"
+                        />
+                      </svg>
+                      <span className="font-semibold text-green-900">
+                        Deliberation Complete
+                      </span>
+                    </div>
+                    <div className="prose max-w-none text-lg text-gray-800">
+                      <ReactMarkdown>{finalStatement.statement_text}</ReactMarkdown>
+                    </div>
+                  </div>
+                </section>
+              )}
 
-            <section>
-              <h2 className="mb-4 text-2xl font-bold text-gray-900">
-                Human Feedback
-              </h2>
-              <HumanFeedbackDisplay feedback={result.human_feedback} />
-            </section>
-
-            {result.all_critiques.length > 0 && (
               <section>
                 <h2 className="mb-4 text-2xl font-bold text-gray-900">
-                  All Critiques
+                  Human Feedback
                 </h2>
-                <CritiqueDisplay critiques={result.all_critiques} />
+                <HumanFeedbackDisplay feedback={result.human_feedback} />
               </section>
-            )}
 
-            {result.all_statements.length > 1 && (
+              {result.critiques.length > 0 && (
+                <section>
+                  <h2 className="mb-4 text-2xl font-bold text-gray-900">
+                    All Critiques
+                  </h2>
+                  <CritiqueDisplay critiques={result.critiques} />
+                </section>
+              )}
+
+              {result.statements.length > 1 && (
+                <section>
+                  <h2 className="mb-4 text-2xl font-bold text-gray-900">
+                    All Statements
+                  </h2>
+                  <StatementList
+                    statements={result.statements}
+                    showRanking={true}
+                  />
+                </section>
+              )}
+
               <section>
                 <h2 className="mb-4 text-2xl font-bold text-gray-900">
-                  All Statements
+                  Original Opinions
                 </h2>
-                <StatementList
-                  statements={result.all_statements}
-                  showRanking={true}
-                />
+                <OpinionList opinions={result.opinions} />
               </section>
-            )}
-
-            <section>
-              <h2 className="mb-4 text-2xl font-bold text-gray-900">
-                Original Opinions
-              </h2>
-              <OpinionList opinions={result.all_opinions} />
-            </section>
-          </>
-        )}
+            </>
+          );
+        })()}
       </div>
     </div>
   );

@@ -221,6 +221,10 @@ async def submit_opinion(
     # Refresh deliberation to get latest opinions
     db.refresh(deliberation)
 
+    # Update num_citizens to reflect actual participant count
+    deliberation.num_citizens = len(deliberation.opinions)
+    db.commit()
+
     # Run transition check - this will block during Habermas Machine (30-60s)
     print(f"[DEBUG] Checking transition: {len(deliberation.opinions)} opinions, max {deliberation.max_citizens}")
     try:
@@ -576,6 +580,43 @@ async def submit_feedback(
     background_tasks.add_task(check_transition)
 
     return HumanFeedbackResponse.from_orm(feedback)
+
+
+@router.post(
+    "/{deliberation_id}/reprocess",
+    response_model=DeliberationResponse,
+    summary="Retry state transition for a stuck deliberation"
+)
+async def reprocess_deliberation(
+    deliberation_id: UUID,
+    db: Session = Depends(get_db)
+):
+    """
+    Re-trigger the state transition for a deliberation that got stuck
+    (e.g. due to a failed Habermas Machine call).
+    """
+    deliberation = db.query(Deliberation).filter(Deliberation.id == deliberation_id).first()
+
+    if not deliberation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Deliberation not found"
+        )
+
+    try:
+        service = DeliberationService(db)
+        result = await service.check_and_transition_state(deliberation)
+        print(f"[REPROCESS] Transition result: {result}, new stage: {deliberation.stage}")
+    except Exception as e:
+        print(f"[REPROCESS] Error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Reprocessing failed: {str(e)}"
+        )
+
+    return DeliberationResponse.from_orm(deliberation)
 
 
 @router.get(

@@ -43,6 +43,18 @@ class DeliberationListResponse(BaseModel):
     total: int
 
 
+class AgentResponseMinimal(BaseModel):
+    """Minimal agent response for deliberation details."""
+    id: UUID
+    name: str
+    human_name: str
+    created_at: datetime
+    last_active_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 class OpinionSubmitRequest(BaseModel):
     """Request schema for submitting an opinion."""
     opinion_text: str = Field(..., min_length=10, max_length=5000, description="Agent's opinion on the question")
@@ -55,6 +67,7 @@ class OpinionResponse(BaseModel):
     agent_id: UUID
     opinion_text: str
     submitted_at: datetime
+    agent: Optional[AgentResponseMinimal] = None
 
     class Config:
         from_attributes = True
@@ -109,6 +122,7 @@ class CritiqueResponse(BaseModel):
     round_number: int
     critique_text: str
     submitted_at: datetime
+    agent: Optional[AgentResponseMinimal] = None
 
     class Config:
         from_attributes = True
@@ -129,18 +143,7 @@ class HumanFeedbackResponse(BaseModel):
     agreement_level: int
     feedback_text: Optional[str]
     submitted_at: datetime
-
-    class Config:
-        from_attributes = True
-
-
-class AgentResponseMinimal(BaseModel):
-    """Minimal agent response for deliberation details."""
-    id: UUID
-    name: str
-    human_name: str
-    created_at: datetime
-    last_active_at: datetime
+    agent: Optional[AgentResponseMinimal] = None
 
     class Config:
         from_attributes = True

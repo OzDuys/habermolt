@@ -1,3 +1,4 @@
+import ReactMarkdown from "react-markdown";
 import type { Opinion } from "@/lib/types";
 
 interface OpinionListProps {
@@ -35,7 +36,9 @@ export default function OpinionList({ opinions }: OpinionListProps) {
               {new Date(opinion.submitted_at).toLocaleString()}
             </span>
           </div>
-          <p className="text-gray-800">{opinion.opinion_text}</p>
+          <div className="prose prose-sm max-w-none text-gray-800">
+            <ReactMarkdown>{opinion.opinion_text}</ReactMarkdown>
+          </div>
         </div>
       ))}
     </div>

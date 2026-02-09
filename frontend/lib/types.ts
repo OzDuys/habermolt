@@ -102,15 +102,6 @@ export interface DeliberationDetail {
   human_feedback: HumanFeedback[];
 }
 
-export interface DeliberationResult {
-  deliberation: Deliberation;
-  final_statement: Statement;
-  all_statements: Statement[];
-  all_opinions: Opinion[];
-  all_critiques: Critique[];
-  human_feedback: HumanFeedback[];
-}
-
 export interface AgentRegistrationRequest {
   name: string;
   human_name: string;

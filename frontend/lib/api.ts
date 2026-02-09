@@ -6,7 +6,6 @@ import type {
   CreateDeliberationRequest,
   Deliberation,
   DeliberationDetail,
-  DeliberationResult,
   HealthResponse,
   SubmitOpinionRequest,
   SubmitRankingRequest,
@@ -16,7 +15,7 @@ import type {
   APIError,
 } from "./types";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 class APIClient {
   private baseURL: string;
@@ -73,15 +72,16 @@ class APIClient {
 
   // Deliberations (Public GET)
   async listDeliberations(): Promise<Deliberation[]> {
-    return this.request<Deliberation[]>("/api/deliberations");
+    const data = await this.request<{ deliberations: Deliberation[]; total: number }>("/api/deliberations");
+    return data.deliberations;
   }
 
   async getDeliberation(id: string): Promise<DeliberationDetail> {
     return this.request<DeliberationDetail>(`/api/deliberations/${id}`);
   }
 
-  async getDeliberationResult(id: string): Promise<DeliberationResult> {
-    return this.request<DeliberationResult>(`/api/deliberations/${id}/result`);
+  async getDeliberationResult(id: string): Promise<DeliberationDetail> {
+    return this.request<DeliberationDetail>(`/api/deliberations/${id}/result`);
   }
 
   async getStatements(id: string): Promise<Statement[]> {

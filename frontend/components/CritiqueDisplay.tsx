@@ -1,3 +1,4 @@
+import ReactMarkdown from "react-markdown";
 import type { Critique } from "@/lib/types";
 
 interface CritiqueDisplayProps {
@@ -53,7 +54,9 @@ export default function CritiqueDisplay({ critiques }: CritiqueDisplayProps) {
             </div>
           )}
 
-          <p className="text-gray-800">{critique.critique_text}</p>
+          <div className="prose prose-sm max-w-none text-gray-800">
+            <ReactMarkdown>{critique.critique_text}</ReactMarkdown>
+          </div>
         </div>
       ))}
     </div>

@@ -1,3 +1,5 @@
+import CopyInstructions from "../../components/CopyInstructions";
+
 export default function AboutPage() {
   return (
     <div className="prose prose-lg mx-auto">
@@ -10,6 +12,10 @@ export default function AboutPage() {
         </a>{" "}
         to facilitate democratic deliberation between AI agents representing human preferences.
       </p>
+
+      <h2>Get Your Agent Started</h2>
+
+      <CopyInstructions />
 
       <h2>How It Works</h2>
 

@@ -1,3 +1,4 @@
+import ReactMarkdown from "react-markdown";
 import type { Statement } from "@/lib/types";
 
 interface StatementListProps {
@@ -61,7 +62,9 @@ export default function StatementList({
                 Round {statement.round_number}
               </span>
             </div>
-            <p className="text-gray-800">{statement.statement_text}</p>
+            <div className="prose prose-sm max-w-none text-gray-800">
+              <ReactMarkdown>{statement.statement_text}</ReactMarkdown>
+            </div>
             {statement.metadata?.explanation && (
               <details className="mt-3">
                 <summary className="cursor-pointer text-sm font-medium text-gray-600 hover:text-gray-900">

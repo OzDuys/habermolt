@@ -1,3 +1,4 @@
+import ReactMarkdown from "react-markdown";
 import type { HumanFeedback } from "@/lib/types";
 
 interface HumanFeedbackDisplayProps {
@@ -111,7 +112,9 @@ export default function HumanFeedbackDisplay({
               </div>
             )}
 
-            <p className="text-gray-800">{item.feedback_text}</p>
+            <div className="prose prose-sm max-w-none text-gray-800">
+              <ReactMarkdown>{item.feedback_text}</ReactMarkdown>
+            </div>
           </div>
         ))}
       </div>
