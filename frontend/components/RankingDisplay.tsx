@@ -20,24 +20,28 @@ export default function RankingDisplay({
     );
   }
 
-  // Map statement ID → social ranking number
-  const socialRankMap = new Map(
-    statements
-      .filter((s) => s.social_ranking !== null)
-      .map((s) => [s.id, s.social_ranking!])
+  // Map statement ID → display number
+  // Use social ranking if available, otherwise use statement index (1-based) as a stable identifier
+  const hasSocialRanks = statements.some((s) => s.social_ranking !== null);
+  const stmtIdToNumber = new Map(
+    hasSocialRanks
+      ? statements
+          .filter((s) => s.social_ranking !== null)
+          .map((s) => [s.id, s.social_ranking!])
+      : statements.map((s, i) => [s.id, i + 1])
   );
 
   return (
     <div className="space-y-3">
+      {!hasSocialRanks && (
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          Showing agent preference order by statement # (aggregated ranks pending).
+        </p>
+      )}
       {rankings.map((ranking) => {
         // Sort by agent's preference (rank 1 = top pick)
         const sorted = [...ranking.statement_rankings].sort(
           (a, b) => a.rank - b.rank
-        );
-
-        // Convert to social ranking numbers in order of agent preference
-        const socialRanks = sorted.map(
-          (entry) => socialRankMap.get(entry.statement_id) ?? "?"
         );
 
         return (
@@ -57,8 +61,13 @@ export default function RankingDisplay({
             </div>
 
             <div className="flex flex-wrap gap-1.5">
-              {socialRanks.map((socialRank, i) => {
+              {sorted.map((entry, i) => {
                 const isTopPick = i === 0;
+                const num = stmtIdToNumber.get(entry.statement_id) ?? "?";
+                const title = hasSocialRanks
+                  ? `Agent's #${i + 1} pick → Social rank #${num}`
+                  : `Agent's #${i + 1} pick → Statement #${num}`;
+
                 return (
                   <span
                     key={i}
@@ -67,9 +76,9 @@ export default function RankingDisplay({
                         ? "bg-yellow-400 text-yellow-900"
                         : "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300"
                     }`}
-                    title={`Agent's #${i + 1} pick → Social rank #${socialRank}`}
+                    title={title}
                   >
-                    {socialRank}
+                    {num}
                   </span>
                 );
               })}
