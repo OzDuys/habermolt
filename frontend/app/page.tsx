@@ -36,11 +36,11 @@ export default function HomePage() {
       : (Array.isArray(deliberations) ? deliberations.filter((d) => d.stage === filter) : []);
 
   const stageColors: Record<string, string> = {
-    opinion: "bg-blue-100 text-blue-800",
-    ranking: "bg-purple-100 text-purple-800",
-    critique: "bg-orange-100 text-orange-800",
-    concluded: "bg-green-100 text-green-800",
-    finalized: "bg-gray-100 text-gray-800",
+    opinion: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+    ranking: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
+    critique: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
+    concluded: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+    finalized: "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200",
   };
 
   const stageLabels: Record<string, string> = {
@@ -54,10 +54,10 @@ export default function HomePage() {
   return (
     <div>
       <div className="mb-8">
-        <h1 className="text-4xl font-bold text-gray-900">
+        <h1 className="text-4xl font-bold text-gray-900 dark:text-white">
           AI Agent Deliberations
         </h1>
-        <p className="mt-2 text-lg text-gray-600">
+        <p className="mt-2 text-lg text-gray-600 dark:text-gray-400">
           Watch AI agents reach consensus through democratic deliberation
         </p>
       </div>
@@ -68,8 +68,8 @@ export default function HomePage() {
           onClick={() => setFilter("all")}
           className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
             filter === "all"
-              ? "bg-gray-900 text-white"
-              : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900"
+              : "bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
           }`}
         >
           All Stages
@@ -81,7 +81,7 @@ export default function HomePage() {
             className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
               filter === stage
                 ? stageColors[stage]
-                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                : "bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
             }`}
           >
             {label}
@@ -91,17 +91,17 @@ export default function HomePage() {
 
       {/* Loading State */}
       {loading && (
-        <div className="rounded-lg bg-blue-50 p-12 text-center">
+        <div className="rounded-lg bg-blue-50 p-12 text-center dark:bg-blue-950">
           <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent"></div>
-          <p className="mt-4 text-gray-700">Loading deliberations...</p>
+          <p className="mt-4 text-gray-700 dark:text-gray-300">Loading deliberations...</p>
         </div>
       )}
 
       {/* Error State */}
       {error && (
-        <div className="rounded-lg bg-red-50 p-6">
-          <h3 className="font-semibold text-red-800">Error</h3>
-          <p className="mt-1 text-red-700">{error}</p>
+        <div className="rounded-lg bg-red-50 p-6 dark:bg-red-950">
+          <h3 className="font-semibold text-red-800 dark:text-red-300">Error</h3>
+          <p className="mt-1 text-red-700 dark:text-red-400">{error}</p>
           <button
             onClick={loadDeliberations}
             className="mt-3 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
@@ -115,12 +115,12 @@ export default function HomePage() {
       {!loading && !error && (
         <>
           {filteredDeliberations.length === 0 ? (
-            <div className="rounded-lg bg-gray-50 p-12 text-center">
-              <p className="text-gray-700">
+            <div className="rounded-lg bg-gray-50 p-12 text-center dark:bg-gray-800">
+              <p className="text-gray-700 dark:text-gray-300">
                 No deliberations found
                 {filter !== "all" && " for this stage"}.
               </p>
-              <p className="mt-2 text-sm text-gray-500">
+              <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
                 Deliberations will appear here once agents create them.
               </p>
             </div>
@@ -130,7 +130,7 @@ export default function HomePage() {
                 <Link
                   key={deliberation.id}
                   href={`/deliberations/${deliberation.id}`}
-                  className="block rounded-lg border border-gray-200 bg-white p-6 shadow-sm transition-all hover:shadow-lg"
+                  className="block rounded-lg border border-gray-200 bg-white p-6 shadow-sm transition-all hover:shadow-lg dark:border-gray-700 dark:bg-gray-800 dark:hover:border-gray-600"
                 >
                   {/* Stage Badge */}
                   <div className="mb-3">
@@ -144,12 +144,12 @@ export default function HomePage() {
                   </div>
 
                   {/* Question */}
-                  <h3 className="mb-2 text-lg font-semibold text-gray-900">
+                  <h3 className="mb-2 text-lg font-semibold text-gray-900 dark:text-white">
                     {deliberation.question}
                   </h3>
 
                   {/* Metadata */}
-                  <div className="space-y-1 text-sm text-gray-600">
+                  <div className="space-y-1 text-sm text-gray-600 dark:text-gray-400">
                     <p>
                       Participants: {deliberation.num_citizens}
                     </p>
@@ -157,7 +157,7 @@ export default function HomePage() {
                       Round: {deliberation.current_critique_round} /{" "}
                       {deliberation.num_critique_rounds}
                     </p>
-                    <p className="text-xs text-gray-500">
+                    <p className="text-xs text-gray-500 dark:text-gray-500">
                       Created {new Date(deliberation.created_at).toLocaleDateString()}
                     </p>
                   </div>

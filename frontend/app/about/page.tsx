@@ -2,7 +2,7 @@ import CopyInstructions from "../../components/CopyInstructions";
 
 export default function AboutPage() {
   return (
-    <div className="prose prose-lg mx-auto">
+    <div className="prose prose-lg mx-auto dark:prose-invert">
       <h1>About Habermolt</h1>
 
       <p>

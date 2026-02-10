@@ -47,21 +47,21 @@ export default function SignInPage() {
 
   return (
     <div className="mx-auto max-w-md py-12">
-      <h1 className="mb-8 text-center text-3xl font-bold text-gray-900">
+      <h1 className="mb-8 text-center text-3xl font-bold text-gray-900 dark:text-white">
         Sign In
       </h1>
 
       {error && (
-        <div className="mb-4 rounded-lg bg-red-50 p-4 text-sm text-red-700">
+        <div className="mb-4 rounded-lg bg-red-50 p-4 text-sm text-red-700 dark:bg-red-950 dark:text-red-400">
           {error}
         </div>
       )}
 
       {needsVerification && (
-        <div className="mb-4 rounded-lg bg-yellow-50 p-4 text-sm text-yellow-800">
+        <div className="mb-4 rounded-lg bg-yellow-50 p-4 text-sm text-yellow-800 dark:bg-yellow-950 dark:text-yellow-300">
           <p className="mb-2">Your email is not verified yet. Check your inbox for a verification link.</p>
           {resendStatus === "sent" ? (
-            <p className="font-medium text-green-700">Verification email sent!</p>
+            <p className="font-medium text-green-700 dark:text-green-400">Verification email sent!</p>
           ) : (
             <button
               onClick={handleResendVerification}
@@ -76,7 +76,7 @@ export default function SignInPage() {
 
       <button
         onClick={handleGoogleSignIn}
-        className="mb-6 flex w-full items-center justify-center gap-3 rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+        className="mb-6 flex w-full items-center justify-center gap-3 rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
       >
         <svg className="h-5 w-5" viewBox="0 0 24 24">
           <path
@@ -100,16 +100,16 @@ export default function SignInPage() {
       </button>
 
       <div className="mb-6 flex items-center gap-4">
-        <div className="h-px flex-1 bg-gray-300" />
-        <span className="text-sm text-gray-500">or</span>
-        <div className="h-px flex-1 bg-gray-300" />
+        <div className="h-px flex-1 bg-gray-300 dark:bg-gray-600" />
+        <span className="text-sm text-gray-500 dark:text-gray-400">or</span>
+        <div className="h-px flex-1 bg-gray-300 dark:bg-gray-600" />
       </div>
 
       <form onSubmit={handleEmailSignIn} className="space-y-4">
         <div>
           <label
             htmlFor="email"
-            className="block text-sm font-medium text-gray-700"
+            className="block text-sm font-medium text-gray-700 dark:text-gray-300"
           >
             Email
           </label>
@@ -119,14 +119,14 @@ export default function SignInPage() {
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
           />
         </div>
 
         <div>
           <label
             htmlFor="password"
-            className="block text-sm font-medium text-gray-700"
+            className="block text-sm font-medium text-gray-700 dark:text-gray-300"
           >
             Password
           </label>
@@ -136,20 +136,20 @@ export default function SignInPage() {
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
           />
         </div>
 
         <button
           type="submit"
           disabled={loading}
-          className="w-full rounded-lg bg-gray-900 px-4 py-3 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+          className="w-full rounded-lg bg-gray-900 px-4 py-3 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200"
         >
           {loading ? "Signing in..." : "Sign In"}
         </button>
       </form>
 
-      <p className="mt-6 text-center text-sm text-gray-600">
+      <p className="mt-6 text-center text-sm text-gray-600 dark:text-gray-400">
         Don&apos;t have an account?{" "}
         <Link
           href="/sign-up"

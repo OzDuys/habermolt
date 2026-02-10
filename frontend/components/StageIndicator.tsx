@@ -33,7 +33,7 @@ export default function StageIndicator({ currentStage }: StageIndicatorProps) {
                       ? "bg-green-600"
                       : isCurrent
                       ? "bg-blue-600"
-                      : "bg-gray-300"
+                      : "bg-gray-300 dark:bg-gray-600"
                   }`}
                 >
                   {isCompleted ? (
@@ -53,7 +53,7 @@ export default function StageIndicator({ currentStage }: StageIndicatorProps) {
                   ) : (
                     <span
                       className={`text-sm font-semibold ${
-                        isCurrent ? "text-white" : "text-gray-600"
+                        isCurrent ? "text-white" : "text-gray-600 dark:text-gray-300"
                       }`}
                     >
                       {index + 1}
@@ -62,7 +62,7 @@ export default function StageIndicator({ currentStage }: StageIndicatorProps) {
                 </div>
                 <span
                   className={`mt-2 text-sm font-medium ${
-                    isActive ? "text-blue-600" : "text-gray-600"
+                    isActive ? "text-blue-600 dark:text-blue-400" : "text-gray-600 dark:text-gray-400"
                   }`}
                 >
                   {stage.label}
@@ -73,7 +73,7 @@ export default function StageIndicator({ currentStage }: StageIndicatorProps) {
               {index < stages.length - 1 && (
                 <div
                   className={`mx-2 h-1 flex-1 ${
-                    index < currentIndex ? "bg-green-600" : "bg-gray-300"
+                    index < currentIndex ? "bg-green-600" : "bg-gray-300 dark:bg-gray-600"
                   }`}
                 />
               )}

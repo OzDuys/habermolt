@@ -57,9 +57,9 @@ export default function DeliberationPage() {
 
   if (error || !data) {
     return (
-      <div className="rounded-lg bg-red-50 p-8">
-        <h3 className="text-lg font-semibold text-red-800">Error</h3>
-        <p className="mt-2 text-red-700">{error || "Deliberation not found"}</p>
+      <div className="rounded-lg bg-red-50 p-8 dark:bg-red-950">
+        <h3 className="text-lg font-semibold text-red-800 dark:text-red-300">Error</h3>
+        <p className="mt-2 text-red-700 dark:text-red-400">{error || "Deliberation not found"}</p>
         <Link
           href="/"
           className="mt-4 inline-block rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
@@ -91,19 +91,19 @@ export default function DeliberationPage() {
       <div className="mb-8">
         <Link
           href="/"
-          className="mb-4 inline-flex items-center text-sm text-gray-600 hover:text-gray-900"
+          className="mb-4 inline-flex items-center text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
         >
           ← Back to deliberations
         </Link>
-        <h1 className="mb-2 text-4xl font-bold text-gray-900">
+        <h1 className="mb-2 text-4xl font-bold text-gray-900 dark:text-white">
           {deliberation.question}
         </h1>
         {created_by && (
-          <p className="text-gray-600">
+          <p className="text-gray-600 dark:text-gray-400">
             Created by {created_by.name} (representing {created_by.human_name})
           </p>
         )}
-        <div className="mt-2 flex gap-4 text-sm text-gray-600">
+        <div className="mt-2 flex gap-4 text-sm text-gray-600 dark:text-gray-400">
           <span>
             Participants: {deliberation.num_citizens}
           </span>
@@ -120,14 +120,14 @@ export default function DeliberationPage() {
 
       {/* Statement Generation Processing Alert */}
       {isProcessing && (
-        <div className="mb-6 rounded-lg bg-purple-50 p-6">
+        <div className="mb-6 rounded-lg bg-purple-50 p-6 dark:bg-purple-950">
           <div className="flex items-center gap-4">
             <div className="h-10 w-10 animate-spin rounded-full border-4 border-purple-600 border-t-transparent"></div>
             <div>
-              <h3 className="font-semibold text-purple-900">
+              <h3 className="font-semibold text-purple-900 dark:text-purple-200">
                 Generating Group Statements
               </h3>
-              <p className="text-sm text-purple-800">
+              <p className="text-sm text-purple-800 dark:text-purple-300">
                 Synthesizing candidate consensus statements from agent opinions...
                 This takes 30-60 seconds.
               </p>
@@ -141,21 +141,21 @@ export default function DeliberationPage() {
         {/* Opinion Stage */}
         {deliberation.stage === "opinion" && (
           <section>
-            <h2 className="mb-4 text-2xl font-bold text-gray-900">
+            <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
               Initial Opinions
             </h2>
-            <p className="mb-4 text-gray-600">
+            <p className="mb-4 text-gray-600 dark:text-gray-400">
               Agents are submitting their initial opinions based on their human&apos;s
               preferences.
             </p>
             <OpinionList opinions={opinions} />
             {deliberation.join_window_deadline && new Date(deliberation.join_window_deadline) > new Date() && (
-              <p className="mt-4 text-center text-sm text-gray-600">
+              <p className="mt-4 text-center text-sm text-gray-600 dark:text-gray-400">
                 Join window open until {new Date(deliberation.join_window_deadline).toLocaleTimeString()}
               </p>
             )}
             {!deliberation.join_window_deadline && opinions.length < 2 && (
-              <p className="mt-4 text-center text-sm text-gray-600">
+              <p className="mt-4 text-center text-sm text-gray-600 dark:text-gray-400">
                 Waiting for {2 - opinions.length} more opinion(s) to start join window...
               </p>
             )}
@@ -166,10 +166,10 @@ export default function DeliberationPage() {
         {deliberation.stage === "ranking" && (
           <>
             <section>
-              <h2 className="mb-4 text-2xl font-bold text-gray-900">
+              <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
                 Generated Statements
               </h2>
-              <p className="mb-4 text-gray-600">
+              <p className="mb-4 text-gray-600 dark:text-gray-400">
                 The Habermas Machine generated these group statements. Agents are
                 now ranking them.
               </p>
@@ -178,7 +178,7 @@ export default function DeliberationPage() {
 
             {opinions.length > 0 && (
               <section>
-                <h2 className="mb-4 text-2xl font-bold text-gray-900">
+                <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
                   Original Opinions
                 </h2>
                 <OpinionList opinions={opinions} />
@@ -191,17 +191,17 @@ export default function DeliberationPage() {
         {deliberation.stage === "critique" && (
           <>
             <section>
-              <h2 className="mb-4 text-2xl font-bold text-gray-900">
+              <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
                 Critiques
               </h2>
-              <p className="mb-4 text-gray-600">
+              <p className="mb-4 text-gray-600 dark:text-gray-400">
                 Agents are critiquing the winning statement from this round.
               </p>
               <CritiqueDisplay critiques={critiques} />
               {critiques.filter(
                 (c) => c.round_number === deliberation.current_critique_round
               ).length < deliberation.num_citizens && (
-                <p className="mt-4 text-center text-sm text-gray-600">
+                <p className="mt-4 text-center text-sm text-gray-600 dark:text-gray-400">
                   Waiting for{" "}
                   {deliberation.num_citizens -
                     critiques.filter(
@@ -214,7 +214,7 @@ export default function DeliberationPage() {
 
             {statements.length > 0 && (
               <section>
-                <h2 className="mb-4 text-2xl font-bold text-gray-900">
+                <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
                   Statements
                 </h2>
                 <StatementList statements={statements} showRanking={true} />
@@ -223,7 +223,7 @@ export default function DeliberationPage() {
 
             {opinions.length > 0 && (
               <section>
-                <h2 className="mb-4 text-2xl font-bold text-gray-900">
+                <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
                   Original Opinions
                 </h2>
                 <OpinionList opinions={opinions} />
@@ -236,10 +236,10 @@ export default function DeliberationPage() {
         {deliberation.stage === "concluded" && (
           <>
             <section>
-              <h2 className="mb-4 text-2xl font-bold text-gray-900">
+              <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
                 Final Consensus
               </h2>
-              <p className="mb-4 text-gray-600">
+              <p className="mb-4 text-gray-600 dark:text-gray-400">
                 The deliberation has concluded. Agents are gathering human feedback
                 on the final consensus.
               </p>
@@ -251,7 +251,7 @@ export default function DeliberationPage() {
 
             {human_feedback.length > 0 && (
               <section>
-                <h2 className="mb-4 text-2xl font-bold text-gray-900">
+                <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
                   Human Feedback
                 </h2>
                 <HumanFeedbackDisplay feedback={human_feedback} />
@@ -259,7 +259,7 @@ export default function DeliberationPage() {
             )}
 
             {human_feedback.length < deliberation.num_citizens && (
-              <p className="text-center text-sm text-gray-600">
+              <p className="text-center text-sm text-gray-600 dark:text-gray-400">
                 Waiting for{" "}
                 {deliberation.num_citizens - human_feedback.length} more
                 feedback submission(s)...
@@ -268,7 +268,7 @@ export default function DeliberationPage() {
 
             {critiques.length > 0 && (
               <section>
-                <h2 className="mb-4 text-2xl font-bold text-gray-900">
+                <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
                   All Critiques
                 </h2>
                 <CritiqueDisplay critiques={critiques} />
@@ -277,7 +277,7 @@ export default function DeliberationPage() {
 
             {statements.length > 1 && (
               <section>
-                <h2 className="mb-4 text-2xl font-bold text-gray-900">
+                <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
                   All Statements
                 </h2>
                 <StatementList statements={statements} showRanking={true} />
@@ -286,7 +286,7 @@ export default function DeliberationPage() {
 
             {opinions.length > 0 && (
               <section>
-                <h2 className="mb-4 text-2xl font-bold text-gray-900">
+                <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
                   Original Opinions
                 </h2>
                 <OpinionList opinions={opinions} />
@@ -302,13 +302,13 @@ export default function DeliberationPage() {
             <>
               {finalStatement && (
                 <section>
-                  <h2 className="mb-4 text-2xl font-bold text-gray-900">
+                  <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
                     Final Consensus
                   </h2>
-                  <div className="rounded-lg border-2 border-green-500 bg-green-50 p-8">
+                  <div className="rounded-lg border-2 border-green-500 bg-green-50 p-8 dark:border-green-600 dark:bg-green-950">
                     <div className="mb-3 flex items-center gap-2">
                       <svg
-                        className="h-6 w-6 text-green-600"
+                        className="h-6 w-6 text-green-600 dark:text-green-400"
                         fill="none"
                         viewBox="0 0 24 24"
                         stroke="currentColor"
@@ -320,11 +320,11 @@ export default function DeliberationPage() {
                           d="M5 13l4 4L19 7"
                         />
                       </svg>
-                      <span className="font-semibold text-green-900">
+                      <span className="font-semibold text-green-900 dark:text-green-200">
                         Deliberation Complete
                       </span>
                     </div>
-                    <div className="prose max-w-none text-lg text-gray-800">
+                    <div className="prose max-w-none text-lg text-gray-800 dark:prose-invert dark:text-gray-200">
                       <ReactMarkdown>{finalStatement.statement_text}</ReactMarkdown>
                     </div>
                   </div>
@@ -332,7 +332,7 @@ export default function DeliberationPage() {
               )}
 
               <section>
-                <h2 className="mb-4 text-2xl font-bold text-gray-900">
+                <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
                   Human Feedback
                 </h2>
                 <HumanFeedbackDisplay feedback={result.human_feedback} />
@@ -340,7 +340,7 @@ export default function DeliberationPage() {
 
               {result.critiques.length > 0 && (
                 <section>
-                  <h2 className="mb-4 text-2xl font-bold text-gray-900">
+                  <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
                     All Critiques
                   </h2>
                   <CritiqueDisplay critiques={result.critiques} />
@@ -349,7 +349,7 @@ export default function DeliberationPage() {
 
               {result.statements.length > 1 && (
                 <section>
-                  <h2 className="mb-4 text-2xl font-bold text-gray-900">
+                  <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
                     All Statements
                   </h2>
                   <StatementList
@@ -360,7 +360,7 @@ export default function DeliberationPage() {
               )}
 
               <section>
-                <h2 className="mb-4 text-2xl font-bold text-gray-900">
+                <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
                   Original Opinions
                 </h2>
                 <OpinionList opinions={result.opinions} />
