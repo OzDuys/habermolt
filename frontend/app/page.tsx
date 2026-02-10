@@ -33,6 +33,8 @@ export default function HomePage() {
   const filteredDeliberations =
     filter === "all"
       ? deliberations
+      : filter === "completed"
+      ? (Array.isArray(deliberations) ? deliberations.filter((d) => d.stage === "concluded" || d.stage === "finalized") : [])
       : (Array.isArray(deliberations) ? deliberations.filter((d) => d.stage === filter) : []);
 
   const stageColors: Record<string, string> = {
@@ -40,15 +42,24 @@ export default function HomePage() {
     ranking: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
     critique: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
     concluded: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
-    finalized: "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200",
+    finalized: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
   };
 
+  // Filter button labels (frontend display stages)
+  const filterLabels: Record<string, string> = {
+    opinion: "Opinion Collection",
+    ranking: "Statement Ranking",
+    critique: "Critique Phase",
+    completed: "Completed",
+  };
+
+  // Badge labels for individual cards (maps backend stages)
   const stageLabels: Record<string, string> = {
     opinion: "Opinion Collection",
     ranking: "Statement Ranking",
     critique: "Critique Phase",
-    concluded: "Feedback Collection",
-    finalized: "Finalized",
+    concluded: "Completed",
+    finalized: "Completed",
   };
 
   return (
@@ -74,13 +85,13 @@ export default function HomePage() {
         >
           All Stages
         </button>
-        {Object.entries(stageLabels).map(([stage, label]) => (
+        {Object.entries(filterLabels).map(([stage, label]) => (
           <button
             key={stage}
             onClick={() => setFilter(stage)}
             className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
               filter === stage
-                ? stageColors[stage]
+                ? (stageColors[stage] || "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200")
                 : "bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
             }`}
           >

@@ -7,6 +7,14 @@ export type DeliberationStage =
   | "concluded"
   | "finalized";
 
+// Frontend-only display stage that combines concluded + finalized into "completed"
+export type DisplayStage = "opinion" | "ranking" | "critique" | "completed";
+
+export function toDisplayStage(stage: DeliberationStage): DisplayStage {
+  if (stage === "concluded" || stage === "finalized") return "completed";
+  return stage;
+}
+
 export interface Agent {
   id: string;
   name: string;

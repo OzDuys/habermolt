@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { api } from "@/lib/api";
-import type { DeliberationDetail } from "@/lib/types";
+import type { DeliberationDetail, DisplayStage } from "@/lib/types";
+import { toDisplayStage } from "@/lib/types";
 import ReactMarkdown from "react-markdown";
 import StageIndicator from "@/components/StageIndicator";
 import OpinionList from "@/components/OpinionList";
@@ -21,6 +22,8 @@ export default function DeliberationPage() {
   const [result, setResult] = useState<DeliberationDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [activeStage, setActiveStage] = useState<DisplayStage>("opinion");
+  const prevBackendStage = useRef<string | null>(null);
 
   useEffect(() => {
     loadDeliberation();
@@ -40,6 +43,13 @@ export default function DeliberationPage() {
       if (deliberationData.deliberation.stage === "finalized") {
         const resultData = await api.getDeliberationResult(id);
         setResult(resultData);
+      }
+
+      // Track the active tab to the current stage when the backend stage advances
+      const newStage = deliberationData.deliberation.stage;
+      if (prevBackendStage.current !== newStage) {
+        setActiveStage(toDisplayStage(newStage));
+        prevBackendStage.current = newStage;
       }
 
       setLoading(false);
@@ -73,6 +83,12 @@ export default function DeliberationPage() {
   const { deliberation, opinions, statements, critiques, human_feedback } = data;
   const created_by = data.created_by || null;
 
+  // Use result data when available (finalized stage has complete data)
+  const displayOpinions = result?.opinions ?? opinions;
+  const displayStatements = result?.statements ?? statements;
+  const displayCritiques = result?.critiques ?? critiques;
+  const displayFeedback = result?.human_feedback ?? human_feedback;
+
   // Determine if Habermas is processing
   const joinWindowExpired = deliberation.join_window_deadline &&
     new Date(deliberation.join_window_deadline) <= new Date();
@@ -84,6 +100,8 @@ export default function DeliberationPage() {
       critiques.filter((c) => c.round_number === deliberation.current_critique_round)
         .length === deliberation.num_citizens &&
       deliberation.current_critique_round < deliberation.num_critique_rounds);
+
+  const finalStatement = displayStatements.find((s) => s.social_ranking === 1);
 
   return (
     <div>
@@ -115,8 +133,12 @@ export default function DeliberationPage() {
         </div>
       </div>
 
-      {/* Stage Progress */}
-      <StageIndicator currentStage={deliberation.stage} />
+      {/* Stage Progress (clickable navigation) */}
+      <StageIndicator
+        currentStage={deliberation.stage}
+        activeStage={activeStage}
+        onStageClick={setActiveStage}
+      />
 
       {/* Statement Generation Processing Alert */}
       {isProcessing && (
@@ -136,10 +158,10 @@ export default function DeliberationPage() {
         </div>
       )}
 
-      {/* Stage-Specific Content */}
+      {/* Stage-Specific Content (driven by active tab) */}
       <div className="space-y-8">
-        {/* Opinion Stage */}
-        {deliberation.stage === "opinion" && (
+        {/* Opinion Tab */}
+        {activeStage === "opinion" && (
           <section>
             <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
               Initial Opinions
@@ -148,13 +170,13 @@ export default function DeliberationPage() {
               Agents are submitting their initial opinions based on their human&apos;s
               preferences.
             </p>
-            <OpinionList opinions={opinions} />
-            {deliberation.join_window_deadline && new Date(deliberation.join_window_deadline) > new Date() && (
+            <OpinionList opinions={displayOpinions} />
+            {deliberation.stage === "opinion" && deliberation.join_window_deadline && new Date(deliberation.join_window_deadline) > new Date() && (
               <p className="mt-4 text-center text-sm text-gray-600 dark:text-gray-400">
                 Join window open until {new Date(deliberation.join_window_deadline).toLocaleTimeString()}
               </p>
             )}
-            {!deliberation.join_window_deadline && opinions.length < 2 && (
+            {deliberation.stage === "opinion" && !deliberation.join_window_deadline && opinions.length < 2 && (
               <p className="mt-4 text-center text-sm text-gray-600 dark:text-gray-400">
                 Waiting for {2 - opinions.length} more opinion(s) to start join window...
               </p>
@@ -162,9 +184,9 @@ export default function DeliberationPage() {
           </section>
         )}
 
-        {/* Ranking Stage */}
-        {deliberation.stage === "ranking" && (
-          <>
+        {/* Ranking Tab */}
+        {activeStage === "ranking" && (
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <section>
               <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
                 Generated Statements
@@ -173,23 +195,26 @@ export default function DeliberationPage() {
                 The Habermas Machine generated these group statements. Agents are
                 now ranking them.
               </p>
-              <StatementList statements={statements} showRanking={true} />
+              <StatementList statements={displayStatements} showRanking={true} />
             </section>
 
-            {opinions.length > 0 && (
+            {displayOpinions.length > 0 && (
               <section>
                 <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
                   Original Opinions
                 </h2>
-                <OpinionList opinions={opinions} />
+                <p className="mb-4 text-gray-600 dark:text-gray-400">
+                  The initial opinions that informed statement generation.
+                </p>
+                <OpinionList opinions={displayOpinions} />
               </section>
             )}
-          </>
+          </div>
         )}
 
-        {/* Critique Stage */}
-        {deliberation.stage === "critique" && (
-          <>
+        {/* Critique Tab */}
+        {activeStage === "critique" && (
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <section>
               <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
                 Critiques
@@ -197,177 +222,123 @@ export default function DeliberationPage() {
               <p className="mb-4 text-gray-600 dark:text-gray-400">
                 Agents are critiquing the winning statement from this round.
               </p>
-              <CritiqueDisplay critiques={critiques} />
-              {critiques.filter(
-                (c) => c.round_number === deliberation.current_critique_round
-              ).length < deliberation.num_citizens && (
-                <p className="mt-4 text-center text-sm text-gray-600 dark:text-gray-400">
-                  Waiting for{" "}
-                  {deliberation.num_citizens -
-                    critiques.filter(
-                      (c) => c.round_number === deliberation.current_critique_round
-                    ).length}{" "}
-                  more critique(s)...
-                </p>
-              )}
+              <CritiqueDisplay critiques={displayCritiques} />
+              {deliberation.stage === "critique" &&
+                critiques.filter(
+                  (c) => c.round_number === deliberation.current_critique_round
+                ).length < deliberation.num_citizens && (
+                  <p className="mt-4 text-center text-sm text-gray-600 dark:text-gray-400">
+                    Waiting for{" "}
+                    {deliberation.num_citizens -
+                      critiques.filter(
+                        (c) => c.round_number === deliberation.current_critique_round
+                      ).length}{" "}
+                    more critique(s)...
+                  </p>
+                )}
             </section>
 
-            {statements.length > 0 && (
+            {displayStatements.length > 0 && (
               <section>
                 <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
                   Statements
                 </h2>
-                <StatementList statements={statements} showRanking={true} />
+                <p className="mb-4 text-gray-600 dark:text-gray-400">
+                  The ranked consensus statements from this round.
+                </p>
+                <StatementList statements={displayStatements} showRanking={true} />
               </section>
             )}
-
-            {opinions.length > 0 && (
-              <section>
-                <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
-                  Original Opinions
-                </h2>
-                <OpinionList opinions={opinions} />
-              </section>
-            )}
-          </>
+          </div>
         )}
 
-        {/* Concluded Stage */}
-        {deliberation.stage === "concluded" && (
+        {/* Completed Tab (concluded + finalized) */}
+        {activeStage === "completed" && (
           <>
-            <section>
-              <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
-                Final Consensus
-              </h2>
-              <p className="mb-4 text-gray-600 dark:text-gray-400">
-                The deliberation has concluded. Agents are gathering human feedback
-                on the final consensus.
-              </p>
-              <StatementList
-                statements={statements.filter((s) => s.social_ranking === 1)}
-                showRanking={false}
-              />
-            </section>
+            {/* Final Consensus */}
+            {finalStatement && (
+              <section>
+                <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
+                  Final Consensus
+                </h2>
+                <div className="rounded-lg border-2 border-green-500 bg-green-50 p-8 dark:border-green-600 dark:bg-green-950">
+                  <div className="mb-3 flex items-center gap-2">
+                    <svg
+                      className="h-6 w-6 text-green-600 dark:text-green-400"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M5 13l4 4L19 7"
+                      />
+                    </svg>
+                    <span className="font-semibold text-green-900 dark:text-green-200">
+                      {deliberation.stage === "finalized"
+                        ? "Deliberation Complete"
+                        : "Awaiting Human Feedback"}
+                    </span>
+                  </div>
+                  <div className="prose max-w-none text-lg text-gray-800 dark:prose-invert dark:text-gray-200">
+                    <ReactMarkdown>{finalStatement.statement_text}</ReactMarkdown>
+                  </div>
+                </div>
+              </section>
+            )}
 
-            {human_feedback.length > 0 && (
+            {/* Human Feedback */}
+            {displayFeedback.length > 0 && (
               <section>
                 <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
                   Human Feedback
                 </h2>
-                <HumanFeedbackDisplay feedback={human_feedback} />
+                <HumanFeedbackDisplay feedback={displayFeedback} />
               </section>
             )}
 
-            {human_feedback.length < deliberation.num_citizens && (
-              <p className="text-center text-sm text-gray-600 dark:text-gray-400">
-                Waiting for{" "}
-                {deliberation.num_citizens - human_feedback.length} more
-                feedback submission(s)...
-              </p>
-            )}
-
-            {critiques.length > 0 && (
-              <section>
-                <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
-                  All Critiques
-                </h2>
-                <CritiqueDisplay critiques={critiques} />
-              </section>
-            )}
-
-            {statements.length > 1 && (
-              <section>
-                <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
-                  All Statements
-                </h2>
-                <StatementList statements={statements} showRanking={true} />
-              </section>
-            )}
-
-            {opinions.length > 0 && (
-              <section>
-                <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
-                  Original Opinions
-                </h2>
-                <OpinionList opinions={opinions} />
-              </section>
-            )}
-          </>
-        )}
-
-        {/* Finalized Stage */}
-        {deliberation.stage === "finalized" && result && (() => {
-          const finalStatement = result.statements.find((s) => s.social_ranking === 1);
-          return (
-            <>
-              {finalStatement && (
-                <section>
-                  <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
-                    Final Consensus
-                  </h2>
-                  <div className="rounded-lg border-2 border-green-500 bg-green-50 p-8 dark:border-green-600 dark:bg-green-950">
-                    <div className="mb-3 flex items-center gap-2">
-                      <svg
-                        className="h-6 w-6 text-green-600 dark:text-green-400"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M5 13l4 4L19 7"
-                        />
-                      </svg>
-                      <span className="font-semibold text-green-900 dark:text-green-200">
-                        Deliberation Complete
-                      </span>
-                    </div>
-                    <div className="prose max-w-none text-lg text-gray-800 dark:prose-invert dark:text-gray-200">
-                      <ReactMarkdown>{finalStatement.statement_text}</ReactMarkdown>
-                    </div>
-                  </div>
-                </section>
+            {deliberation.stage === "concluded" &&
+              human_feedback.length < deliberation.num_citizens && (
+                <p className="text-center text-sm text-gray-600 dark:text-gray-400">
+                  Waiting for{" "}
+                  {deliberation.num_citizens - human_feedback.length} more
+                  feedback submission(s)...
+                </p>
               )}
 
-              <section>
-                <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
-                  Human Feedback
-                </h2>
-                <HumanFeedbackDisplay feedback={result.human_feedback} />
-              </section>
-
-              {result.critiques.length > 0 && (
+            {/* Supplementary data: critiques + statements + opinions side by side */}
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              {displayCritiques.length > 0 && (
                 <section>
                   <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
                     All Critiques
                   </h2>
-                  <CritiqueDisplay critiques={result.critiques} />
+                  <CritiqueDisplay critiques={displayCritiques} />
                 </section>
               )}
 
-              {result.statements.length > 1 && (
+              {displayStatements.length > 1 && (
                 <section>
                   <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
                     All Statements
                   </h2>
-                  <StatementList
-                    statements={result.statements}
-                    showRanking={true}
-                  />
+                  <StatementList statements={displayStatements} showRanking={true} />
                 </section>
               )}
+            </div>
 
+            {displayOpinions.length > 0 && (
               <section>
                 <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
                   Original Opinions
                 </h2>
-                <OpinionList opinions={result.opinions} />
+                <OpinionList opinions={displayOpinions} />
               </section>
-            </>
-          );
-        })()}
+            )}
+          </>
+        )}
       </div>
     </div>
   );
