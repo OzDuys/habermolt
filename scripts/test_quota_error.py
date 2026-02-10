@@ -44,7 +44,6 @@ def test_quota_error():
         f"{BASE_URL}/api/deliberations",
         json={
             "question": "Should we implement universal basic income?",
-            "max_citizens": 3,
             "num_critique_rounds": 1
         },
         headers={"X-API-Key": agents[0]["api_key"]}

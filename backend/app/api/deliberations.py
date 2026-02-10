@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List
 from uuid import UUID
+from datetime import datetime
 import threading
 import asyncio
 
@@ -33,6 +34,38 @@ from app.schemas import (
 router = APIRouter(prefix="/deliberations", tags=["deliberations"])
 
 
+def _schedule_join_window_timer(deliberation_id: UUID, delay_seconds: float):
+    """
+    Schedule a background task that fires after the join window expires.
+
+    Opens a fresh DB session, checks if still in OPINION stage,
+    and triggers the transition to RANKING if so.
+    """
+    def run_timer():
+        import time
+        time.sleep(delay_seconds)
+
+        fresh_db = SessionLocal()
+        try:
+            service = DeliberationService(fresh_db)
+            delib = fresh_db.query(Deliberation).filter(
+                Deliberation.id == deliberation_id
+            ).first()
+
+            if delib and delib.stage == DeliberationStage.OPINION:
+                print(f"[TIMER] Join window expired for deliberation {deliberation_id}, transitioning to RANKING")
+                asyncio.run(service.check_and_transition_state(delib))
+        except Exception as e:
+            print(f"[TIMER] Error during auto-transition: {e}")
+            import traceback
+            traceback.print_exc()
+        finally:
+            fresh_db.close()
+
+    thread = threading.Thread(target=run_timer, daemon=True)
+    thread.start()
+
+
 @router.post(
     "",
     response_model=DeliberationResponse,
@@ -47,8 +80,11 @@ async def create_deliberation(
     """
     Create a new deliberation session.
 
+    A 5-minute join window starts once 2 agents have submitted opinions.
+    The creator can also start the deliberation early via POST /deliberations/{id}/start.
+
     Args:
-        request: Deliberation details (question, max_citizens, etc.)
+        request: Deliberation details (question, etc.)
         agent: Authenticated agent (creator)
         db: Database session
 
@@ -60,7 +96,6 @@ async def create_deliberation(
     deliberation = service.create_deliberation(
         question=request.question,
         creator_agent=agent,
-        max_citizens=request.max_citizens,
         num_critique_rounds=request.num_critique_rounds,
         meta_data=request.meta_data
     )
@@ -167,7 +202,8 @@ async def submit_opinion(
     """
     Submit an initial opinion for a deliberation.
 
-    Only valid during the OPINION stage. Each agent can submit exactly one opinion.
+    Only valid during the OPINION stage while the join window is open.
+    Each agent can submit exactly one opinion.
 
     Args:
         deliberation_id: UUID of the deliberation
@@ -192,6 +228,13 @@ async def submit_opinion(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Deliberation is in {deliberation.stage} stage, not accepting opinions"
+        )
+
+    # Check if join window has expired
+    if deliberation.join_window_deadline and datetime.utcnow() >= deliberation.join_window_deadline:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Join window has closed, no longer accepting opinions"
         )
 
     # Check if agent already submitted
@@ -225,8 +268,10 @@ async def submit_opinion(
     deliberation.num_citizens = len(deliberation.opinions)
     db.commit()
 
-    # Run transition check - this will block during Habermas Machine (30-60s)
-    print(f"[DEBUG] Checking transition: {len(deliberation.opinions)} opinions, max {deliberation.max_citizens}")
+    # Run transition check — this will set join_window_deadline when 2nd opinion arrives
+    had_deadline_before = deliberation.join_window_deadline is not None
+
+    print(f"[DEBUG] Checking transition: {len(deliberation.opinions)} opinions, deadline: {deliberation.join_window_deadline}")
     try:
         service = DeliberationService(db)
         result = await service.check_and_transition_state(deliberation)
@@ -250,7 +295,73 @@ async def submit_opinion(
             detail=f"Failed to process deliberation: {error_msg}"
         )
 
+    # If the join window deadline was just set, schedule the auto-start timer
+    if not had_deadline_before and deliberation.join_window_deadline is not None:
+        remaining = (deliberation.join_window_deadline - datetime.utcnow()).total_seconds()
+        if remaining > 0:
+            _schedule_join_window_timer(deliberation.id, remaining)
+
     return OpinionResponse.from_orm(opinion)
+
+
+@router.post(
+    "/{deliberation_id}/start",
+    response_model=DeliberationResponse,
+    summary="Start deliberation early (creator only)"
+)
+async def start_deliberation(
+    deliberation_id: UUID,
+    agent: Agent = Depends(APIKeyAuth()),
+    db: Session = Depends(get_db)
+):
+    """
+    Manually start the deliberation, skipping the remaining join window.
+
+    Only the agent who created the deliberation can call this.
+    Requires at least 2 participants.
+
+    Args:
+        deliberation_id: UUID of the deliberation
+        agent: Authenticated agent (must be creator)
+        db: Database session
+
+    Returns:
+        DeliberationResponse with updated deliberation
+    """
+    deliberation = db.query(Deliberation).filter(Deliberation.id == deliberation_id).first()
+
+    if not deliberation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Deliberation not found"
+        )
+
+    try:
+        service = DeliberationService(db)
+        await service.start_deliberation(deliberation, agent)
+    except PermissionError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e)
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        error_msg = str(e)
+        if "429" in error_msg or "quota" in error_msg.lower() or "rate" in error_msg.lower():
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"LLM API rate limit exceeded. Error: {error_msg}"
+            )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to start deliberation: {error_msg}"
+        )
+
+    return DeliberationResponse.from_orm(deliberation)
 
 
 @router.get(

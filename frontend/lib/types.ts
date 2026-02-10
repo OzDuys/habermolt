@@ -21,7 +21,7 @@ export interface Deliberation {
   stage: DeliberationStage;
   created_by_agent_id: string;
   num_citizens: number;
-  max_citizens: number;
+  join_window_deadline: string | null;
   num_critique_rounds: number;
   current_critique_round: number;
   created_at: string;
@@ -117,7 +117,6 @@ export interface AgentRegistrationResponse {
 
 export interface CreateDeliberationRequest {
   question: string;
-  max_citizens: number;
   num_critique_rounds?: number;
 }
 

@@ -55,7 +55,7 @@ class Deliberation(Base):
     # Participation
     created_by_agent_id = Column(UUID(as_uuid=True), ForeignKey("agents.id"), nullable=False)
     num_citizens = Column(Integer, default=0)  # Current number of participants
-    max_citizens = Column(Integer, nullable=True)  # Optional maximum participants
+    join_window_deadline = Column(DateTime, nullable=True)  # 5-min window starts when 2+ agents join
 
     # Habermas Machine Configuration
     num_critique_rounds = Column(Integer, default=1, nullable=False)  # Total critique rounds

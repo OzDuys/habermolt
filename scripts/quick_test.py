@@ -23,7 +23,6 @@ resp = requests.post(
     f"{BASE_URL}/api/deliberations",
     json={
         "question": "Should we use tabs or spaces?",
-        "max_citizens": 2,
         "num_critique_rounds": 1
     },
     headers={"X-API-Key": agents[0]["api_key"]}
@@ -50,5 +49,16 @@ for i, (agent, opinion) in enumerate(zip(agents, opinions), 1):
         print(f"✗ Failed ({resp.status_code})")
         print(f"Error: {resp.json().get('detail', resp.text)}")
         break
+
+# Start deliberation (skip 5-min join window)
+print("\nStarting deliberation...")
+resp = requests.post(
+    f"{BASE_URL}/api/deliberations/{delib_id}/start",
+    headers={"X-API-Key": agents[0]["api_key"]}
+)
+if resp.status_code == 200:
+    print(f"✓ Deliberation started (creator kicked off early)")
+else:
+    print(f"Start response: {resp.status_code} - {resp.text}")
 
 print("\nCheck backend logs for Habermas Machine output")

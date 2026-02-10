@@ -5,7 +5,7 @@ Handles transitions between the five stages:
 OPINION → RANKING → CRITIQUE → CONCLUDED → FINALIZED
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
@@ -41,11 +41,13 @@ class DeliberationService:
         """
         self.db = db
 
+    # Join window duration in seconds (5 minutes)
+    JOIN_WINDOW_SECONDS = 300
+
     def create_deliberation(
         self,
         question: str,
         creator_agent: Agent,
-        max_citizens: Optional[int] = None,
         num_critique_rounds: int = 1,
         meta_data: dict = None
     ) -> Deliberation:
@@ -55,7 +57,6 @@ class DeliberationService:
         Args:
             question: The question to deliberate on
             creator_agent: The agent creating the deliberation
-            max_citizens: Optional maximum number of participants
             num_critique_rounds: Number of critique rounds (default 1)
             meta_data: Optional metadata dictionary
 
@@ -67,7 +68,6 @@ class DeliberationService:
             stage=DeliberationStage.OPINION,
             created_by_agent_id=creator_agent.id,
             num_citizens=0,
-            max_citizens=max_citizens,
             num_critique_rounds=num_critique_rounds,
             current_critique_round=0,
             meta_data=meta_data or {}
@@ -126,9 +126,11 @@ class DeliberationService:
 
     async def _check_opinion_to_ranking_transition(self, deliberation: Deliberation) -> bool:
         """
-        Check if all opinions are submitted and transition to RANKING stage.
+        Check if the join window has expired and transition to RANKING stage.
 
-        Generates candidate statements for agents to rank.
+        The 5-minute join window starts when the 2nd opinion arrives.
+        Transition happens when the window expires OR when the creator
+        manually starts via start_deliberation().
 
         Args:
             deliberation: The deliberation instance
@@ -136,20 +138,34 @@ class DeliberationService:
         Returns:
             bool: True if transition occurred
         """
-        # Check if we have at least 2 opinions (minimum for deliberation)
         if len(deliberation.opinions) < 2:
             return False
 
-        # Check if we've reached max_citizens (if set) or have a reasonable number
-        if deliberation.max_citizens:
-            if len(deliberation.opinions) < deliberation.max_citizens:
-                return False
+        # Start the join window when we first hit 2 opinions
+        if deliberation.join_window_deadline is None:
+            deliberation.join_window_deadline = datetime.utcnow() + timedelta(seconds=self.JOIN_WINDOW_SECONDS)
+            self.db.commit()
+            return False
 
-        # All opinions collected - generate candidate statements
+        # Window still open — don't transition yet
+        if datetime.utcnow() < deliberation.join_window_deadline:
+            return False
+
+        # Window expired — transition to RANKING
+        return await self._transition_to_ranking(deliberation)
+
+    async def _transition_to_ranking(self, deliberation: Deliberation) -> bool:
+        """
+        Execute the OPINION → RANKING transition: generate statements and update state.
+
+        Args:
+            deliberation: The deliberation instance
+
+        Returns:
+            bool: True if transition occurred
+        """
         opinions_text = [opinion.opinion_text for opinion in deliberation.opinions]
 
-        # Generate statements (async, takes 10-60 seconds)
-        # social_ranking is left as None — determined by Schulze after agents rank
         statements = await statement_service.generate_statements(
             self.db,
             deliberation,
@@ -160,7 +176,6 @@ class DeliberationService:
         if not statements:
             raise ValueError("Failed to generate any candidate statements")
 
-        # Update deliberation state
         deliberation.stage = DeliberationStage.RANKING
         deliberation.num_citizens = len(deliberation.opinions)
         deliberation.started_at = datetime.utcnow()
@@ -169,6 +184,34 @@ class DeliberationService:
         self.db.commit()
 
         return True
+
+    async def start_deliberation(self, deliberation: Deliberation, agent: Agent) -> bool:
+        """
+        Manually start the deliberation (skip remaining join window).
+
+        Only the creator agent can call this. Requires at least 2 opinions.
+
+        Args:
+            deliberation: The deliberation instance
+            agent: The agent requesting the start
+
+        Returns:
+            bool: True if transition occurred
+
+        Raises:
+            ValueError: If preconditions are not met
+            PermissionError: If agent is not the creator
+        """
+        if agent.id != deliberation.created_by_agent_id:
+            raise PermissionError("Only the creator can start the deliberation")
+
+        if deliberation.stage != DeliberationStage.OPINION:
+            raise ValueError(f"Deliberation is in {deliberation.stage} stage, not opinion")
+
+        if len(deliberation.opinions) < 2:
+            raise ValueError("Need at least 2 participants to start")
+
+        return await self._transition_to_ranking(deliberation)
 
     async def _check_ranking_to_critique_transition(self, deliberation: Deliberation) -> bool:
         """
@@ -323,6 +366,10 @@ class DeliberationService:
         if not deliberation.is_accepting_opinions():
             return False
 
+        # Check if join window has expired
+        if deliberation.join_window_deadline and datetime.utcnow() >= deliberation.join_window_deadline:
+            return False
+
         # Check if agent already submitted opinion
         existing_opinion = self.db.query(Opinion).filter(
             and_(
@@ -333,11 +380,6 @@ class DeliberationService:
 
         if existing_opinion:
             return False
-
-        # Check if max_citizens reached
-        if deliberation.max_citizens:
-            if len(deliberation.opinions) >= deliberation.max_citizens:
-                return False
 
         return True
 

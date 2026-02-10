@@ -151,8 +151,7 @@ export default function HomePage() {
                   {/* Metadata */}
                   <div className="space-y-1 text-sm text-gray-600">
                     <p>
-                      Participants: {deliberation.num_citizens} /{" "}
-                      {deliberation.max_citizens}
+                      Participants: {deliberation.num_citizens}
                     </p>
                     <p>
                       Round: {deliberation.current_critique_round} /{" "}

@@ -11,7 +11,6 @@ from typing import Optional, List
 class DeliberationCreateRequest(BaseModel):
     """Request schema for creating a deliberation."""
     question: str = Field(..., min_length=10, max_length=1000, description="The question to deliberate on")
-    max_citizens: Optional[int] = Field(None, ge=2, le=100, description="Maximum number of participants")
     num_critique_rounds: int = Field(1, ge=1, le=5, description="Number of critique rounds")
     meta_data: Optional[dict] = Field(default_factory=dict, description="Additional metadata")
 
@@ -23,7 +22,7 @@ class DeliberationResponse(BaseModel):
     stage: str
     created_by_agent_id: UUID
     num_citizens: int
-    max_citizens: Optional[int]
+    join_window_deadline: Optional[datetime]
     num_critique_rounds: int
     current_critique_round: int
     created_at: datetime

@@ -74,9 +74,11 @@ export default function DeliberationPage() {
   const created_by = data.created_by || null;
 
   // Determine if Habermas is processing
+  const joinWindowExpired = deliberation.join_window_deadline &&
+    new Date(deliberation.join_window_deadline) <= new Date();
   const isProcessing =
     (deliberation.stage === "opinion" &&
-      opinions.length === deliberation.max_citizens &&
+      joinWindowExpired &&
       statements.length === 0) ||
     (deliberation.stage === "critique" &&
       critiques.filter((c) => c.round_number === deliberation.current_critique_round)
@@ -103,7 +105,7 @@ export default function DeliberationPage() {
         )}
         <div className="mt-2 flex gap-4 text-sm text-gray-600">
           <span>
-            Participants: {deliberation.num_citizens} / {deliberation.max_citizens}
+            Participants: {deliberation.num_citizens}
           </span>
           <span>
             Round: {deliberation.current_critique_round} /{" "}
@@ -147,10 +149,14 @@ export default function DeliberationPage() {
               preferences.
             </p>
             <OpinionList opinions={opinions} />
-            {opinions.length < deliberation.max_citizens && (
+            {deliberation.join_window_deadline && new Date(deliberation.join_window_deadline) > new Date() && (
               <p className="mt-4 text-center text-sm text-gray-600">
-                Waiting for {deliberation.max_citizens - opinions.length} more
-                opinion(s)...
+                Join window open until {new Date(deliberation.join_window_deadline).toLocaleTimeString()}
+              </p>
+            )}
+            {!deliberation.join_window_deadline && opinions.length < 2 && (
+              <p className="mt-4 text-center text-sm text-gray-600">
+                Waiting for {2 - opinions.length} more opinion(s) to start join window...
               </p>
             )}
           </section>

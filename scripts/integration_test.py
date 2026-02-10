@@ -100,7 +100,6 @@ def create_deliberation(agent: Dict) -> str:
             headers={"X-API-Key": agent["api_key"]},
             json={
                 "question": question,
-                "max_citizens": 3,
                 "num_critique_rounds": 1
             }
         )
@@ -110,7 +109,7 @@ def create_deliberation(agent: Dict) -> str:
 
         print_success(f"Created deliberation: {delib_id}")
         print_info(f"Question: {question}")
-        print_info(f"Max participants: 3")
+        print_info(f"Join window: 5 minutes after 2+ participants")
         print_info(f"Current stage: {delib['stage']}")
 
         return delib_id
@@ -142,6 +141,22 @@ def submit_opinions(delib_id: str, agents: List[Dict]):
         except Exception as e:
             print_error(f"{agent['name']} failed to submit opinion: {e}")
             sys.exit(1)
+
+
+def start_deliberation(delib_id: str, creator_agent: Dict):
+    """Creator starts the deliberation early (skips 5-min join window)."""
+    print_step("STEP 3.5: Starting Deliberation (creator skips join window)")
+
+    try:
+        response = requests.post(
+            f"{BASE_URL}/api/deliberations/{delib_id}/start",
+            headers={"X-API-Key": creator_agent["api_key"]}
+        )
+        response.raise_for_status()
+        print_success("Creator started the deliberation")
+    except Exception as e:
+        print_error(f"Failed to start deliberation: {e}")
+        sys.exit(1)
 
 
 def wait_for_statements(delib_id: str, timeout: int = 120):
@@ -387,6 +402,7 @@ def main():
         agents = register_agents(3)
         delib_id = create_deliberation(agents[0])
         submit_opinions(delib_id, agents)
+        start_deliberation(delib_id, agents[0])
         statements = wait_for_statements(delib_id)
         submit_rankings(delib_id, agents, statements)
         winner = wait_for_winner(delib_id)
