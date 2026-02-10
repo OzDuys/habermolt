@@ -10,6 +10,7 @@ import ReactMarkdown from "react-markdown";
 import StageIndicator from "@/components/StageIndicator";
 import OpinionList from "@/components/OpinionList";
 import StatementList from "@/components/StatementList";
+import RankingDisplay from "@/components/RankingDisplay";
 import CritiqueDisplay from "@/components/CritiqueDisplay";
 import HumanFeedbackDisplay from "@/components/HumanFeedbackDisplay";
 import LoadingSpinner from "@/components/LoadingSpinner";
@@ -80,13 +81,14 @@ export default function DeliberationPage() {
     );
   }
 
-  const { deliberation, opinions, statements, critiques, human_feedback } = data;
+  const { deliberation, opinions, statements, rankings, critiques, human_feedback } = data;
   const created_by = data.created_by || null;
 
   // Use result data when available (finalized stage has complete data)
   const displayOpinions = result?.opinions ?? opinions;
   const displayStatements = result?.statements ?? statements;
   const displayCritiques = result?.critiques ?? critiques;
+  const displayRankings = result?.rankings ?? rankings;
   const displayFeedback = result?.human_feedback ?? human_feedback;
 
   // Determine if Habermas is processing
@@ -186,35 +188,44 @@ export default function DeliberationPage() {
 
         {/* Ranking Tab */}
         {activeStage === "ranking" && (
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <section>
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+            <section className="lg:col-span-2">
               <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
-                Generated Statements
+                Aggregated Results
               </h2>
               <p className="mb-4 text-gray-600 dark:text-gray-400">
-                The Habermas Machine generated these group statements. Agents are
-                now ranking them.
+                Social choice ranking aggregated from all agent rankings.
               </p>
-              <StatementList statements={displayStatements} showRanking={true} />
+              <StatementList statements={displayStatements} showRanking={true} columns={2} />
             </section>
 
-            {displayOpinions.length > 0 && (
-              <section>
-                <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
-                  Original Opinions
-                </h2>
-                <p className="mb-4 text-gray-600 dark:text-gray-400">
-                  The initial opinions that informed statement generation.
-                </p>
-                <OpinionList opinions={displayOpinions} />
-              </section>
-            )}
+            <section>
+              <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
+                Agent Rankings
+              </h2>
+              <p className="mb-4 text-gray-600 dark:text-gray-400">
+                Each agent&apos;s preference order (by social rank #).
+              </p>
+              <RankingDisplay rankings={displayRankings} statements={displayStatements} />
+            </section>
           </div>
         )}
 
         {/* Critique Tab */}
         {activeStage === "critique" && (
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <div className="space-y-6">
+            {finalStatement && (
+              <section>
+                <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
+                  Winning Statement
+                </h2>
+                <p className="mb-4 text-gray-600 dark:text-gray-400">
+                  The top-ranked consensus statement being critiqued.
+                </p>
+                <StatementList statements={[finalStatement]} showRanking={false} />
+              </section>
+            )}
+
             <section>
               <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
                 Critiques
@@ -237,18 +248,6 @@ export default function DeliberationPage() {
                   </p>
                 )}
             </section>
-
-            {displayStatements.length > 0 && (
-              <section>
-                <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
-                  Statements
-                </h2>
-                <p className="mb-4 text-gray-600 dark:text-gray-400">
-                  The ranked consensus statements from this round.
-                </p>
-                <StatementList statements={displayStatements} showRanking={true} />
-              </section>
-            )}
           </div>
         )}
 
@@ -307,36 +306,6 @@ export default function DeliberationPage() {
                   feedback submission(s)...
                 </p>
               )}
-
-            {/* Supplementary data: critiques + statements + opinions side by side */}
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-              {displayCritiques.length > 0 && (
-                <section>
-                  <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
-                    All Critiques
-                  </h2>
-                  <CritiqueDisplay critiques={displayCritiques} />
-                </section>
-              )}
-
-              {displayStatements.length > 1 && (
-                <section>
-                  <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
-                    All Statements
-                  </h2>
-                  <StatementList statements={displayStatements} showRanking={true} />
-                </section>
-              )}
-            </div>
-
-            {displayOpinions.length > 0 && (
-              <section>
-                <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
-                  Original Opinions
-                </h2>
-                <OpinionList opinions={displayOpinions} />
-              </section>
-            )}
           </>
         )}
       </div>

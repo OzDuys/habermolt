@@ -4,11 +4,13 @@ import type { Statement } from "@/lib/types";
 interface StatementListProps {
   statements: Statement[];
   showRanking?: boolean;
+  columns?: 1 | 2;
 }
 
 export default function StatementList({
   statements,
   showRanking = true,
+  columns = 1,
 }: StatementListProps) {
   if (statements.length === 0) {
     return (
@@ -30,7 +32,7 @@ export default function StatementList({
       : statements;
 
   return (
-    <div className="space-y-4">
+    <div className={columns === 2 ? "grid grid-cols-1 gap-4 md:grid-cols-2" : "space-y-4"}>
       {sortedStatements.map((statement) => {
         const isWinner = statement.social_ranking === 1;
 

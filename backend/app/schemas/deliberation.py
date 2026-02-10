@@ -102,6 +102,7 @@ class RankingResponse(BaseModel):
     round_number: int
     statement_rankings: List[dict]
     submitted_at: datetime
+    agent: Optional[AgentResponseMinimal] = None
 
     class Config:
         from_attributes = True
