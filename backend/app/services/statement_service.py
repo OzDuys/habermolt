@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models import Deliberation, Statement
-from app.services.gemini_client import LLMClient
+from app.services.llm_client import LLMClient
 
 logger = logging.getLogger(__name__)
 

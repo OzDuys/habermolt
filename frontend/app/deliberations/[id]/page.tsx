@@ -4,8 +4,8 @@ import { useEffect, useState, useRef } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { api } from "@/lib/api";
-import type { DeliberationDetail, DisplayStage } from "@/lib/types";
-import { toDisplayStage } from "@/lib/types";
+import type { DeliberationDetail, ActiveView } from "@/lib/types";
+import { toActiveView, activeViewKey } from "@/lib/types";
 import ReactMarkdown from "react-markdown";
 import StageIndicator from "@/components/StageIndicator";
 import OpinionList from "@/components/OpinionList";
@@ -23,8 +23,8 @@ export default function DeliberationPage() {
   const [result, setResult] = useState<DeliberationDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeStage, setActiveStage] = useState<DisplayStage>("opinion");
-  const prevBackendStage = useRef<string | null>(null);
+  const [activeView, setActiveView] = useState<ActiveView>({ type: "opinion" });
+  const prevViewKey = useRef<string | null>(null);
 
   useEffect(() => {
     loadDeliberation();
@@ -46,11 +46,15 @@ export default function DeliberationPage() {
         setResult(resultData);
       }
 
-      // Track the active tab to the current stage when the backend stage advances
-      const newStage = deliberationData.deliberation.stage;
-      if (prevBackendStage.current !== newStage) {
-        setActiveStage(toDisplayStage(newStage));
-        prevBackendStage.current = newStage;
+      // Track the active view to the current stage when the backend state advances
+      const newView = toActiveView(
+        deliberationData.deliberation.stage,
+        deliberationData.deliberation.current_critique_round
+      );
+      const newKey = activeViewKey(newView);
+      if (prevViewKey.current !== newKey) {
+        setActiveView(newView);
+        prevViewKey.current = newKey;
       }
 
       setLoading(false);
@@ -91,7 +95,20 @@ export default function DeliberationPage() {
   const displayRankings = result?.rankings ?? rankings;
   const displayFeedback = result?.human_feedback ?? human_feedback;
 
-  // Determine if Habermas is processing
+  // Round-filtered data for the active round view
+  const activeRound = activeView.type === "round" ? activeView.round : 0;
+  const roundStatements = displayStatements.filter((s) => s.round_number === activeRound);
+  const roundRankings = displayRankings.filter((r) => r.round_number === activeRound);
+  const roundCritiques = displayCritiques.filter((c) => c.round_number === activeRound);
+  const roundWinner = roundStatements.find((s) => s.social_ranking === 1);
+
+  // Current round state helpers
+  const isRankingPhase =
+    deliberation.stage === "ranking" && deliberation.current_critique_round === activeRound;
+  const isCritiquePhase =
+    deliberation.stage === "critique" && deliberation.current_critique_round === activeRound;
+
+  // Determine if Habermas is processing (generating statements)
   const joinWindowExpired = deliberation.join_window_deadline &&
     new Date(deliberation.join_window_deadline) <= new Date();
   const isProcessing =
@@ -101,9 +118,12 @@ export default function DeliberationPage() {
     (deliberation.stage === "critique" &&
       critiques.filter((c) => c.round_number === deliberation.current_critique_round)
         .length === deliberation.num_citizens &&
-      deliberation.current_critique_round < deliberation.num_critique_rounds);
+      deliberation.current_critique_round < deliberation.num_critique_rounds - 1);
 
-  const finalStatement = displayStatements.find((s) => s.social_ranking === 1);
+  // Final statement for the completed view
+  const lastRound = deliberation.num_critique_rounds - 1;
+  const lastRoundStatements = displayStatements.filter((s) => s.round_number === lastRound);
+  const finalStatement = lastRoundStatements.find((s) => s.social_ranking === 1);
 
   return (
     <div>
@@ -127,10 +147,12 @@ export default function DeliberationPage() {
           <span>
             Participants: {deliberation.num_citizens}
           </span>
-          <span>
-            Round: {deliberation.current_critique_round} /{" "}
-            {deliberation.num_critique_rounds}
-          </span>
+          {deliberation.num_critique_rounds > 1 && (
+            <span>
+              Round: {deliberation.current_critique_round + 1} /{" "}
+              {deliberation.num_critique_rounds}
+            </span>
+          )}
           <span>Created {new Date(deliberation.created_at).toLocaleString()}</span>
         </div>
       </div>
@@ -138,8 +160,10 @@ export default function DeliberationPage() {
       {/* Stage Progress (clickable navigation) */}
       <StageIndicator
         currentStage={deliberation.stage}
-        activeStage={activeStage}
-        onStageClick={setActiveStage}
+        currentCritiqueRound={deliberation.current_critique_round}
+        numCritiqueRounds={deliberation.num_critique_rounds}
+        activeView={activeView}
+        onViewChange={setActiveView}
       />
 
       {/* Statement Generation Processing Alert */}
@@ -160,10 +184,10 @@ export default function DeliberationPage() {
         </div>
       )}
 
-      {/* Stage-Specific Content (driven by active tab) */}
+      {/* Stage-Specific Content (driven by active view) */}
       <div className="space-y-8">
-        {/* Opinion Tab */}
-        {activeStage === "opinion" && (
+        {/* Opinion View */}
+        {activeView.type === "opinion" && (
           <section>
             <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
               Initial Opinions
@@ -186,73 +210,77 @@ export default function DeliberationPage() {
           </section>
         )}
 
-        {/* Ranking Tab */}
-        {activeStage === "ranking" && (
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-            <section className="lg:col-span-2">
-              <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
-                Aggregated Results
-              </h2>
-              <p className="mb-4 text-gray-600 dark:text-gray-400">
-                Social choice ranking aggregated from all agent rankings.
-              </p>
-              <StatementList statements={displayStatements} showRanking={true} columns={2} />
-            </section>
-
-            <section>
-              <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
-                Agent Rankings
-              </h2>
-              <p className="mb-4 text-gray-600 dark:text-gray-400">
-                Each agent&apos;s preference order (by social rank #).
-              </p>
-              <RankingDisplay rankings={displayRankings} statements={displayStatements} />
-            </section>
-          </div>
-        )}
-
-        {/* Critique Tab */}
-        {activeStage === "critique" && (
-          <div className="space-y-6">
-            {finalStatement && (
-              <section>
+        {/* Round View (Ranking + Critique combined for a given round) */}
+        {activeView.type === "round" && (
+          <div className="space-y-8">
+            {/* Ranking Section */}
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+              <section className="lg:col-span-2">
                 <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
-                  Winning Statement
+                  Aggregated Results
                 </h2>
                 <p className="mb-4 text-gray-600 dark:text-gray-400">
-                  The top-ranked consensus statement being critiqued.
+                  Social choice ranking aggregated from all agent rankings.
                 </p>
-                <StatementList statements={[finalStatement]} showRanking={false} />
-              </section>
-            )}
-
-            <section>
-              <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
-                Critiques
-              </h2>
-              <p className="mb-4 text-gray-600 dark:text-gray-400">
-                Agents are critiquing the winning statement from this round.
-              </p>
-              <CritiqueDisplay critiques={displayCritiques} />
-              {deliberation.stage === "critique" &&
-                critiques.filter(
-                  (c) => c.round_number === deliberation.current_critique_round
-                ).length < deliberation.num_citizens && (
+                <StatementList statements={roundStatements} showRanking={true} columns={2} />
+                {isRankingPhase && roundRankings.length < deliberation.num_citizens && (
                   <p className="mt-4 text-center text-sm text-gray-600 dark:text-gray-400">
                     Waiting for{" "}
-                    {deliberation.num_citizens -
-                      critiques.filter(
-                        (c) => c.round_number === deliberation.current_critique_round
-                      ).length}{" "}
-                    more critique(s)...
+                    {deliberation.num_citizens - roundRankings.length}{" "}
+                    more ranking(s)...
                   </p>
                 )}
-            </section>
+              </section>
+
+              <section>
+                <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
+                  Agent Rankings
+                </h2>
+                <p className="mb-4 text-gray-600 dark:text-gray-400">
+                  Each agent&apos;s preference order (by social rank #).
+                </p>
+                <RankingDisplay rankings={roundRankings} statements={roundStatements} />
+              </section>
+            </div>
+
+            {/* Critique Section (shown once critiques exist or critique phase is active) */}
+            {(roundCritiques.length > 0 || isCritiquePhase) && (
+              <div className="space-y-6">
+                {roundWinner && (
+                  <section>
+                    <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
+                      Winning Statement
+                    </h2>
+                    <p className="mb-4 text-gray-600 dark:text-gray-400">
+                      The top-ranked consensus statement being critiqued.
+                    </p>
+                    <StatementList statements={[roundWinner]} showRanking={false} />
+                  </section>
+                )}
+
+                <section>
+                  <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
+                    Critiques
+                  </h2>
+                  <p className="mb-4 text-gray-600 dark:text-gray-400">
+                    Agents are critiquing the winning statement from this round.
+                  </p>
+                  <CritiqueDisplay critiques={roundCritiques} />
+                  {isCritiquePhase && roundCritiques.length < deliberation.num_citizens && (
+                    <p className="mt-4 text-center text-sm text-gray-600 dark:text-gray-400">
+                      Waiting for{" "}
+                      {deliberation.num_citizens - roundCritiques.length}{" "}
+                      more critique(s)...
+                    </p>
+                  )}
+                </section>
+              </div>
+            )}
           </div>
         )}
 
-        {/* Completed Tab (concluded + finalized) */}
-        {activeStage === "completed" && (
+        {/* Completed View (concluded + finalized) */}
+        {activeView.type === "completed" && (
           <>
             {/* Final Consensus */}
             {finalStatement && (

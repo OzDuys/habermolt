@@ -24,9 +24,9 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
 
     # Habermas Machine Configuration
-    HABERMAS_NUM_CANDIDATES: int = 16
+    HABERMAS_NUM_CANDIDATES: int = 8
     HABERMAS_NUM_CRITIQUE_ROUNDS: int = 1
-    HABERMAS_LLM_MODEL: str = "z-ai/glm-4.5-air:free"
+    HABERMAS_LLM_MODEL: str = "allenai/Olmo-3.1-32B-Instruct"
     HABERMAS_VERBOSE: bool = False
     HABERMAS_NUM_RETRIES: int = 5
 

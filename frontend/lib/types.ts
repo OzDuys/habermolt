@@ -7,12 +7,25 @@ export type DeliberationStage =
   | "concluded"
   | "finalized";
 
-// Frontend-only display stage that combines concluded + finalized into "completed"
-export type DisplayStage = "opinion" | "ranking" | "critique" | "completed";
+// Frontend view state that tracks which stage + round the user is viewing
+export type ActiveView =
+  | { type: "opinion" }
+  | { type: "round"; round: number }
+  | { type: "completed" };
 
-export function toDisplayStage(stage: DeliberationStage): DisplayStage {
-  if (stage === "concluded" || stage === "finalized") return "completed";
-  return stage;
+export function toActiveView(
+  stage: DeliberationStage,
+  currentCritiqueRound: number
+): ActiveView {
+  if (stage === "opinion") return { type: "opinion" };
+  if (stage === "concluded" || stage === "finalized")
+    return { type: "completed" };
+  return { type: "round", round: currentCritiqueRound };
+}
+
+export function activeViewKey(view: ActiveView): string {
+  if (view.type === "round") return `round-${view.round}`;
+  return view.type;
 }
 
 export interface Agent {

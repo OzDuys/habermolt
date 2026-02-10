@@ -1,62 +1,115 @@
-import type { DeliberationStage, DisplayStage } from "@/lib/types";
-import { toDisplayStage } from "@/lib/types";
+import type { DeliberationStage, ActiveView } from "@/lib/types";
+import { activeViewKey } from "@/lib/types";
 
 interface StageIndicatorProps {
   currentStage: DeliberationStage;
-  activeStage: DisplayStage;
-  onStageClick: (stage: DisplayStage) => void;
+  currentCritiqueRound: number;
+  numCritiqueRounds: number;
+  activeView: ActiveView;
+  onViewChange: (view: ActiveView) => void;
 }
 
-const stages: { value: DisplayStage; label: string }[] = [
-  { value: "opinion", label: "Opinion" },
-  { value: "ranking", label: "Ranking" },
-  { value: "critique", label: "Critique" },
-  { value: "completed", label: "Completed" },
-];
+type StageEntry = {
+  key: string;
+  label: string;
+  sublabel?: string;
+  view: ActiveView;
+};
+
+function getStageStatus(
+  entry: StageEntry,
+  currentStage: DeliberationStage,
+  currentCritiqueRound: number
+): "completed" | "current" | "future" {
+  if (entry.key === "opinion") {
+    return currentStage === "opinion" ? "current" : "completed";
+  }
+
+  if (entry.key === "completed") {
+    if (currentStage === "concluded" || currentStage === "finalized")
+      return "current";
+    return "future";
+  }
+
+  // Round entries
+  const round = (entry.view as { type: "round"; round: number }).round;
+
+  if (currentStage === "opinion") return "future";
+  if (currentStage === "concluded" || currentStage === "finalized")
+    return "completed";
+
+  // We're in ranking or critique stage
+  if (currentCritiqueRound === round) return "current";
+  if (currentCritiqueRound > round) return "completed";
+  return "future";
+}
 
 export default function StageIndicator({
   currentStage,
-  activeStage,
-  onStageClick,
+  currentCritiqueRound,
+  numCritiqueRounds,
+  activeView,
+  onViewChange,
 }: StageIndicatorProps) {
-  const displayStage = toDisplayStage(currentStage);
-  const currentIndex = stages.findIndex((s) => s.value === displayStage);
-  const activeIndex = stages.findIndex((s) => s.value === activeStage);
+  // Build dynamic stages: Opinion → Round 1 → Round 2 → ... → Completed
+  const stages: StageEntry[] = [
+    { key: "opinion", label: "Opinions", view: { type: "opinion" } },
+    ...Array.from({ length: numCritiqueRounds }, (_, i) => {
+      // Show sub-phase for the current round
+      let sublabel: string | undefined;
+      if (
+        (currentStage === "ranking" || currentStage === "critique") &&
+        currentCritiqueRound === i
+      ) {
+        sublabel = currentStage === "ranking" ? "Ranking" : "Critiquing";
+      }
+      return {
+        key: `round-${i}`,
+        label: numCritiqueRounds === 1 ? "Deliberation" : `Round ${i + 1}`,
+        sublabel,
+        view: { type: "round" as const, round: i },
+      };
+    }),
+    { key: "completed", label: "Completed", view: { type: "completed" } },
+  ];
+
+  const activeKey = activeViewKey(activeView);
 
   return (
     <div className="mb-8">
       <div className="flex items-center justify-between">
         {stages.map((stage, index) => {
-          const isCompleted = index < currentIndex;
-          const isCurrent = index === currentIndex;
-          const isActive = index === activeIndex;
-          const isClickable = index <= currentIndex;
+          const status = getStageStatus(
+            stage,
+            currentStage,
+            currentCritiqueRound
+          );
+          const isActive = stage.key === activeKey;
+          const isClickable = status === "completed" || status === "current";
 
           return (
-            <div key={stage.value} className="flex flex-1 items-center">
+            <div key={stage.key} className="flex flex-1 items-center">
               {/* Circle + Label */}
               <div className="flex flex-col items-center">
                 <button
                   type="button"
                   disabled={!isClickable}
-                  onClick={() => isClickable && onStageClick(stage.value)}
+                  onClick={() => isClickable && onViewChange(stage.view)}
                   className={`flex h-10 w-10 items-center justify-center rounded-full transition-all ${
-                    isCompleted
+                    status === "completed"
                       ? "bg-green-600 hover:bg-green-500"
-                      : isCurrent
-                      ? "bg-blue-600 hover:bg-blue-500"
-                      : "bg-gray-300 dark:bg-gray-600"
+                      : status === "current"
+                        ? "bg-blue-600 hover:bg-blue-500"
+                        : "bg-gray-300 dark:bg-gray-600"
                   } ${
                     isActive
                       ? "ring-2 ring-offset-2 ring-blue-500 dark:ring-offset-gray-900"
                       : ""
                   } ${
-                    isClickable
-                      ? "cursor-pointer"
-                      : "cursor-default"
+                    isClickable ? "cursor-pointer" : "cursor-default"
                   }`}
                 >
-                  {isCompleted ? (
+                  {status === "completed" ? (
                     <svg
                       className="h-6 w-6 text-white"
                       fill="none"
@@ -73,7 +126,7 @@ export default function StageIndicator({
                   ) : (
                     <span
                       className={`text-sm font-semibold ${
-                        isCurrent
+                        status === "current"
                           ? "text-white"
                           : "text-gray-600 dark:text-gray-300"
                       }`}
@@ -91,13 +144,18 @@ export default function StageIndicator({
                 >
                   {stage.label}
                 </span>
+                {stage.sublabel && (
+                  <span className="text-xs text-blue-500 dark:text-blue-400">
+                    {stage.sublabel}
+                  </span>
+                )}
               </div>
 
               {/* Connector Line */}
               {index < stages.length - 1 && (
                 <div
                   className={`mx-2 h-1 flex-1 ${
-                    index < currentIndex
+                    status === "completed"
                       ? "bg-green-600"
                       : "bg-gray-300 dark:bg-gray-600"
                   }`}
