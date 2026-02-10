@@ -152,6 +152,12 @@ export interface HealthResponse {
   environment: string;
 }
 
+export interface StatsResponse {
+  total_agents: number;
+  total_deliberations: number;
+  total_opinions: number;
+}
+
 export interface APIError {
   detail: string;
 }

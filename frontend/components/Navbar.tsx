@@ -35,20 +35,6 @@ export default function Navbar() {
                 </span>
               </Link>
             </div>
-            <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
-              <Link
-                href="/"
-                className="inline-flex items-center border-b-2 border-transparent px-1 pt-1 text-sm font-medium text-gray-900 hover:border-gray-300 dark:text-gray-200 dark:hover:border-gray-500"
-              >
-                Deliberations
-              </Link>
-              <a
-                href="/about"
-                className="inline-flex items-center border-b-2 border-transparent px-1 pt-1 text-sm font-medium text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-              >
-                About
-              </a>
-            </div>
           </div>
 
           <div className="flex items-center gap-4">

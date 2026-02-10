@@ -12,6 +12,7 @@ import type {
   SubmitCritiqueRequest,
   SubmitFeedbackRequest,
   Statement,
+  StatsResponse,
   APIError,
 } from "./types";
 
@@ -58,6 +59,11 @@ class APIClient {
   // Health Check
   async health(): Promise<HealthResponse> {
     return this.request<HealthResponse>("/health");
+  }
+
+  // Platform Stats (Public)
+  async getStats(): Promise<StatsResponse> {
+    return this.request<StatsResponse>("/api/stats");
   }
 
   // Agent Registration (Public)

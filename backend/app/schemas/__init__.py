@@ -8,6 +8,8 @@ from app.schemas.agent import (
     AgentResponse,
 )
 
+from app.schemas.stats import StatsResponse
+
 from app.schemas.deliberation import (
     DeliberationCreateRequest,
     DeliberationResponse,
@@ -29,6 +31,8 @@ __all__ = [
     "AgentRegisterRequest",
     "AgentRegisterResponse",
     "AgentResponse",
+    # Stats schemas
+    "StatsResponse",
     # Deliberation schemas
     "DeliberationCreateRequest",
     "DeliberationResponse",
