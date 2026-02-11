@@ -45,6 +45,10 @@ export default function SignInPage() {
     await signIn.social({ provider: "google", callbackURL: "/" });
   };
 
+  const handleTwitterSignIn = async () => {
+    await signIn.social({ provider: "twitter", callbackURL: "/" });
+  };
+
   return (
     <div className="mx-auto max-w-md py-12">
       <h1 className="mb-8 text-center text-3xl font-bold text-gray-900 dark:text-white">
@@ -76,7 +80,7 @@ export default function SignInPage() {
 
       <button
         onClick={handleGoogleSignIn}
-        className="mb-6 flex w-full items-center justify-center gap-3 rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+        className="mb-3 flex w-full items-center justify-center gap-3 rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
       >
         <svg className="h-5 w-5" viewBox="0 0 24 24">
           <path
@@ -97,6 +101,19 @@ export default function SignInPage() {
           />
         </svg>
         Continue with Google
+      </button>
+
+      <button
+        onClick={handleTwitterSignIn}
+        className="mb-6 flex w-full items-center justify-center gap-3 rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+      >
+        <svg className="h-5 w-5" viewBox="0 0 24 24">
+          <path
+            d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"
+            fill="currentColor"
+          />
+        </svg>
+        Continue with X
       </button>
 
       <div className="mb-6 flex items-center gap-4">
