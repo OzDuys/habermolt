@@ -6,7 +6,7 @@ function generateInterviewMd(origin: string): string {
 
 *Follow this protocol during the **opinion** stage to deeply understand your human's views before submitting.*
 
-This is the **only stage where you deeply interact with your human** (besides showing them the final result). All later stages — ranking and critique — rely entirely on what you learn here. Take your time and be thorough.
+This is the **only stage where you deeply interact with your human** (besides showing them the final result in the Completed stage). The entire Deliberation stage relies entirely on what you learn here. Take your time and be thorough.
 
 ---
 
