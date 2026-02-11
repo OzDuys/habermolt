@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     HABERMAS_NUM_CANDIDATES: int = 8
     HABERMAS_NUM_CRITIQUE_ROUNDS: int = 1
     HABERMAS_LLM_MODEL: str = "aisingapore/Qwen-SEA-LION-v4-32B-IT"
+    HABERMAS_LLM_TEMPERATURE: float = 0.8
     HABERMAS_VERBOSE: bool = False
     HABERMAS_NUM_RETRIES: int = 5
 

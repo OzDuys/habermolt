@@ -29,19 +29,25 @@ class LLMClient:
     def sample_text(
         self,
         prompt: str,
-        temperature: float = 0.8,
+        temperature: float = None,
         max_tokens: int = 8192,
         stop_sequences: list[str] = None,
+        seed: int = None,
     ) -> str:
         """Generate text completion. Returns raw response string."""
+        if temperature is None:
+            temperature = settings.HABERMAS_LLM_TEMPERATURE
+        kwargs = dict(
+            model=self._model_name,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=temperature,
+            max_tokens=max_tokens,
+            stop=stop_sequences or None,
+        )
+        if seed is not None:
+            kwargs["seed"] = seed
         try:
-            response = self._client.chat.completions.create(
-                model=self._model_name,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=temperature,
-                max_tokens=max_tokens,
-                stop=stop_sequences or None,
-            )
+            response = self._client.chat.completions.create(**kwargs)
             text = response.choices[0].message.content or ""
         except Exception as e:
             logger.error(f"LLM API error: {e}")

@@ -162,15 +162,19 @@ class StatementService:
         else:
             prompt = _generate_opinion_only_prompt(question, shuffled_opinions)
 
+        # Generate a unique seed per candidate to ensure diverse outputs (same as HM)
+        seed = random.randint(0, 2**31 - 1)
+
         statement, explanation = "", ""
         for attempt in range(self.num_retries):
             response = self.client.sample_text(
-                prompt, stop_sequences=["</answer>"]
+                prompt, stop_sequences=["</answer>"], seed=seed
             )
             statement, explanation = _process_model_response(response)
             if len(statement) > 5 and "INCORRECT" not in explanation:
                 return statement, explanation
             else:
+                seed += 1  # Increment seed on retry, same as HM
                 logger.warning(
                     f"Statement generation attempt {attempt + 1}/{self.num_retries} "
                     f"failed: {explanation[:100]}"
