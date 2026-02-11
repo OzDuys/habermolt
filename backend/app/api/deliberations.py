@@ -4,7 +4,7 @@ API routes for deliberation management and participation.
 
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 from uuid import UUID
 from datetime import datetime
 import threading
@@ -12,7 +12,7 @@ import asyncio
 
 from app.database import get_db, SessionLocal
 from app.models import Agent, Deliberation, DeliberationStage, Opinion, Ranking, Critique, HumanFeedback
-from app.middleware.auth import APIKeyAuth
+from app.middleware.auth import APIKeyAuth, OptionalAPIKeyAuth
 from app.services.deliberation_service import DeliberationService
 from app.schemas import (
     DeliberationCreateRequest,
@@ -145,15 +145,19 @@ async def list_deliberations(
 )
 async def get_deliberation(
     deliberation_id: UUID,
+    agent: Optional[Agent] = Depends(OptionalAPIKeyAuth()),
     db: Session = Depends(get_db)
 ):
     """
     Get detailed information about a deliberation.
 
-    Includes all opinions, statements, rankings, critiques, and feedback.
+    Includes statements, rankings, critiques, and feedback.
+    When called by an authenticated agent, only that agent's own opinion is returned.
+    When called without auth (e.g. the public frontend), all opinions are returned.
 
     Args:
         deliberation_id: UUID of the deliberation
+        agent: Optional authenticated agent
         db: Database session
 
     Returns:
@@ -175,10 +179,16 @@ async def get_deliberation(
             detail="Creator agent not found"
         )
 
+    # If an agent is authenticated, only return their own opinion
+    if agent:
+        opinions = [o for o in deliberation.opinions if o.agent_id == agent.id]
+    else:
+        opinions = list(deliberation.opinions)
+
     return DeliberationDetailResponse(
         deliberation=DeliberationResponse.from_orm(deliberation),
         created_by=creator,
-        opinions=[OpinionResponse.from_orm(o) for o in deliberation.opinions],
+        opinions=[OpinionResponse.from_orm(o) for o in opinions],
         statements=[StatementResponse.from_orm(s) for s in deliberation.statements],
         rankings=[RankingResponse.from_orm(r) for r in deliberation.rankings],
         critiques=[CritiqueResponse.from_orm(c) for c in deliberation.critiques],
@@ -737,15 +747,18 @@ async def reprocess_deliberation(
 )
 async def get_result(
     deliberation_id: UUID,
+    agent: Optional[Agent] = Depends(OptionalAPIKeyAuth()),
     db: Session = Depends(get_db)
 ):
     """
     Get complete results of a finalized deliberation.
 
     Only available for FINALIZED deliberations.
+    When called by an authenticated agent, only that agent's own opinion is returned.
 
     Args:
         deliberation_id: UUID of the deliberation
+        agent: Optional authenticated agent
         db: Database session
 
     Returns:
@@ -773,10 +786,16 @@ async def get_result(
             detail="Creator agent not found"
         )
 
+    # If an agent is authenticated, only return their own opinion
+    if agent:
+        opinions = [o for o in deliberation.opinions if o.agent_id == agent.id]
+    else:
+        opinions = list(deliberation.opinions)
+
     return DeliberationDetailResponse(
         deliberation=DeliberationResponse.from_orm(deliberation),
         created_by=creator,
-        opinions=[OpinionResponse.from_orm(o) for o in deliberation.opinions],
+        opinions=[OpinionResponse.from_orm(o) for o in opinions],
         statements=[StatementResponse.from_orm(s) for s in deliberation.statements],
         rankings=[RankingResponse.from_orm(r) for r in deliberation.rankings],
         critiques=[CritiqueResponse.from_orm(c) for c in deliberation.critiques],

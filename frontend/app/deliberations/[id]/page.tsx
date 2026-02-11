@@ -108,17 +108,8 @@ export default function DeliberationPage() {
   const isCritiquePhase =
     deliberation.stage === "critique" && deliberation.current_critique_round === activeRound;
 
-  // Determine if Habermas is processing (generating statements)
-  const joinWindowExpired = deliberation.join_window_deadline &&
-    new Date(deliberation.join_window_deadline) <= new Date();
-  const isProcessing =
-    (deliberation.stage === "opinion" &&
-      joinWindowExpired &&
-      statements.length === 0) ||
-    (deliberation.stage === "critique" &&
-      critiques.filter((c) => c.round_number === deliberation.current_critique_round)
-        .length === deliberation.num_citizens &&
-      deliberation.current_critique_round < deliberation.num_critique_rounds - 1);
+  // The backend sets meta_data.processing = true while generating statements
+  const isProcessing = !!deliberation.meta_data?.processing;
 
   // Final statement for the completed view
   const lastRound = deliberation.num_critique_rounds - 1;

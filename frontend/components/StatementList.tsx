@@ -71,13 +71,13 @@ export default function StatementList({
             <div className="prose prose-sm max-w-none text-gray-800 dark:prose-invert dark:text-gray-200">
               <ReactMarkdown>{statement.statement_text}</ReactMarkdown>
             </div>
-            {statement.metadata?.explanation && (
+            {statement.meta_data?.explanation && (
               <details className="mt-3">
                 <summary className="cursor-pointer text-sm font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200">
                   View explanation
                 </summary>
                 <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                  {statement.metadata.explanation}
+                  {statement.meta_data.explanation}
                 </p>
               </details>
             )}

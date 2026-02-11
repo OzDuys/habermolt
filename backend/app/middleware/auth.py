@@ -73,3 +73,20 @@ class APIKeyAuth:
         """Extract and validate API key from request."""
         api_key = request.headers.get("X-API-Key")
         return await get_current_agent(api_key=api_key, request=request)
+
+
+class OptionalAPIKeyAuth:
+    """
+    Dependency class for optional API key authentication.
+    Returns None if no API key is provided (e.g. public frontend requests).
+    """
+
+    async def __call__(self, request: Request) -> Optional[Agent]:
+        """Extract and validate API key if present, otherwise return None."""
+        api_key = request.headers.get("X-API-Key")
+        if not api_key:
+            return None
+        try:
+            return await get_current_agent(api_key=api_key, request=request)
+        except HTTPException:
+            return None

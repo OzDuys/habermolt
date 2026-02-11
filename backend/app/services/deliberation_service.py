@@ -164,22 +164,34 @@ class DeliberationService:
         Returns:
             bool: True if transition occurred
         """
+        # Signal that statement generation is in progress
+        deliberation.meta_data = {**(deliberation.meta_data or {}), 'processing': True}
+        self.db.commit()
+
         opinions_text = [opinion.opinion_text for opinion in deliberation.opinions]
 
-        statements = await statement_service.generate_statements(
-            self.db,
-            deliberation,
-            opinions_text,
-            round_number=0,
-        )
+        try:
+            statements = await statement_service.generate_statements(
+                self.db,
+                deliberation,
+                opinions_text,
+                round_number=0,
+            )
+        except Exception:
+            deliberation.meta_data = {**(deliberation.meta_data or {}), 'processing': False}
+            self.db.commit()
+            raise
 
         if not statements:
+            deliberation.meta_data = {**(deliberation.meta_data or {}), 'processing': False}
+            self.db.commit()
             raise ValueError("Failed to generate any candidate statements")
 
         deliberation.stage = DeliberationStage.RANKING
         deliberation.num_citizens = len(deliberation.opinions)
         deliberation.started_at = datetime.utcnow()
         deliberation.updated_at = datetime.utcnow()
+        deliberation.meta_data = {**(deliberation.meta_data or {}), 'processing': False}
 
         self.db.commit()
 
@@ -287,6 +299,10 @@ class DeliberationService:
 
         # All critiques collected - decide next step
         if deliberation.current_critique_round < deliberation.num_critique_rounds - 1:
+            # Signal that statement generation is in progress
+            deliberation.meta_data = {**(deliberation.meta_data or {}), 'processing': True}
+            self.db.commit()
+
             # Get previous winning statement and critiques
             winner = self.get_winning_statement(deliberation)
             previous_winner_text = winner.statement_text if winner else None
@@ -298,21 +314,29 @@ class DeliberationService:
             deliberation.current_critique_round += 1
 
             # Generate new candidate statements using critiques
-            statements = await statement_service.generate_statements(
-                self.db,
-                deliberation,
-                opinions_text,
-                round_number=deliberation.current_critique_round,
-                previous_winner=previous_winner_text,
-                critiques=critiques_text,
-            )
+            try:
+                statements = await statement_service.generate_statements(
+                    self.db,
+                    deliberation,
+                    opinions_text,
+                    round_number=deliberation.current_critique_round,
+                    previous_winner=previous_winner_text,
+                    critiques=critiques_text,
+                )
+            except Exception:
+                deliberation.meta_data = {**(deliberation.meta_data or {}), 'processing': False}
+                self.db.commit()
+                raise
 
             if not statements:
+                deliberation.meta_data = {**(deliberation.meta_data or {}), 'processing': False}
+                self.db.commit()
                 raise ValueError("Failed to generate any candidate statements")
 
             # Back to ranking stage
             deliberation.stage = DeliberationStage.RANKING
             deliberation.updated_at = datetime.utcnow()
+            deliberation.meta_data = {**(deliberation.meta_data or {}), 'processing': False}
 
         else:
             # Final round complete - conclude

@@ -50,7 +50,7 @@ export interface Deliberation {
   started_at: string | null;
   concluded_at: string | null;
   finalized_at: string | null;
-  metadata: Record<string, any>;
+  meta_data: Record<string, any>;
 }
 
 export interface Opinion {
@@ -69,7 +69,7 @@ export interface Statement {
   statement_text: string;
   social_ranking: number | null;
   generated_at: string;
-  metadata: Record<string, any>;
+  meta_data: Record<string, any>;
 }
 
 export interface RankingEntry {
