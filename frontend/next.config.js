@@ -8,6 +8,18 @@ const nextConfig = {
         destination: "/api/skill",
       },
       {
+        source: "/skill.json",
+        destination: "/api/skill-json",
+      },
+      {
+        source: "/heartbeat.md",
+        destination: "/api/heartbeat",
+      },
+      {
+        source: "/interview.md",
+        destination: "/api/interview",
+      },
+      {
         source: "/api/deliberations/:path*",
         destination: `${process.env.BACKEND_URL || "http://localhost:8000"}/api/deliberations/:path*`,
       },
