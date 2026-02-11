@@ -1,11 +1,12 @@
 """
-Service for generating candidate consensus statements using Gemini.
+Service for generating candidate consensus statements using multiple LLMs.
 
 Replaces the statement generation part of the Habermas Machine.
 Prompts are adapted from habermas_machine/statement_model/cot_model.py.
 """
 
 import asyncio
+import itertools
 import logging
 import random
 import re
@@ -134,15 +135,22 @@ def _process_model_response(response: str) -> Tuple[str, str]:
 
 
 class StatementService:
-    """Generates candidate group statements by calling Gemini."""
+    """Generates candidate group statements using multiple LLM models."""
 
     def __init__(self):
         self.num_candidates = settings.HABERMAS_NUM_CANDIDATES
         self.num_retries = settings.HABERMAS_NUM_RETRIES
-        self.client = LLMClient()
+        model_list = settings.habermas_model_list
+        # One LLMClient per unique model, keyed by name
+        self.clients = {name: LLMClient(model_name=name) for name in model_list}
+        # Build the per-candidate model assignment by cycling through the list
+        self.candidate_models = [
+            m for m, _ in zip(itertools.cycle(model_list), range(self.num_candidates))
+        ]
 
     def _generate_single_statement(
         self,
+        client: LLMClient,
         question: str,
         opinions: list[str],
         previous_winner: Optional[str] = None,
@@ -167,7 +175,7 @@ class StatementService:
 
         statement, explanation = "", ""
         for attempt in range(self.num_retries):
-            response = self.client.sample_text(
+            response = client.sample_text(
                 prompt, stop_sequences=["</answer>"], seed=seed
             )
             statement, explanation = _process_model_response(response)
@@ -177,7 +185,7 @@ class StatementService:
                 seed += 1  # Increment seed on retry, same as HM
                 logger.warning(
                     f"Statement generation attempt {attempt + 1}/{self.num_retries} "
-                    f"failed: {explanation[:100]}"
+                    f"failed (model={client._model_name}): {explanation[:100]}"
                 )
 
         return statement, explanation
@@ -194,22 +202,23 @@ class StatementService:
         """
         Generate num_candidates statements and store them in the database.
 
-        Statements are saved with social_ranking=None — the ranking is determined
-        later by the Schulze method after agents submit their rankings.
+        Each candidate is assigned a model from the configured model list (cycled
+        if there are fewer models than candidates).
 
         Returns list of Statement model instances.
         """
         def _generate_all():
             results = []
-            for i in range(self.num_candidates):
+            for i, model_name in enumerate(self.candidate_models):
+                client = self.clients[model_name]
                 logger.info(
                     f"Generating statement {i + 1}/{self.num_candidates} "
-                    f"for deliberation {deliberation.id}"
+                    f"(model={model_name}) for deliberation {deliberation.id}"
                 )
                 stmt, expl = self._generate_single_statement(
-                    deliberation.question, opinions, previous_winner, critiques
+                    client, deliberation.question, opinions, previous_winner, critiques
                 )
-                results.append((stmt, expl))
+                results.append((stmt, expl, model_name))
             return results
 
         # Run blocking LLM calls in thread pool
@@ -217,14 +226,14 @@ class StatementService:
 
         # Store in database — social_ranking is NULL at this point
         statements = []
-        for stmt_text, explanation in results:
+        for stmt_text, explanation, model_name in results:
             if stmt_text:  # Skip empty statements from failed generations
                 statement = Statement(
                     deliberation_id=deliberation.id,
                     round_number=round_number,
                     statement_text=stmt_text,
                     social_ranking=None,
-                    meta_data={"explanation": explanation},
+                    meta_data={"explanation": explanation, "model": model_name},
                 )
                 db.add(statement)
                 statements.append(statement)

@@ -24,12 +24,20 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
 
     # Habermas Machine Configuration
-    HABERMAS_NUM_CANDIDATES: int = 8
+    HABERMAS_NUM_CANDIDATES: int = 6
     HABERMAS_NUM_CRITIQUE_ROUNDS: int = 1
     HABERMAS_LLM_MODEL: str = "aisingapore/Qwen-SEA-LION-v4-32B-IT"
+    HABERMAS_LLM_MODELS: str = ""  # Comma-separated list of models; cycles if fewer than NUM_CANDIDATES
     HABERMAS_LLM_TEMPERATURE: float = 0.8
     HABERMAS_VERBOSE: bool = False
     HABERMAS_NUM_RETRIES: int = 5
+
+    @property
+    def habermas_model_list(self) -> list[str]:
+        """Parse HABERMAS_LLM_MODELS into a list. Falls back to single HABERMAS_LLM_MODEL."""
+        if self.HABERMAS_LLM_MODELS:
+            return [m.strip() for m in self.HABERMAS_LLM_MODELS.split(",") if m.strip()]
+        return [self.HABERMAS_LLM_MODEL]
 
     # API Configuration
     API_V1_PREFIX: str = "/api"

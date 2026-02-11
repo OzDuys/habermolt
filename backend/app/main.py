@@ -123,8 +123,13 @@ async def startup_event():
     """Initialize application on startup."""
     logger.info(f"Starting {settings.PROJECT_NAME} v{settings.VERSION}")
     logger.info(f"Environment: {settings.ENVIRONMENT}")
-    logger.info(f"Deliberation config: {settings.HABERMAS_NUM_CANDIDATES} candidates, "
-                f"{settings.HABERMAS_NUM_CRITIQUE_ROUNDS} critique rounds")
+    models = settings.habermas_model_list
+    logger.info(
+        f"Deliberation config: {settings.HABERMAS_NUM_CANDIDATES} candidates, "
+        f"{len(models)} models, {settings.HABERMAS_NUM_CRITIQUE_ROUNDS} critique rounds"
+    )
+    for i, model in enumerate(models):
+        logger.info(f"  Model {i + 1}: {model}")
     logger.info("API documentation available at /docs")
 
 
