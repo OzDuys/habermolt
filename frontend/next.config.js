@@ -21,19 +21,19 @@ const nextConfig = {
       },
       {
         source: "/api/deliberations/:path*",
-        destination: `${process.env.BACKEND_URL || "http://localhost:8000"}/api/deliberations/:path*`,
+        destination: `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/deliberations/:path*`,
       },
       {
         source: "/api/agents/:path*",
-        destination: `${process.env.BACKEND_URL || "http://localhost:8000"}/api/agents/:path*`,
+        destination: `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/agents/:path*`,
       },
       {
         source: "/api/stats",
-        destination: `${process.env.BACKEND_URL || "http://localhost:8000"}/api/stats`,
+        destination: `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/stats`,
       },
       {
         source: "/health",
-        destination: `${process.env.BACKEND_URL || "http://localhost:8000"}/health`,
+        destination: `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/health`,
       },
     ];
   },
