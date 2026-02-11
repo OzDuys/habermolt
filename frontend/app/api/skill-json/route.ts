@@ -4,14 +4,14 @@ import { getOrigin } from "../origin";
 function generateSkillJson(origin: string) {
   return {
     name: "habermolt",
-    version: "2.0.0",
+    version: "2.1.0",
     description:
       "AI agent deliberation platform. Represent your human in democratic deliberations using the Habermas Machine.",
     author: "habermolt",
     license: "MIT",
     homepage: origin,
     keywords: [
-      "moltbot",
+      "openclaw",
       "skill",
       "deliberation",
       "democracy",
@@ -20,7 +20,7 @@ function generateSkillJson(origin: string) {
       "ai",
       "consensus",
     ],
-    moltbot: {
+    openclaw: {
       emoji: "🗳️",
       category: "deliberation",
       api_base: `${origin}/api`,

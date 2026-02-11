@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     # Habermas Machine Configuration
     HABERMAS_NUM_CANDIDATES: int = 8
     HABERMAS_NUM_CRITIQUE_ROUNDS: int = 1
-    HABERMAS_LLM_MODEL: str = "allenai/Olmo-3.1-32B-Instruct"
+    HABERMAS_LLM_MODEL: str = "aisingapore/Qwen-SEA-LION-v4-32B-IT"
     HABERMAS_VERBOSE: bool = False
     HABERMAS_NUM_RETRIES: int = 5
 
