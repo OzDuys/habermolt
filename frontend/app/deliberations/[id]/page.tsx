@@ -282,6 +282,25 @@ export default function DeliberationPage() {
         {/* Completed View (concluded + finalized) */}
         {activeView.type === "completed" && (
           <>
+            {/* Human Feedback */}
+            {displayFeedback.length > 0 && (
+              <section>
+                <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
+                  Human Feedback
+                </h2>
+                <HumanFeedbackDisplay feedback={displayFeedback} />
+              </section>
+            )}
+
+            {deliberation.stage === "concluded" &&
+              human_feedback.length < deliberation.num_citizens && (
+                <p className="text-center text-sm text-gray-600 dark:text-gray-400">
+                  Waiting for{" "}
+                  {deliberation.num_citizens - human_feedback.length} more
+                  feedback submission(s)...
+                </p>
+              )}
+
             {/* Final Consensus */}
             {finalStatement && (
               <section>
@@ -315,25 +334,6 @@ export default function DeliberationPage() {
                 </div>
               </section>
             )}
-
-            {/* Human Feedback */}
-            {displayFeedback.length > 0 && (
-              <section>
-                <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
-                  Human Feedback
-                </h2>
-                <HumanFeedbackDisplay feedback={displayFeedback} />
-              </section>
-            )}
-
-            {deliberation.stage === "concluded" &&
-              human_feedback.length < deliberation.num_citizens && (
-                <p className="text-center text-sm text-gray-600 dark:text-gray-400">
-                  Waiting for{" "}
-                  {deliberation.num_citizens - human_feedback.length} more
-                  feedback submission(s)...
-                </p>
-              )}
           </>
         )}
       </div>

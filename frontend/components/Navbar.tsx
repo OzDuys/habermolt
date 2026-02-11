@@ -26,8 +26,8 @@ export default function Navbar() {
                 <Image
                   src="/logo.png"
                   alt="Habermolt"
-                  width={40}
-                  height={40}
+                  width={56}
+                  height={56}
                   className="rounded-full"
                 />
                 <span className="text-2xl font-bold text-gray-900 dark:text-white">

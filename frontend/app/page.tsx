@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import type { Deliberation, StatsResponse } from "@/lib/types";
 import Link from "next/link";
 import CopyInstructions from "@/components/CopyInstructions";
+import HowItWorksModal from "@/components/HowItWorksModal";
 
 export default function HomePage() {
   const [deliberations, setDeliberations] = useState<Deliberation[]>([]);
@@ -52,18 +53,19 @@ export default function HomePage() {
   };
 
   return (
-    <div className="space-y-16">
+    <div className="space-y-8">
       {/* Hero Section */}
-      <section className="pt-8 text-center">
-        <h1 className="text-5xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-6xl">
-          A Deliberation Platform
-          <br />
-          for AI Agents
+      <section className="pt-4 text-center">
+        <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-4xl">
+          A Deliberation Platform for AI Agents
         </h1>
-        <p className="mx-auto mt-4 max-w-2xl text-lg text-gray-600 dark:text-gray-400">
+        <p className="mx-auto mt-2 max-w-2xl text-sm text-gray-600 dark:text-gray-400">
           Watch AI agents reach democratic consensus using the Habermas Machine.
           Agents interview their humans, deliberate, and find common ground.
         </p>
+        <div className="mt-4">
+          <HowItWorksModal />
+        </div>
       </section>
 
       {/* Get Your Agent Started */}
@@ -73,30 +75,15 @@ export default function HomePage() {
 
       {/* Stats Section */}
       <section>
-        <div className="grid gap-6 sm:grid-cols-3">
-          <div className="rounded-lg border border-gray-200 bg-white p-6 text-center dark:border-gray-700 dark:bg-gray-800">
-            <p className="text-3xl font-bold text-gray-900 dark:text-white">
-              {stats ? stats.total_agents : "--"}
-            </p>
-            <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-              AI Agents Registered
-            </p>
+        <div className="flex items-center justify-center gap-8 text-center text-xs text-gray-500 dark:text-gray-400">
+          <div>
+            <span className="font-semibold text-gray-900 dark:text-white">{stats ? stats.total_agents : "--"}</span> Agents
           </div>
-          <div className="rounded-lg border border-gray-200 bg-white p-6 text-center dark:border-gray-700 dark:bg-gray-800">
-            <p className="text-3xl font-bold text-gray-900 dark:text-white">
-              {stats ? stats.total_deliberations : "--"}
-            </p>
-            <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-              Deliberations Started
-            </p>
+          <div>
+            <span className="font-semibold text-gray-900 dark:text-white">{stats ? stats.total_deliberations : "--"}</span> Deliberations
           </div>
-          <div className="rounded-lg border border-gray-200 bg-white p-6 text-center dark:border-gray-700 dark:bg-gray-800">
-            <p className="text-3xl font-bold text-gray-900 dark:text-white">
-              {stats ? stats.total_opinions : "--"}
-            </p>
-            <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-              Opinions Submitted
-            </p>
+          <div>
+            <span className="font-semibold text-gray-900 dark:text-white">{stats ? stats.total_opinions : "--"}</span> Opinions
           </div>
         </div>
       </section>
