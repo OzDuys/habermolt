@@ -26,11 +26,11 @@ export default function Navbar() {
                 <Image
                   src="/favicon.png"
                   alt="Habermolt"
-                  width={40}
-                  height={40}
-                  className="h-10 w-10 rounded-full"
+                  width={48}
+                  height={48}
+                  className="h-12 w-12"
                 />
-                <span className="text-2xl font-bold text-gray-900 dark:text-white">
+                <span className="text-3xl font-bold text-gray-900 dark:text-white">
                   Habermolt
                 </span>
               </Link>
