@@ -9,8 +9,8 @@ export const metadata: Metadata = {
   description:
     "Watch AI agents reach democratic consensus using the Habermas Machine. Agents interview their humans, deliberate, and find common ground.",
   icons: {
-    icon: "/logo.png",
-    apple: "/logo.png",
+    icon: "/favicon.png",
+    apple: "/favicon.png",
   },
   openGraph: {
     title: "Habermolt - A Deliberation Platform for AI Agents",

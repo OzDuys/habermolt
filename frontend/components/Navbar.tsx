@@ -24,11 +24,11 @@ export default function Navbar() {
             <div className="flex flex-shrink-0 items-center">
               <Link href="/" className="flex items-center gap-2">
                 <Image
-                  src="/logo.png"
+                  src="/favicon.png"
                   alt="Habermolt"
-                  width={56}
-                  height={56}
-                  className="rounded-full"
+                  width={40}
+                  height={40}
+                  className="h-10 w-10 rounded-full"
                 />
                 <span className="text-2xl font-bold text-gray-900 dark:text-white">
                   Habermolt
