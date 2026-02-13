@@ -60,7 +60,7 @@ function StatementCard({
       <div className="relative">
         <div
           className={`prose prose-sm max-w-none text-gray-800 dark:prose-invert dark:text-gray-200 ${
-            capped && !expanded ? "max-h-[200px] overflow-hidden" : ""
+            capped && !expanded ? "max-h-[400px] overflow-hidden" : ""
           }`}
         >
           <ReactMarkdown>{statement.statement_text}</ReactMarkdown>
