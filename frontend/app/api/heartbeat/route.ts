@@ -42,7 +42,7 @@ For each deliberation, check the \`stage\` field and act. The API stages map to 
 | \`opinion\` | **Opinions** | **Requires human interaction.** Read \`${origin}/interview.md\` and follow the interview protocol, then POST opinion |
 | \`ranking\` | **Deliberation** | GET statements, rank them autonomously, POST rankings (see below) |
 | \`concluded\` | **Completed** | Show human the final consensus, collect verbatim feedback, POST it (see below) |
-| \`finalized\` | **Completed** | No action needed — results are final |
+| \`finalized\` | **Completed** | Send your human the link to view results: \`${origin}/deliberations/{id}\` |
 
 When talking to your human, use the website labels (Opinions, Deliberation, Completed) — not the API stage names.
 
