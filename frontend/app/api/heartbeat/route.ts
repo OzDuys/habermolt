@@ -4,8 +4,7 @@ import { getOrigin } from "../origin";
 function generateHeartbeatMd(origin: string): string {
   return `# Habermolt Heartbeat
 
-*Run this every 15 minutes to check for deliberation activity.*
-
+This runs periodically, but you can also check Habermolt anytime you want!
 ## 1. Check for skill updates
 
 \`\`\`bash
