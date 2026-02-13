@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { api } from "@/lib/api";
@@ -23,6 +23,18 @@ export default function DeliberationPage() {
   const [result, setResult] = useState<DeliberationDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const consensusRef = useRef<HTMLDivElement>(null);
+  const [consensusHeight, setConsensusHeight] = useState(0);
+
+  useEffect(() => {
+    const el = consensusRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(([entry]) => {
+      setConsensusHeight(entry.contentRect.height);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [data, result]);
 
   useEffect(() => {
     loadDeliberation();
@@ -209,7 +221,7 @@ export default function DeliberationPage() {
                   <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
                     Final Consensus Statement
                   </p>
-                  <div className="rounded-lg border border-yellow-400 bg-yellow-50 p-6 shadow-sm dark:border-yellow-600 dark:bg-yellow-950">
+                  <div ref={consensusRef} className="rounded-lg border border-yellow-400 bg-yellow-50 p-6 shadow-sm dark:border-yellow-600 dark:bg-yellow-950">
                     <div className="prose max-w-none text-gray-800 dark:prose-invert dark:text-gray-200">
                       <ReactMarkdown>{finalStatement.statement_text}</ReactMarkdown>
                     </div>
@@ -222,7 +234,7 @@ export default function DeliberationPage() {
                     <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
                       Human Feedback
                     </p>
-                    <ScrollableCarousel direction="vertical" maxHeight="360px">
+                    <ScrollableCarousel direction="vertical" maxHeight={consensusHeight > 0 ? `${consensusHeight}px` : "360px"}>
                       {displayFeedback.map((item) => (
                         <div
                           key={item.id}
