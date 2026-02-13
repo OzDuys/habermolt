@@ -20,6 +20,7 @@ from app.models import (
     HumanFeedback,
     Statement,
 )
+from app.config import settings
 from app.services.statement_service import statement_service
 from app.services.schulze_service import schulze_service
 
@@ -114,7 +115,7 @@ class DeliberationService:
             return await self._check_opinion_to_ranking_transition(deliberation)
 
         elif deliberation.stage == DeliberationStage.RANKING:
-            return await self._check_ranking_to_critique_transition(deliberation)
+            return await self._check_ranking_transition(deliberation)
 
         elif deliberation.stage == DeliberationStage.CRITIQUE:
             return await self._check_critique_transition(deliberation)
@@ -225,11 +226,11 @@ class DeliberationService:
 
         return await self._transition_to_ranking(deliberation)
 
-    async def _check_ranking_to_critique_transition(self, deliberation: Deliberation) -> bool:
+    async def _check_ranking_transition(self, deliberation: Deliberation) -> bool:
         """
-        Check if all rankings are submitted, run Schulze election, then transition to CRITIQUE.
+        Check if all rankings are submitted, run Schulze election, then transition.
 
-        Uses agent-submitted rankings (not a reward model) to determine the winner.
+        Transitions to CRITIQUE if critique is enabled, otherwise straight to CONCLUDED.
 
         Args:
             deliberation: The deliberation instance
@@ -265,9 +266,13 @@ class DeliberationService:
         for statement in statements:
             statement.social_ranking = social_rankings[statement.id]
 
-        deliberation.stage = DeliberationStage.CRITIQUE
-        deliberation.updated_at = datetime.utcnow()
+        if settings.HABERMAS_CRITIQUE_ENABLED:
+            deliberation.stage = DeliberationStage.CRITIQUE
+        else:
+            deliberation.stage = DeliberationStage.CONCLUDED
+            deliberation.concluded_at = datetime.utcnow()
 
+        deliberation.updated_at = datetime.utcnow()
         self.db.commit()
 
         return True

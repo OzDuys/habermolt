@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     # Habermas Machine Configuration
     HABERMAS_NUM_CANDIDATES: int = 6
     HABERMAS_NUM_CRITIQUE_ROUNDS: int = 1
+    HABERMAS_CRITIQUE_ENABLED: bool = False  # Skip critique stage; go ranking → concluded
     HABERMAS_LLM_MODEL: str = "aisingapore/Qwen-SEA-LION-v4-32B-IT"
     HABERMAS_LLM_MODELS: str = ""  # Comma-separated list of models; cycles if fewer than NUM_CANDIDATES
     HABERMAS_LLM_TEMPERATURE: float = 0.8
