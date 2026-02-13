@@ -3,10 +3,12 @@
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import type { Statement } from "@/lib/types";
+import ScrollableCarousel from "./ScrollableCarousel";
 
 interface StatementListProps {
   statements: Statement[];
   showRanking?: boolean;
+  highlightWinner?: boolean;
   columns?: 1 | 2;
   mode?: "grid" | "preview-carousel" | "carousel";
 }
@@ -14,13 +16,18 @@ interface StatementListProps {
 function StatementCard({
   statement,
   showRanking,
+  highlightWinner = true,
   className = "",
+  capped = false,
 }: {
   statement: Statement;
   showRanking: boolean;
+  highlightWinner?: boolean;
   className?: string;
+  capped?: boolean;
 }) {
-  const isWinner = statement.social_ranking === 1;
+  const [expanded, setCardExpanded] = useState(false);
+  const isWinner = highlightWinner && statement.social_ranking === 1;
 
   return (
     <div
@@ -50,9 +57,27 @@ function StatementCard({
           )}
         </div>
       </div>
-      <div className="prose prose-sm max-w-none text-gray-800 dark:prose-invert dark:text-gray-200">
-        <ReactMarkdown>{statement.statement_text}</ReactMarkdown>
+      <div className="relative">
+        <div
+          className={`prose prose-sm max-w-none text-gray-800 dark:prose-invert dark:text-gray-200 ${
+            capped && !expanded ? "max-h-[200px] overflow-hidden" : ""
+          }`}
+        >
+          <ReactMarkdown>{statement.statement_text}</ReactMarkdown>
+        </div>
+        {capped && !expanded && (
+          <div className="absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-t from-white dark:from-gray-800" />
+        )}
       </div>
+      {capped && (
+        <button
+          type="button"
+          onClick={() => setCardExpanded(!expanded)}
+          className="mt-1 text-xs font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+        >
+          {expanded ? "Show less" : "Read more"}
+        </button>
+      )}
       {statement.meta_data?.explanation && (
         <details className="mt-3">
           <summary className="cursor-pointer text-sm font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200">
@@ -70,6 +95,7 @@ function StatementCard({
 export default function StatementList({
   statements,
   showRanking = true,
+  highlightWinner = true,
   columns = 1,
   mode = "grid",
 }: StatementListProps) {
@@ -96,16 +122,18 @@ export default function StatementList({
 
   if (mode === "carousel") {
     return (
-      <div className="flex gap-4 overflow-x-auto snap-x snap-mandatory pb-4 [scrollbar-width:none] [-webkit-overflow-scrolling:touch] [&::-webkit-scrollbar]:hidden">
+      <ScrollableCarousel>
         {sortedStatements.map((statement) => (
           <StatementCard
             key={statement.id}
             statement={statement}
             showRanking={showRanking}
+            highlightWinner={highlightWinner}
+            capped
             className="min-w-[85vw] max-w-[400px] flex-shrink-0 snap-start sm:min-w-[300px]"
           />
         ))}
-      </div>
+      </ScrollableCarousel>
     );
   }
 
@@ -116,7 +144,7 @@ export default function StatementList({
     return (
       <div>
         {winner && (
-          <StatementCard statement={winner} showRanking={showRanking} />
+          <StatementCard statement={winner} showRanking={showRanking} highlightWinner={highlightWinner} />
         )}
         {rest.length > 0 && (
           <div className="mt-4">
@@ -136,16 +164,18 @@ export default function StatementList({
               {expanded ? "Hide" : "View all"} {rest.length} other statement{rest.length !== 1 ? "s" : ""}
             </button>
             {expanded && (
-              <div className="mt-3 flex gap-4 overflow-x-auto snap-x snap-mandatory pb-4 [scrollbar-width:none] [-webkit-overflow-scrolling:touch] [&::-webkit-scrollbar]:hidden">
+              <ScrollableCarousel className="mt-3">
                 {rest.map((statement) => (
                   <StatementCard
                     key={statement.id}
                     statement={statement}
                     showRanking={showRanking}
+                    highlightWinner={highlightWinner}
+                    capped
                     className="min-w-[85vw] max-w-[400px] flex-shrink-0 snap-start sm:min-w-[300px]"
                   />
                 ))}
-              </div>
+              </ScrollableCarousel>
             )}
           </div>
         )}
@@ -156,7 +186,7 @@ export default function StatementList({
   return (
     <div className={columns === 2 ? "grid grid-cols-1 gap-4 md:grid-cols-2" : "space-y-4"}>
       {sortedStatements.map((statement) => (
-        <StatementCard key={statement.id} statement={statement} showRanking={showRanking} />
+        <StatementCard key={statement.id} statement={statement} showRanking={showRanking} highlightWinner={highlightWinner} />
       ))}
     </div>
   );

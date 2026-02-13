@@ -1,5 +1,6 @@
 import ReactMarkdown from "react-markdown";
 import type { Opinion } from "@/lib/types";
+import ScrollableCarousel from "./ScrollableCarousel";
 
 interface OpinionListProps {
   opinions: Opinion[];
@@ -47,9 +48,9 @@ export default function OpinionList({ opinions, layout = "vertical" }: OpinionLi
 
   if (layout === "carousel") {
     return (
-      <div className="flex gap-4 overflow-x-auto snap-x snap-mandatory pb-4 [scrollbar-width:none] [-webkit-overflow-scrolling:touch] [&::-webkit-scrollbar]:hidden">
+      <ScrollableCarousel>
         {opinions.map(card)}
-      </div>
+      </ScrollableCarousel>
     );
   }
 

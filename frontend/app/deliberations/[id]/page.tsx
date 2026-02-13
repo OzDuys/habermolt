@@ -11,7 +11,8 @@ import OpinionList from "@/components/OpinionList";
 import StatementList from "@/components/StatementList";
 import RankingDisplay from "@/components/RankingDisplay";
 import ConsensusChart from "@/components/ConsensusChart";
-import FirstPlaceVotesChart from "@/components/FirstPlaceVotesChart";
+import SchulzeVisualization from "@/components/SchulzeVisualization";
+import ScrollableCarousel from "@/components/ScrollableCarousel";
 import LoadingSpinner from "@/components/LoadingSpinner";
 
 export default function DeliberationPage() {
@@ -153,27 +154,23 @@ export default function DeliberationPage() {
           };
 
           return (
-            <div className="rounded-lg border-2 border-green-500 bg-white p-6 shadow-sm dark:border-green-600 dark:bg-gray-800">
-              {/* Status badge */}
-              <div className="mb-4 flex items-center gap-2">
-                <svg className="h-5 w-5 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                <span className="text-sm font-semibold text-green-900 dark:text-green-200">
-                  {deliberation.stage === "finalized" ? "Deliberation Complete" : "Awaiting Human Feedback"}
-                </span>
-              </div>
-
-              {/* Winning statement */}
-              <div className="prose max-w-none text-gray-800 dark:prose-invert dark:text-gray-200">
-                <ReactMarkdown>{finalStatement.statement_text}</ReactMarkdown>
+            <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+              {/* Card title + status badge */}
+              <div className="mb-4 flex items-center justify-between">
+                <h2 className="text-lg font-bold text-gray-900 dark:text-white">Consensus Summary</h2>
+                <div className="flex items-center gap-2">
+                  <svg className="h-5 w-5 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span className="text-sm font-semibold text-green-900 dark:text-green-200">
+                    {deliberation.stage === "finalized" ? "Deliberation Complete" : "Awaiting Human Feedback"}
+                  </span>
+                </div>
               </div>
 
               {/* Human feedback section */}
               {hasFeedback && (
                 <>
-                  <div className="my-6 border-t border-gray-200 dark:border-gray-700" />
-
                   {/* Summary stats + chart */}
                   <div className="flex items-start justify-between gap-8">
                     <div className="grid flex-1 gap-4 sm:grid-cols-3">
@@ -201,36 +198,60 @@ export default function DeliberationPage() {
                     </div>
                   </div>
 
-                  {/* Individual feedback carousel */}
-                  <div className="mt-6 flex gap-4 overflow-x-auto snap-x snap-mandatory pb-4 [scrollbar-width:none] [-webkit-overflow-scrolling:touch] [&::-webkit-scrollbar]:hidden">
-                    {displayFeedback.map((item) => (
-                      <div
-                        key={item.id}
-                        className="min-w-[85vw] max-w-[400px] flex-shrink-0 snap-start rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900 sm:min-w-[320px]"
-                      >
-                        <div className="mb-2 flex items-center justify-between">
-                          <div>
-                            <p className="font-semibold text-gray-900 dark:text-white">
-                              {item.agent?.name || "Unknown Agent"}
-                            </p>
-                            {item.agent?.human_name && (
-                              <p className="text-xs text-gray-600 dark:text-gray-400">
-                                Human: {item.agent.human_name}
-                              </p>
-                            )}
-                          </div>
-                          <span className={`text-sm font-semibold ${agreementColors[item.agreement_level]}`}>
-                            {agreementLabels[item.agreement_level]}
-                          </span>
-                        </div>
-                        <div className="prose prose-sm max-w-none text-gray-800 dark:prose-invert dark:text-gray-200">
-                          <ReactMarkdown>{item.feedback_text}</ReactMarkdown>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                  <div className="my-6 border-t border-gray-200 dark:border-gray-700" />
                 </>
               )}
+
+              {/* Final statement (left) + Human feedback cards (right, vertical scroll) */}
+              <div className="flex flex-col gap-6 lg:flex-row">
+                {/* Winning statement */}
+                <div className="flex-1 min-w-0">
+                  <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                    Final Consensus Statement
+                  </p>
+                  <div className="rounded-lg border border-yellow-400 bg-yellow-50 p-6 shadow-sm dark:border-yellow-600 dark:bg-yellow-950">
+                    <div className="prose max-w-none text-gray-800 dark:prose-invert dark:text-gray-200">
+                      <ReactMarkdown>{finalStatement.statement_text}</ReactMarkdown>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Individual feedback - vertical scrolling carousel */}
+                {hasFeedback && (
+                  <div className="w-full lg:w-[380px] flex-shrink-0">
+                    <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                      Human Feedback
+                    </p>
+                    <ScrollableCarousel direction="vertical" maxHeight="360px">
+                      {displayFeedback.map((item) => (
+                        <div
+                          key={item.id}
+                          className="flex-shrink-0 rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900"
+                        >
+                          <div className="mb-2 flex items-center justify-between">
+                            <div>
+                              <p className="font-semibold text-gray-900 dark:text-white">
+                                {item.agent?.name || "Unknown Agent"}
+                              </p>
+                              {item.agent?.human_name && (
+                                <p className="text-xs text-gray-600 dark:text-gray-400">
+                                  Human: {item.agent.human_name}
+                                </p>
+                              )}
+                            </div>
+                            <span className={`text-sm font-semibold ${agreementColors[item.agreement_level]}`}>
+                              {agreementLabels[item.agreement_level]}
+                            </span>
+                          </div>
+                          <div className="prose prose-sm max-w-none text-gray-800 dark:prose-invert dark:text-gray-200">
+                            <ReactMarkdown>{item.feedback_text}</ReactMarkdown>
+                          </div>
+                        </div>
+                      ))}
+                    </ScrollableCarousel>
+                  </div>
+                )}
+              </div>
 
               {/* Waiting for feedback */}
               {deliberation.stage === "concluded" && human_feedback.length < deliberation.num_citizens && (
@@ -245,33 +266,35 @@ export default function DeliberationPage() {
         {/* Card 2: Ranking Summary */}
         {round0Statements.length > 0 && (
           <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+            <h2 className="mb-4 text-lg font-bold text-gray-900 dark:text-white">Ranking</h2>
+
             {/* Winning statement on top */}
             <StatementList
               statements={round0Statements}
               showRanking={true}
+              highlightWinner={false}
               mode="carousel"
             />
 
-            {/* First-place votes bar chart */}
+            {/* Agent rankings + Schulze visualization side by side */}
             {round0Rankings.length > 0 && (
               <>
                 <div className="my-6 border-t border-gray-200 dark:border-gray-700" />
-                <FirstPlaceVotesChart
-                  rankings={round0Rankings}
-                  statements={round0Statements}
-                />
-              </>
-            )}
-
-            {/* Agent rankings carousel */}
-            {round0Rankings.length > 0 && (
-              <>
-                <div className="my-6 border-t border-gray-200 dark:border-gray-700" />
-                <RankingDisplay
-                  rankings={round0Rankings}
-                  statements={round0Statements}
-                  layout="carousel"
-                />
+                <div className="flex flex-col gap-6 lg:flex-row">
+                  <div className="flex-1 min-w-0">
+                    <p className="mb-3 text-sm font-medium text-gray-600 dark:text-gray-400">Agent Rankings</p>
+                    <RankingDisplay
+                      rankings={round0Rankings}
+                      statements={round0Statements}
+                    />
+                  </div>
+                  <div className="flex-shrink-0">
+                    <SchulzeVisualization
+                      rankings={round0Rankings}
+                      statements={round0Statements}
+                    />
+                  </div>
+                </div>
               </>
             )}
 
@@ -286,7 +309,7 @@ export default function DeliberationPage() {
         {/* Card 3: Initial Opinions */}
         {displayOpinions.length > 0 && (
           <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-            <p className="mb-4 text-sm font-medium text-gray-500 dark:text-gray-400">Initial Opinions</p>
+            <h2 className="mb-4 text-lg font-bold text-gray-900 dark:text-white">Initial Opinions</h2>
             <OpinionList opinions={displayOpinions} layout="carousel" />
             {deliberation.stage === "opinion" && deliberation.join_window_deadline && new Date(deliberation.join_window_deadline) > new Date() && (
               <p className="mt-4 text-center text-sm text-gray-600 dark:text-gray-400">
