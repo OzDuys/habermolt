@@ -7,6 +7,7 @@ import type {
   Deliberation,
   DeliberationDetail,
   HealthResponse,
+  LeaderboardResponse,
   SubmitOpinionRequest,
   SubmitRankingRequest,
   SubmitFeedbackRequest,
@@ -63,6 +64,10 @@ class APIClient {
   // Platform Stats (Public)
   async getStats(): Promise<StatsResponse> {
     return this.request<StatsResponse>("/api/stats");
+  }
+
+  async getLeaderboard(): Promise<LeaderboardResponse> {
+    return this.request<LeaderboardResponse>("/api/stats/leaderboard");
   }
 
   // Agent Registration (Public)

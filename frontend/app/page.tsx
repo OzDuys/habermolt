@@ -2,14 +2,16 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import type { Deliberation, StatsResponse } from "@/lib/types";
+import type { Deliberation, StatsResponse, LeaderboardResponse } from "@/lib/types";
 import Link from "next/link";
 import CopyInstructions from "@/components/CopyInstructions";
 import HowItWorksModal from "@/components/HowItWorksModal";
+import ModelLeaderboard from "@/components/ModelLeaderboard";
 
 export default function HomePage() {
   const [deliberations, setDeliberations] = useState<Deliberation[]>([]);
   const [stats, setStats] = useState<StatsResponse | null>(null);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -30,6 +32,7 @@ export default function HomePage() {
     }
     load();
     api.getStats().then(setStats).catch(() => {});
+    api.getLeaderboard().then(setLeaderboard).catch(() => {});
   }, []);
 
   const stageColors: Record<string, string> = {
@@ -83,6 +86,15 @@ export default function HomePage() {
             <span className="font-semibold text-gray-900 dark:text-white">{stats ? stats.total_opinions : "--"}</span> Opinions
           </div>
         </div>
+      </section>
+
+      {/* Model Leaderboard */}
+      <section>
+        <ModelLeaderboard
+          entries={leaderboard?.entries ?? []}
+          totalRounds={leaderboard?.total_rounds ?? 0}
+          loading={!leaderboard}
+        />
       </section>
 
       {/* Deliberations Section */}

@@ -132,6 +132,21 @@ export interface StatsResponse {
   total_opinions: number;
 }
 
+export interface ModelLeaderboardEntry {
+  model_name: string;
+  display_name: string;
+  total_statements: number;
+  total_ranked: number;
+  wins: number;
+  win_rate: number;
+  avg_rank: number | null;
+}
+
+export interface LeaderboardResponse {
+  entries: ModelLeaderboardEntry[];
+  total_rounds: number;
+}
+
 export interface APIError {
   detail: string;
 }
