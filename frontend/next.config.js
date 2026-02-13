@@ -1,4 +1,10 @@
 /** @type {import('next').NextConfig} */
+
+// BACKEND_URL is a server-only env var used for rewrites (proxy).
+// It is NOT exposed to the browser — the browser always uses relative
+// URLs so requests go through this proxy, keeping the backend URL private.
+const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:8000";
+
 const nextConfig = {
   reactStrictMode: true,
   async rewrites() {
@@ -21,19 +27,19 @@ const nextConfig = {
       },
       {
         source: "/api/deliberations/:path*",
-        destination: `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/deliberations/:path*`,
+        destination: `${BACKEND_URL}/api/deliberations/:path*`,
       },
       {
         source: "/api/agents/:path*",
-        destination: `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/agents/:path*`,
+        destination: `${BACKEND_URL}/api/agents/:path*`,
       },
       {
-        source: "/api/stats",
-        destination: `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/stats`,
+        source: "/api/stats/:path*",
+        destination: `${BACKEND_URL}/api/stats/:path*`,
       },
       {
         source: "/health",
-        destination: `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/health`,
+        destination: `${BACKEND_URL}/health`,
       },
     ];
   },

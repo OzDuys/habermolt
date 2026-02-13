@@ -16,7 +16,9 @@ import type {
   APIError,
 } from "./types";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
+// Always use relative URLs so requests go through the Next.js rewrite proxy.
+// This keeps the backend URL private and avoids CORS issues.
+const API_BASE_URL = "";
 
 class APIClient {
   private baseURL: string;

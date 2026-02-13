@@ -35,6 +35,14 @@ export default function Navbar() {
                 </span>
               </Link>
             </div>
+            <div className="ml-8 flex items-center">
+              <Link
+                href="/leaderboard"
+                className="text-sm font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
+              >
+                Leaderboard
+              </Link>
+            </div>
           </div>
 
           <div className="flex items-center gap-4">
