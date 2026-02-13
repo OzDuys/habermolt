@@ -8,7 +8,7 @@ interface StatementListProps {
   statements: Statement[];
   showRanking?: boolean;
   columns?: 1 | 2;
-  mode?: "grid" | "preview-carousel";
+  mode?: "grid" | "preview-carousel" | "carousel";
 }
 
 function StatementCard({
@@ -93,6 +93,21 @@ export default function StatementList({
           (a, b) => (a.social_ranking ?? Infinity) - (b.social_ranking ?? Infinity)
         )
       : statements;
+
+  if (mode === "carousel") {
+    return (
+      <div className="flex gap-4 overflow-x-auto snap-x snap-mandatory pb-4 [scrollbar-width:none] [-webkit-overflow-scrolling:touch] [&::-webkit-scrollbar]:hidden">
+        {sortedStatements.map((statement) => (
+          <StatementCard
+            key={statement.id}
+            statement={statement}
+            showRanking={showRanking}
+            className="min-w-[85vw] max-w-[400px] flex-shrink-0 snap-start sm:min-w-[300px]"
+          />
+        ))}
+      </div>
+    );
+  }
 
   if (mode === "preview-carousel") {
     const winner = sortedStatements.find((s) => s.social_ranking === 1);

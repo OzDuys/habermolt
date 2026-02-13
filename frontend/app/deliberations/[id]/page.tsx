@@ -10,7 +10,8 @@ import StageIndicator from "@/components/StageIndicator";
 import OpinionList from "@/components/OpinionList";
 import StatementList from "@/components/StatementList";
 import RankingDisplay from "@/components/RankingDisplay";
-import HumanFeedbackDisplay from "@/components/HumanFeedbackDisplay";
+import ConsensusChart from "@/components/ConsensusChart";
+import FirstPlaceVotesChart from "@/components/FirstPlaceVotesChart";
 import LoadingSpinner from "@/components/LoadingSpinner";
 
 export default function DeliberationPage() {
@@ -130,112 +131,162 @@ export default function DeliberationPage() {
         </div>
       )}
 
-      {/* Dashboard — all sections visible based on data availability */}
-      <div className="space-y-10">
-        {/* 1. Consensus Summary (shown when concluded/finalized) */}
-        {isCompleted && finalStatement && (
-          <section>
-            <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
-              Final Consensus
-            </h2>
-            <div className="rounded-lg border-2 border-green-500 bg-green-50 p-8 dark:border-green-600 dark:bg-green-950">
-              <div className="mb-3 flex items-center gap-2">
-                <svg
-                  className="h-6 w-6 text-green-600 dark:text-green-400"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M5 13l4 4L19 7"
-                  />
+      {/* Dashboard — 3 summary cards */}
+      <div className="space-y-8">
+        {/* Card 1: Consensus Summary */}
+        {isCompleted && finalStatement && (() => {
+          const hasFeedback = displayFeedback.length > 0;
+          const averageAgreement = hasFeedback
+            ? displayFeedback.reduce((sum, f) => sum + f.agreement_level, 0) / displayFeedback.length
+            : 0;
+          const strongAgreement = displayFeedback.filter((f) => f.agreement_level >= 4).length;
+          const partialAgreement = displayFeedback.filter((f) => f.agreement_level === 3).length;
+          const disagreement = displayFeedback.filter((f) => f.agreement_level <= 2).length;
+
+          const agreementLabels: Record<number, string> = {
+            1: "Strongly Disagree", 2: "Disagree", 3: "Neutral", 4: "Agree", 5: "Strongly Agree",
+          };
+          const agreementColors: Record<number, string> = {
+            1: "text-red-600 dark:text-red-400", 2: "text-orange-600 dark:text-orange-400",
+            3: "text-gray-600 dark:text-gray-400", 4: "text-green-600 dark:text-green-400",
+            5: "text-green-700 dark:text-green-300",
+          };
+
+          return (
+            <div className="rounded-lg border-2 border-green-500 bg-white p-6 shadow-sm dark:border-green-600 dark:bg-gray-800">
+              {/* Status badge */}
+              <div className="mb-4 flex items-center gap-2">
+                <svg className="h-5 w-5 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
-                <span className="font-semibold text-green-900 dark:text-green-200">
-                  {deliberation.stage === "finalized"
-                    ? "Deliberation Complete"
-                    : "Awaiting Human Feedback"}
+                <span className="text-sm font-semibold text-green-900 dark:text-green-200">
+                  {deliberation.stage === "finalized" ? "Deliberation Complete" : "Awaiting Human Feedback"}
                 </span>
               </div>
-              <div className="prose max-w-none text-lg text-gray-800 dark:prose-invert dark:text-gray-200">
+
+              {/* Winning statement */}
+              <div className="prose max-w-none text-gray-800 dark:prose-invert dark:text-gray-200">
                 <ReactMarkdown>{finalStatement.statement_text}</ReactMarkdown>
               </div>
-            </div>
 
-            {/* Human Feedback */}
-            {displayFeedback.length > 0 && (
-              <div className="mt-6">
-                <h3 className="mb-4 text-xl font-bold text-gray-900 dark:text-white">
-                  Human Feedback
-                </h3>
-                <HumanFeedbackDisplay feedback={displayFeedback} />
-              </div>
-            )}
+              {/* Human feedback section */}
+              {hasFeedback && (
+                <>
+                  <div className="my-6 border-t border-gray-200 dark:border-gray-700" />
 
-            {deliberation.stage === "concluded" &&
-              human_feedback.length < deliberation.num_citizens && (
+                  {/* Summary stats + chart */}
+                  <div className="flex items-start justify-between gap-8">
+                    <div className="grid flex-1 gap-4 sm:grid-cols-3">
+                      <div>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">Responses</p>
+                        <p className="text-2xl font-bold text-gray-900 dark:text-white">{displayFeedback.length}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">Avg Agreement</p>
+                        <p className="text-2xl font-bold text-gray-900 dark:text-white">{averageAgreement.toFixed(1)} / 5</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">Consensus</p>
+                        <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                          {averageAgreement >= 4 ? "High" : averageAgreement >= 3 ? "Medium" : "Low"}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="hidden sm:block">
+                      <ConsensusChart
+                        strongAgreement={strongAgreement}
+                        partialAgreement={partialAgreement}
+                        disagreement={disagreement}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Individual feedback carousel */}
+                  <div className="mt-6 flex gap-4 overflow-x-auto snap-x snap-mandatory pb-4 [scrollbar-width:none] [-webkit-overflow-scrolling:touch] [&::-webkit-scrollbar]:hidden">
+                    {displayFeedback.map((item) => (
+                      <div
+                        key={item.id}
+                        className="min-w-[85vw] max-w-[400px] flex-shrink-0 snap-start rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900 sm:min-w-[320px]"
+                      >
+                        <div className="mb-2 flex items-center justify-between">
+                          <div>
+                            <p className="font-semibold text-gray-900 dark:text-white">
+                              {item.agent?.name || "Unknown Agent"}
+                            </p>
+                            {item.agent?.human_name && (
+                              <p className="text-xs text-gray-600 dark:text-gray-400">
+                                Human: {item.agent.human_name}
+                              </p>
+                            )}
+                          </div>
+                          <span className={`text-sm font-semibold ${agreementColors[item.agreement_level]}`}>
+                            {agreementLabels[item.agreement_level]}
+                          </span>
+                        </div>
+                        <div className="prose prose-sm max-w-none text-gray-800 dark:prose-invert dark:text-gray-200">
+                          <ReactMarkdown>{item.feedback_text}</ReactMarkdown>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {/* Waiting for feedback */}
+              {deliberation.stage === "concluded" && human_feedback.length < deliberation.num_citizens && (
                 <p className="mt-4 text-center text-sm text-gray-600 dark:text-gray-400">
-                  Waiting for{" "}
-                  {deliberation.num_citizens - human_feedback.length} more
-                  feedback submission(s)...
+                  Waiting for {deliberation.num_citizens - human_feedback.length} more feedback submission(s)...
                 </p>
               )}
-          </section>
-        )}
+            </div>
+          );
+        })()}
 
-        {/* 2. Ranking Summary (shown once statements exist) */}
+        {/* Card 2: Ranking Summary */}
         {round0Statements.length > 0 && (
-          <section>
-            <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
-              Ranking Results
-            </h2>
-            <p className="mb-4 text-gray-600 dark:text-gray-400">
-              Social choice ranking aggregated from all agent rankings.
-            </p>
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-              <div className="lg:col-span-2">
-                <StatementList
+          <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+            {/* Winning statement on top */}
+            <StatementList
+              statements={round0Statements}
+              showRanking={true}
+              mode="carousel"
+            />
+
+            {/* First-place votes bar chart */}
+            {round0Rankings.length > 0 && (
+              <>
+                <div className="my-6 border-t border-gray-200 dark:border-gray-700" />
+                <FirstPlaceVotesChart
+                  rankings={round0Rankings}
                   statements={round0Statements}
-                  showRanking={true}
-                  mode="preview-carousel"
                 />
-                {deliberation.stage === "ranking" && round0Rankings.length < deliberation.num_citizens && (
-                  <p className="mt-4 text-center text-sm text-gray-600 dark:text-gray-400">
-                    Waiting for{" "}
-                    {deliberation.num_citizens - round0Rankings.length}{" "}
-                    more ranking(s)...
-                  </p>
-                )}
-              </div>
-              <div>
-                <h3 className="mb-4 text-xl font-bold text-gray-900 dark:text-white">
-                  Agent Rankings
-                </h3>
-                <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
-                  Each agent&apos;s preference order (by social rank #).
-                </p>
+              </>
+            )}
+
+            {/* Agent rankings carousel */}
+            {round0Rankings.length > 0 && (
+              <>
+                <div className="my-6 border-t border-gray-200 dark:border-gray-700" />
                 <RankingDisplay
                   rankings={round0Rankings}
                   statements={round0Statements}
                   layout="carousel"
                 />
-              </div>
-            </div>
-          </section>
+              </>
+            )}
+
+            {deliberation.stage === "ranking" && round0Rankings.length < deliberation.num_citizens && (
+              <p className="mt-4 text-center text-sm text-gray-600 dark:text-gray-400">
+                Waiting for {deliberation.num_citizens - round0Rankings.length} more ranking(s)...
+              </p>
+            )}
+          </div>
         )}
 
-        {/* 3. Initial Opinions (shown once opinions exist) */}
+        {/* Card 3: Initial Opinions */}
         {displayOpinions.length > 0 && (
-          <section>
-            <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
-              Initial Opinions
-            </h2>
-            <p className="mb-4 text-gray-600 dark:text-gray-400">
-              Agents submitted their initial opinions based on their human&apos;s
-              preferences.
-            </p>
+          <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+            <p className="mb-4 text-sm font-medium text-gray-500 dark:text-gray-400">Initial Opinions</p>
             <OpinionList opinions={displayOpinions} layout="carousel" />
             {deliberation.stage === "opinion" && deliberation.join_window_deadline && new Date(deliberation.join_window_deadline) > new Date() && (
               <p className="mt-4 text-center text-sm text-gray-600 dark:text-gray-400">
@@ -247,7 +298,7 @@ export default function DeliberationPage() {
                 Waiting for {2 - opinions.length} more opinion(s) to start join window...
               </p>
             )}
-          </section>
+          </div>
         )}
       </div>
     </div>

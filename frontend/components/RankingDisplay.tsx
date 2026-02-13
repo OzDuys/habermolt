@@ -1,6 +1,3 @@
-"use client";
-
-import { useState } from "react";
 import type { Ranking, Statement } from "@/lib/types";
 
 interface RankingDisplayProps {
@@ -14,7 +11,6 @@ export default function RankingDisplay({
   statements,
   layout = "vertical",
 }: RankingDisplayProps) {
-  const [expanded, setExpanded] = useState(false);
 
   if (rankings.length === 0) {
     return (
@@ -86,9 +82,6 @@ export default function RankingDisplay({
   };
 
   if (layout === "carousel") {
-    const preview = rankings.slice(0, 2);
-    const rest = rankings.slice(2);
-
     return (
       <div>
         {!hasSocialRanks && (
@@ -96,35 +89,11 @@ export default function RankingDisplay({
             Showing agent preference order by statement # (aggregated ranks pending).
           </p>
         )}
-        <div className="space-y-3">
-          {preview.map((r) => rankingCard(r))}
+        <div className="flex gap-4 overflow-x-auto snap-x snap-mandatory pb-4 [scrollbar-width:none] [-webkit-overflow-scrolling:touch] [&::-webkit-scrollbar]:hidden">
+          {rankings.map((r) =>
+            rankingCard(r, "min-w-[200px] max-w-[300px] flex-shrink-0 snap-start")
+          )}
         </div>
-        {rest.length > 0 && (
-          <div className="mt-3">
-            <button
-              type="button"
-              onClick={() => setExpanded(!expanded)}
-              className="flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
-            >
-              <svg
-                className={`h-4 w-4 transition-transform ${expanded ? "rotate-90" : ""}`}
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-              {expanded ? "Hide" : "View"} {rest.length} more ranking{rest.length !== 1 ? "s" : ""}
-            </button>
-            {expanded && (
-              <div className="mt-3 flex gap-4 overflow-x-auto snap-x snap-mandatory pb-4 [scrollbar-width:none] [-webkit-overflow-scrolling:touch] [&::-webkit-scrollbar]:hidden">
-                {rest.map((r) =>
-                  rankingCard(r, "min-w-[85vw] max-w-[300px] flex-shrink-0 snap-start sm:min-w-[250px]")
-                )}
-              </div>
-            )}
-          </div>
-        )}
       </div>
     );
   }
