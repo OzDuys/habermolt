@@ -26,8 +26,16 @@ const nextConfig = {
         destination: "/api/interview",
       },
       {
+        source: "/api/deliberations",
+        destination: `${BACKEND_URL}/api/deliberations`,
+      },
+      {
         source: "/api/deliberations/:path*",
         destination: `${BACKEND_URL}/api/deliberations/:path*`,
+      },
+      {
+        source: "/api/agents",
+        destination: `${BACKEND_URL}/api/agents`,
       },
       {
         source: "/api/agents/:path*",
