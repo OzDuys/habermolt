@@ -25,6 +25,7 @@ export default function DeliberationPage() {
   const [error, setError] = useState<string | null>(null);
   const consensusRef = useRef<HTMLDivElement>(null);
   const [consensusHeight, setConsensusHeight] = useState(0);
+  const [joinWindowRemaining, setJoinWindowRemaining] = useState<number | null>(null);
 
   useEffect(() => {
     const el = consensusRef.current;
@@ -35,6 +36,26 @@ export default function DeliberationPage() {
     observer.observe(el);
     return () => observer.disconnect();
   }, [data, result]);
+
+  // Tick the join window countdown every second
+  useEffect(() => {
+    if (!data) return;
+    const { deliberation } = data;
+    if (deliberation.stage !== "opinion" || !deliberation.join_window_deadline) {
+      setJoinWindowRemaining(null);
+      return;
+    }
+    const calcRemaining = () => {
+      const remaining = Math.max(
+        0,
+        Math.floor((new Date(deliberation.join_window_deadline!).getTime() - Date.now()) / 1000)
+      );
+      setJoinWindowRemaining(remaining);
+    };
+    calcRemaining();
+    const timer = setInterval(calcRemaining, 1000);
+    return () => clearInterval(timer);
+  }, [data]);
 
   useEffect(() => {
     loadDeliberation();
@@ -323,15 +344,32 @@ export default function DeliberationPage() {
           <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
             <h2 className="mb-4 text-lg font-bold text-gray-900 dark:text-white">Initial Opinions</h2>
             <OpinionList opinions={displayOpinions} layout="carousel" />
-            {deliberation.stage === "opinion" && deliberation.join_window_deadline && new Date(deliberation.join_window_deadline) > new Date() && (
+            {deliberation.stage === "opinion" && joinWindowRemaining !== null && joinWindowRemaining > 0 && (
+              <div className="mt-4 rounded-lg bg-blue-50 p-4 dark:bg-blue-950">
+                <div className="flex items-center justify-center gap-3">
+                  <div className="flex items-baseline gap-1 tabular-nums">
+                    <span className="text-2xl font-bold text-blue-700 dark:text-blue-300">
+                      {Math.floor(joinWindowRemaining / 60)}:{String(joinWindowRemaining % 60).padStart(2, "0")}
+                    </span>
+                  </div>
+                </div>
+                <p className="mt-2 text-center text-sm text-blue-700 dark:text-blue-300">
+                  Join window open — waiting for the timer to expire, or the deliberation creator can start it early at any time.
+                </p>
+              </div>
+            )}
+            {deliberation.stage === "opinion" && joinWindowRemaining === 0 && (
               <p className="mt-4 text-center text-sm text-gray-600 dark:text-gray-400">
-                Join window open until {new Date(deliberation.join_window_deadline).toLocaleTimeString()}
+                Join window has closed. Deliberation is starting...
               </p>
             )}
             {deliberation.stage === "opinion" && !deliberation.join_window_deadline && opinions.length < 2 && (
-              <p className="mt-4 text-center text-sm text-gray-600 dark:text-gray-400">
-                Waiting for {2 - opinions.length} more opinion(s) to start join window...
-              </p>
+              <div className="mt-4 rounded-lg bg-gray-50 p-4 dark:bg-gray-900">
+                <p className="text-center text-sm text-gray-600 dark:text-gray-400">
+                  Waiting for {2 - opinions.length} more opinion(s) to start the join window countdown.
+                  The deliberation creator can also start it early at any time.
+                </p>
+              </div>
             )}
           </div>
         )}
