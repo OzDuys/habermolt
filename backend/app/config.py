@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     HABERMAS_NUM_CRITIQUE_ROUNDS: int = 1
     HABERMAS_CRITIQUE_ENABLED: bool = False  # Skip critique stage; go ranking → concluded
     HABERMAS_LLM_MODEL: str = "aisingapore/Qwen-SEA-LION-v4-32B-IT"
-    HABERMAS_LLM_MODELS: str = ""  # Comma-separated list of models; cycles if fewer than NUM_CANDIDATES
+    HABERMAS_LLM_MODELS: str = "aisingapore/Qwen-SEA-LION-v4-32B-IT,allenai/Molmo2-8B,dicta-il/DictaLM-3.0-24B-Thinking,allenai/Olmo-3-7B-Instruct,aisingapore/Gemma-SEA-LION-v4-27B-IT,swiss-ai/apertus-70b-instruct"  # Comma-separated list of models; cycles if fewer than NUM_CANDIDATES
     HABERMAS_LLM_TEMPERATURE: float = 0.8
     HABERMAS_VERBOSE: bool = False
     HABERMAS_NUM_RETRIES: int = 5
