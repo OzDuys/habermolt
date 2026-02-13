@@ -49,23 +49,24 @@ export default function RankingDisplay({
               <p className="mb-1 font-semibold text-gray-900 dark:text-white">
                 {ranking.agent?.name || "Unknown Agent"}
               </p>
-              <ol className="space-y-0.5">
+              <div className="mt-1 flex flex-col items-start gap-1.5">
                 {sorted.map((entry, i) => {
                   const num = stmtIdToNumber.get(entry.statement_id) ?? "?";
+                  const isFirst = i === 0;
                   return (
-                    <li
+                    <div
                       key={entry.statement_id}
-                      className={`text-sm tabular-nums ${
-                        i === 0
-                          ? "font-semibold text-yellow-600 dark:text-yellow-400"
-                          : "text-gray-600 dark:text-gray-400"
+                      className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold tabular-nums ${
+                        isFirst
+                          ? "bg-yellow-400 text-yellow-900"
+                          : "bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300"
                       }`}
                     >
-                      #{num}
-                    </li>
+                      {num}
+                    </div>
                   );
                 })}
-              </ol>
+              </div>
             </div>
           );
         })}

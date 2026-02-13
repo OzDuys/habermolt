@@ -48,11 +48,14 @@ function getCurveControlPoint(
   return { cx: mx + nx * offset, cy: my + ny * offset };
 }
 
+type View = "grid" | "graph";
+
 export default function SchulzeVisualization({
   rankings,
   statements,
 }: SchulzeVisualizationProps) {
   const [showTooltip, setShowTooltip] = useState(false);
+  const [view, setView] = useState<View>("grid");
 
   const sortedStatements = [...statements]
     .filter((s) => s.social_ranking !== null)
@@ -81,7 +84,21 @@ export default function SchulzeVisualization({
     .slice(0, displayCount)
     .map((_, i) => `#${i + 1}`);
 
-  // Build directed edges — only where i strictly beats j
+  const totalVoters = rankings.length;
+
+  // --- Grid helpers ---
+  function cellStyle(i: number, j: number) {
+    if (i === j) return "bg-gray-100 dark:bg-gray-800";
+    const wins = defeats[i][j];
+    const losses = defeats[j][i];
+    if (wins > losses)
+      return "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300";
+    if (wins < losses)
+      return "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300";
+    return "bg-yellow-50 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300";
+  }
+
+  // --- Graph helpers ---
   const edges: { from: number; to: number; weight: number }[] = [];
   for (let i = 0; i < displayCount; i++) {
     for (let j = i + 1; j < displayCount; j++) {
@@ -92,9 +109,7 @@ export default function SchulzeVisualization({
       }
     }
   }
-
   const maxWeight = Math.max(...edges.map((e) => e.weight), 1);
-
   const size = 340;
   const graphCenter = size / 2;
   const graphRadius = size / 2 - 45;
@@ -103,11 +118,36 @@ export default function SchulzeVisualization({
 
   return (
     <div className="flex flex-col items-center">
-      {/* Title with info tooltip */}
+      {/* Title with view toggle and info tooltip */}
       <div className="relative mb-3 flex items-center gap-2">
         <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
           Schulze Method — Pairwise Defeats
         </p>
+        {/* View toggle */}
+        <div className="flex rounded-md border border-gray-300 dark:border-gray-600">
+          <button
+            type="button"
+            onClick={() => setView("grid")}
+            className={`px-2 py-0.5 text-xs font-medium transition-colors ${
+              view === "grid"
+                ? "bg-gray-200 text-gray-900 dark:bg-gray-600 dark:text-white"
+                : "text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
+            }`}
+          >
+            Grid
+          </button>
+          <button
+            type="button"
+            onClick={() => setView("graph")}
+            className={`px-2 py-0.5 text-xs font-medium transition-colors ${
+              view === "graph"
+                ? "bg-gray-200 text-gray-900 dark:bg-gray-600 dark:text-white"
+                : "text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
+            }`}
+          >
+            Graph
+          </button>
+        </div>
         <button
           type="button"
           onClick={() => setShowTooltip(!showTooltip)}
@@ -146,123 +186,195 @@ export default function SchulzeVisualization({
         )}
       </div>
 
-      {/* Graph */}
-      <svg
-        width={size}
-        height={size}
-        viewBox={`0 0 ${size} ${size}`}
-        className="max-w-full"
-      >
-        <defs>
-          <marker
-            id="schulze-arrow"
-            viewBox="0 0 10 8"
-            refX="10"
-            refY="4"
-            markerWidth="2.5"
-            markerHeight="2"
-            orient="auto-start-reverse"
+      {/* ===== Grid View ===== */}
+      {view === "grid" && (
+        <>
+          <div className="overflow-x-auto">
+            <table className="border-collapse text-center text-sm">
+              <thead>
+                <tr>
+                  <th className="px-2 py-1.5 text-xs text-gray-500 dark:text-gray-400" />
+                  {labels.map((label, j) => (
+                    <th
+                      key={j}
+                      className={`px-2 py-1.5 text-xs font-semibold ${
+                        sortedStatements[j]?.social_ranking === 1
+                          ? "text-yellow-600 dark:text-yellow-400"
+                          : "text-gray-600 dark:text-gray-300"
+                      }`}
+                    >
+                      {label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {labels.map((rowLabel, i) => {
+                  const isWinner = sortedStatements[i]?.social_ranking === 1;
+                  return (
+                    <tr key={i}>
+                      <td
+                        className={`px-2 py-1.5 text-xs font-semibold ${
+                          isWinner
+                            ? "text-yellow-600 dark:text-yellow-400"
+                            : "text-gray-600 dark:text-gray-300"
+                        }`}
+                      >
+                        {rowLabel}
+                      </td>
+                      {labels.map((_, j) => (
+                        <td
+                          key={j}
+                          className={`min-w-[2.5rem] border border-gray-200 px-2 py-1.5 font-mono text-xs font-medium tabular-nums dark:border-gray-700 ${cellStyle(i, j)}`}
+                        >
+                          {i === j ? "—" : `${defeats[i][j]}/${totalVoters}`}
+                        </td>
+                      ))}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
+            <span className="flex items-center gap-1">
+              <span className="inline-block h-2.5 w-2.5 rounded-sm bg-emerald-200 dark:bg-emerald-800" />
+              Win
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="inline-block h-2.5 w-2.5 rounded-sm bg-red-200 dark:bg-red-800" />
+              Loss
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="inline-block h-2.5 w-2.5 rounded-sm bg-yellow-100 dark:bg-yellow-900" />
+              Tie
+            </span>
+          </div>
+          <p className="mt-1.5 text-center text-xs text-gray-500 dark:text-gray-400">
+            Cell = voters who preferred row over column / total voters
+          </p>
+        </>
+      )}
+
+      {/* ===== Graph View ===== */}
+      {view === "graph" && (
+        <>
+          <svg
+            width={size}
+            height={size}
+            viewBox={`0 0 ${size} ${size}`}
+            className="max-w-full"
           >
-            <path d="M 0 0 L 10 4 L 0 8 z" className="fill-gray-500 dark:fill-gray-400" />
-          </marker>
-        </defs>
-
-        {/* Edges */}
-        {edges.map((edge) => {
-          const from = positions[edge.from];
-          const to = positions[edge.to];
-          const dx = to.x - from.x;
-          const dy = to.y - from.y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          const curveOffset = 20;
-          const cp = getCurveControlPoint(from.x, from.y, to.x, to.y, curveOffset);
-
-          // Shorten to stop at node edges
-          const t1 = 1 - (nodeRadius + 4) / dist;
-          const px = (1 - t1) * (1 - t1) * from.x + 2 * (1 - t1) * t1 * cp.cx + t1 * t1 * to.x;
-          const py = (1 - t1) * (1 - t1) * from.y + 2 * (1 - t1) * t1 * cp.cy + t1 * t1 * to.y;
-          const t0 = nodeRadius / dist;
-          const sx = (1 - t0) * (1 - t0) * from.x + 2 * (1 - t0) * t0 * cp.cx + t0 * t0 * to.x;
-          const sy = (1 - t0) * (1 - t0) * from.y + 2 * (1 - t0) * t0 * cp.cy + t0 * t0 * to.y;
-
-          const opacity = 0.3 + 0.7 * (edge.weight / maxWeight);
-          const strokeWidth = 0.5 + 1 * (edge.weight / maxWeight);
-
-          // Label at curve midpoint
-          const lx = 0.25 * from.x + 0.5 * cp.cx + 0.25 * to.x;
-          const ly = 0.25 * from.y + 0.5 * cp.cy + 0.25 * to.y;
-
-          return (
-            <g key={`${edge.from}-${edge.to}`}>
-              <path
-                d={`M ${sx} ${sy} Q ${cp.cx} ${cp.cy} ${px} ${py}`}
-                fill="none"
-                className="stroke-gray-500 dark:stroke-gray-400"
-                strokeWidth={strokeWidth}
-                strokeOpacity={opacity}
-                markerEnd="url(#schulze-arrow)"
-              />
-              <rect
-                x={lx - 10}
-                y={ly - 8}
-                width={20}
-                height={16}
-                rx={3}
-                className="fill-white stroke-gray-300 dark:fill-gray-800 dark:stroke-gray-600"
-                strokeWidth={1}
-              />
-              <text
-                x={lx}
-                y={ly + 4}
-                textAnchor="middle"
-                className="fill-gray-700 dark:fill-gray-300"
-                fontSize={11}
-                fontWeight={600}
+            <defs>
+              <marker
+                id="schulze-arrow"
+                viewBox="0 0 10 8"
+                refX="7"
+                refY="4"
+                markerWidth="3.8"
+                markerHeight="3.2"
+                orient="auto-start-reverse"
               >
-                {edge.weight}
-              </text>
-            </g>
-          );
-        })}
+                <path d="M 0 0 L 10 4 L 0 8 z" className="fill-gray-500 dark:fill-gray-400" />
+              </marker>
+            </defs>
 
-        {/* Nodes */}
-        {positions.map((pos, i) => {
-          const isWinner = sortedStatements[i]?.social_ranking === 1;
-          return (
-            <g key={i}>
-              <circle
-                cx={pos.x}
-                cy={pos.y}
-                r={nodeRadius}
-                className={
-                  isWinner
-                    ? "fill-yellow-400 stroke-yellow-500 dark:fill-yellow-500 dark:stroke-yellow-400"
-                    : "fill-white stroke-gray-400 dark:fill-gray-700 dark:stroke-gray-500"
-                }
-                strokeWidth={2}
-              />
-              <text
-                x={pos.x}
-                y={pos.y + 5}
-                textAnchor="middle"
-                className={`font-bold ${
-                  isWinner
-                    ? "fill-yellow-900"
-                    : "fill-gray-800 dark:fill-gray-200"
-                }`}
-                fontSize={14}
-              >
-                {labels[i]}
-              </text>
-            </g>
-          );
-        })}
-      </svg>
+            {/* Edges */}
+            {edges.map((edge) => {
+              const from = positions[edge.from];
+              const to = positions[edge.to];
+              const dx = to.x - from.x;
+              const dy = to.y - from.y;
+              const dist = Math.sqrt(dx * dx + dy * dy);
+              const curveOffset = 20;
+              const cp = getCurveControlPoint(from.x, from.y, to.x, to.y, curveOffset);
 
-      {/* Legend */}
-      <p className="mt-2 text-center text-xs text-gray-500 dark:text-gray-400">
-        Arrows show head-to-head wins. Labels = number of agents who preferred the winner.
-      </p>
+              const sw = 0.75 + 0.75 * (edge.weight / maxWeight);
+              const t1 = 1 - (nodeRadius + 4) / dist;
+              const px = (1 - t1) * (1 - t1) * from.x + 2 * (1 - t1) * t1 * cp.cx + t1 * t1 * to.x;
+              const py = (1 - t1) * (1 - t1) * from.y + 2 * (1 - t1) * t1 * cp.cy + t1 * t1 * to.y;
+              const t0 = (nodeRadius + 2) / dist;
+              const sx = (1 - t0) * (1 - t0) * from.x + 2 * (1 - t0) * t0 * cp.cx + t0 * t0 * to.x;
+              const sy = (1 - t0) * (1 - t0) * from.y + 2 * (1 - t0) * t0 * cp.cy + t0 * t0 * to.y;
+
+              const opacity = 0.3 + 0.7 * (edge.weight / maxWeight);
+              const strokeWidth = sw;
+
+              const lx = 0.25 * from.x + 0.5 * cp.cx + 0.25 * to.x;
+              const ly = 0.25 * from.y + 0.5 * cp.cy + 0.25 * to.y;
+
+              return (
+                <g key={`${edge.from}-${edge.to}`}>
+                  <path
+                    d={`M ${sx} ${sy} Q ${cp.cx} ${cp.cy} ${px} ${py}`}
+                    fill="none"
+                    className="stroke-gray-500 dark:stroke-gray-400"
+                    strokeWidth={strokeWidth}
+                    strokeOpacity={opacity}
+                    markerEnd="url(#schulze-arrow)"
+                  />
+                  <rect
+                    x={lx - 10}
+                    y={ly - 8}
+                    width={20}
+                    height={16}
+                    rx={3}
+                    className="fill-white stroke-gray-300 dark:fill-gray-800 dark:stroke-gray-600"
+                    strokeWidth={1}
+                  />
+                  <text
+                    x={lx}
+                    y={ly + 4}
+                    textAnchor="middle"
+                    className="fill-gray-700 dark:fill-gray-300"
+                    fontSize={11}
+                    fontWeight={600}
+                  >
+                    {edge.weight}
+                  </text>
+                </g>
+              );
+            })}
+
+            {/* Nodes */}
+            {positions.map((pos, i) => {
+              const isWinner = sortedStatements[i]?.social_ranking === 1;
+              return (
+                <g key={i}>
+                  <circle
+                    cx={pos.x}
+                    cy={pos.y}
+                    r={nodeRadius}
+                    className={
+                      isWinner
+                        ? "fill-yellow-400 stroke-yellow-500 dark:fill-yellow-500 dark:stroke-yellow-400"
+                        : "fill-white stroke-gray-400 dark:fill-gray-700 dark:stroke-gray-500"
+                    }
+                    strokeWidth={2}
+                  />
+                  <text
+                    x={pos.x}
+                    y={pos.y + 5}
+                    textAnchor="middle"
+                    className={`font-bold ${
+                      isWinner
+                        ? "fill-yellow-900"
+                        : "fill-gray-800 dark:fill-gray-200"
+                    }`}
+                    fontSize={14}
+                  >
+                    {labels[i]}
+                  </text>
+                </g>
+              );
+            })}
+          </svg>
+          <p className="mt-2 text-center text-xs text-gray-500 dark:text-gray-400">
+            Arrows show head-to-head wins. Labels = number of agents who preferred the winner.
+          </p>
+        </>
+      )}
+
       {numCandidates > displayCount && (
         <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
           Showing top {displayCount} of {numCandidates} candidates
