@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import type { Statement } from "@/lib/types";
 
@@ -5,13 +8,73 @@ interface StatementListProps {
   statements: Statement[];
   showRanking?: boolean;
   columns?: 1 | 2;
+  mode?: "grid" | "preview-carousel";
+}
+
+function StatementCard({
+  statement,
+  showRanking,
+  className = "",
+}: {
+  statement: Statement;
+  showRanking: boolean;
+  className?: string;
+}) {
+  const isWinner = statement.social_ranking === 1;
+
+  return (
+    <div
+      className={`rounded-lg border p-6 shadow-sm ${
+        isWinner
+          ? "border-yellow-400 bg-yellow-50 dark:border-yellow-600 dark:bg-yellow-950"
+          : "border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800"
+      } ${className}`}
+    >
+      <div className="mb-3 flex items-start justify-between">
+        <div className="flex items-center gap-3">
+          {showRanking && statement.social_ranking !== null && (
+            <div
+              className={`flex h-10 w-10 items-center justify-center rounded-full font-bold ${
+                isWinner
+                  ? "bg-yellow-400 text-yellow-900"
+                  : "bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300"
+              }`}
+            >
+              #{statement.social_ranking}
+            </div>
+          )}
+          {isWinner && (
+            <span className="rounded-full bg-yellow-400 px-3 py-1 text-xs font-semibold text-yellow-900">
+              Winner
+            </span>
+          )}
+        </div>
+      </div>
+      <div className="prose prose-sm max-w-none text-gray-800 dark:prose-invert dark:text-gray-200">
+        <ReactMarkdown>{statement.statement_text}</ReactMarkdown>
+      </div>
+      {statement.meta_data?.explanation && (
+        <details className="mt-3">
+          <summary className="cursor-pointer text-sm font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200">
+            View explanation
+          </summary>
+          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+            {statement.meta_data.explanation}
+          </p>
+        </details>
+      )}
+    </div>
+  );
 }
 
 export default function StatementList({
   statements,
   showRanking = true,
   columns = 1,
+  mode = "grid",
 }: StatementListProps) {
+  const [expanded, setExpanded] = useState(false);
+
   if (statements.length === 0) {
     return (
       <div className="rounded-lg bg-gray-50 p-8 text-center dark:bg-gray-800">
@@ -31,59 +94,55 @@ export default function StatementList({
         )
       : statements;
 
-  return (
-    <div className={columns === 2 ? "grid grid-cols-1 gap-4 md:grid-cols-2" : "space-y-4"}>
-      {sortedStatements.map((statement) => {
-        const isWinner = statement.social_ranking === 1;
+  if (mode === "preview-carousel") {
+    const winner = sortedStatements.find((s) => s.social_ranking === 1);
+    const rest = sortedStatements.filter((s) => s.social_ranking !== 1);
 
-        return (
-          <div
-            key={statement.id}
-            className={`rounded-lg border p-6 shadow-sm ${
-              isWinner
-                ? "border-yellow-400 bg-yellow-50 dark:border-yellow-600 dark:bg-yellow-950"
-                : "border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800"
-            }`}
-          >
-            <div className="mb-3 flex items-start justify-between">
-              <div className="flex items-center gap-3">
-                {showRanking && statement.social_ranking !== null && (
-                  <div
-                    className={`flex h-10 w-10 items-center justify-center rounded-full font-bold ${
-                      isWinner
-                        ? "bg-yellow-400 text-yellow-900"
-                        : "bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300"
-                    }`}
-                  >
-                    #{statement.social_ranking}
-                  </div>
-                )}
-                {isWinner && (
-                  <span className="rounded-full bg-yellow-400 px-3 py-1 text-xs font-semibold text-yellow-900">
-                    Winner
-                  </span>
-                )}
+    return (
+      <div>
+        {winner && (
+          <StatementCard statement={winner} showRanking={showRanking} />
+        )}
+        {rest.length > 0 && (
+          <div className="mt-4">
+            <button
+              type="button"
+              onClick={() => setExpanded(!expanded)}
+              className="flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+            >
+              <svg
+                className={`h-4 w-4 transition-transform ${expanded ? "rotate-90" : ""}`}
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+              {expanded ? "Hide" : "View all"} {rest.length} other statement{rest.length !== 1 ? "s" : ""}
+            </button>
+            {expanded && (
+              <div className="mt-3 flex gap-4 overflow-x-auto snap-x snap-mandatory pb-4 [scrollbar-width:none] [-webkit-overflow-scrolling:touch] [&::-webkit-scrollbar]:hidden">
+                {rest.map((statement) => (
+                  <StatementCard
+                    key={statement.id}
+                    statement={statement}
+                    showRanking={showRanking}
+                    className="min-w-[85vw] max-w-[400px] flex-shrink-0 snap-start sm:min-w-[300px]"
+                  />
+                ))}
               </div>
-              <span className="text-xs text-gray-500 dark:text-gray-500">
-                Round {statement.round_number}
-              </span>
-            </div>
-            <div className="prose prose-sm max-w-none text-gray-800 dark:prose-invert dark:text-gray-200">
-              <ReactMarkdown>{statement.statement_text}</ReactMarkdown>
-            </div>
-            {statement.meta_data?.explanation && (
-              <details className="mt-3">
-                <summary className="cursor-pointer text-sm font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200">
-                  View explanation
-                </summary>
-                <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                  {statement.meta_data.explanation}
-                </p>
-              </details>
             )}
           </div>
-        );
-      })}
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className={columns === 2 ? "grid grid-cols-1 gap-4 md:grid-cols-2" : "space-y-4"}>
+      {sortedStatements.map((statement) => (
+        <StatementCard key={statement.id} statement={statement} showRanking={showRanking} />
+      ))}
     </div>
   );
 }

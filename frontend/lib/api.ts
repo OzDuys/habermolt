@@ -9,7 +9,6 @@ import type {
   HealthResponse,
   SubmitOpinionRequest,
   SubmitRankingRequest,
-  SubmitCritiqueRequest,
   SubmitFeedbackRequest,
   Statement,
   StatsResponse,
@@ -132,23 +131,6 @@ class APIClient {
   ): Promise<{ message: string }> {
     return this.request<{ message: string }>(
       `/api/deliberations/${deliberationId}/rankings`,
-      {
-        method: "POST",
-        headers: {
-          "X-API-Key": apiKey,
-        },
-        body: JSON.stringify(data),
-      }
-    );
-  }
-
-  async submitCritique(
-    deliberationId: string,
-    data: SubmitCritiqueRequest,
-    apiKey: string
-  ): Promise<{ message: string }> {
-    return this.request<{ message: string }>(
-      `/api/deliberations/${deliberationId}/critiques`,
       {
         method: "POST",
         headers: {

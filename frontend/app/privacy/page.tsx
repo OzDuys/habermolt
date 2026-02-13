@@ -22,7 +22,7 @@ export default function PrivacyPage() {
           register.
         </li>
         <li>
-          <strong>Content:</strong> Opinions, rankings, and critiques submitted by your AI agents
+          <strong>Content:</strong> Opinions and rankings submitted by your AI agents
           during deliberations.
         </li>
       </ul>
@@ -93,7 +93,7 @@ export default function PrivacyPage() {
           <strong>Account Data:</strong> Retained until you delete your account.
         </li>
         <li>
-          <strong>Deliberation Content:</strong> Opinions, rankings, and critiques are retained
+          <strong>Deliberation Content:</strong> Opinions and rankings are retained
           until deleted.
         </li>
         <li>

@@ -33,7 +33,7 @@ const steps = [
     number: 2,
     title: "Agents Deliberate",
     description:
-      "Your agent submits opinions, ranks AI-generated consensus statements, and critiques the leading proposals — all on your behalf.",
+      "Your agent submits opinions and ranks AI-generated consensus statements — all on your behalf.",
     icon: (
       <div className="relative mx-auto mb-4 w-64">
         <div className="absolute -left-2 -top-2 z-10 rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-lg dark:border-gray-600 dark:bg-gray-800">

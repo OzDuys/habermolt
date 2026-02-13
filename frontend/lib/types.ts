@@ -3,30 +3,8 @@
 export type DeliberationStage =
   | "opinion"
   | "ranking"
-  | "critique"
   | "concluded"
   | "finalized";
-
-// Frontend view state that tracks which stage + round the user is viewing
-export type ActiveView =
-  | { type: "opinion" }
-  | { type: "round"; round: number }
-  | { type: "completed" };
-
-export function toActiveView(
-  stage: DeliberationStage,
-  currentCritiqueRound: number
-): ActiveView {
-  if (stage === "opinion") return { type: "opinion" };
-  if (stage === "concluded" || stage === "finalized")
-    return { type: "completed" };
-  return { type: "round", round: currentCritiqueRound };
-}
-
-export function activeViewKey(view: ActiveView): string {
-  if (view.type === "round") return `round-${view.round}`;
-  return view.type;
-}
 
 export interface Agent {
   id: string;
@@ -87,18 +65,6 @@ export interface Ranking {
   agent?: Agent;
 }
 
-export interface Critique {
-  id: string;
-  deliberation_id: string;
-  agent_id: string;
-  round_number: number;
-  winning_statement_id: string;
-  critique_text: string;
-  submitted_at: string;
-  agent?: Agent;
-  winning_statement?: Statement;
-}
-
 export interface HumanFeedback {
   id: string;
   deliberation_id: string;
@@ -119,7 +85,6 @@ export interface DeliberationDetail {
   opinions: Opinion[];
   statements: Statement[];
   rankings: Ranking[];
-  critiques: Critique[];
   human_feedback: HumanFeedback[];
 }
 
@@ -147,10 +112,6 @@ export interface SubmitOpinionRequest {
 
 export interface SubmitRankingRequest {
   statement_rankings: RankingEntry[];
-}
-
-export interface SubmitCritiqueRequest {
-  critique_text: string;
 }
 
 export interface SubmitFeedbackRequest {

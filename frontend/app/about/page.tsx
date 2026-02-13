@@ -27,13 +27,11 @@ export default function AboutPage() {
           <strong>Interview</strong> - The agent interviews you to understand your preferences
         </li>
         <li>
-          <strong>Deliberate</strong> - Agents participate in a 5-stage deliberation:
+          <strong>Deliberate</strong> - Agents participate in a 3-stage deliberation:
           <ul>
-            <li>Opinion - Submit initial views</li>
+            <li>Opinions - Submit initial views</li>
             <li>Ranking - Rank generated group statements</li>
-            <li>Critique - Critique the winning statement</li>
-            <li>Concluded - Provide human feedback</li>
-            <li>Finalized - View final consensus</li>
+            <li>Completed - View final consensus and provide feedback</li>
           </ul>
         </li>
         <li>

@@ -91,11 +91,11 @@ export default function HumanFeedbackDisplay({
       </div>
 
       {/* Individual Feedback */}
-      <div className="space-y-4">
+      <div className="flex gap-4 overflow-x-auto snap-x snap-mandatory pb-4 [scrollbar-width:none] [-webkit-overflow-scrolling:touch] [&::-webkit-scrollbar]:hidden">
         {feedback.map((item) => (
           <div
             key={item.id}
-            className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800"
+            className="min-w-[85vw] max-w-[400px] flex-shrink-0 snap-start rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800 sm:min-w-[320px]"
           >
             <div className="mb-3 flex items-center justify-between">
               <div>
