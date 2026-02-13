@@ -29,38 +29,43 @@ class LLMClient:
     def sample_text(
         self,
         prompt: str,
+        system_prompt: str = None,
         temperature: float = None,
         max_tokens: int = 8192,
-        stop_sequences: list[str] = None,
         seed: int = None,
     ) -> str:
-        """Generate text completion. Returns raw response string."""
+        """Generate text from a chat model.
+
+        Args:
+            prompt: The user message content.
+            system_prompt: Optional system message for role/instructions.
+            temperature: Sampling temperature (defaults to config).
+            max_tokens: Maximum tokens in the response.
+            seed: Optional seed for deterministic sampling (supported by
+                  some providers/models, silently ignored by others).
+        """
         if temperature is None:
             temperature = settings.HABERMAS_LLM_TEMPERATURE
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+
         kwargs = dict(
             model=self._model_name,
-            messages=[{"role": "user", "content": prompt}],
+            messages=messages,
             temperature=temperature,
             max_tokens=max_tokens,
-            stop=stop_sequences or None,
         )
         if seed is not None:
             kwargs["seed"] = seed
+
         try:
             response = self._client.chat.completions.create(**kwargs)
-            text = response.choices[0].message.content or ""
+            return response.choices[0].message.content or ""
         except Exception as e:
             logger.error(f"LLM API error: {e}")
-            text = ""
-
-        # Append stop sequence back if it was used as a stop token
-        # (OpenAI API strips stop sequences from output)
-        if stop_sequences and text:
-            for seq in stop_sequences:
-                if seq not in text:
-                    text = text + seq
-
-        return text
+            return ""
 
 
 # Backward-compatible alias
