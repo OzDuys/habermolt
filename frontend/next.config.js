@@ -34,6 +34,10 @@ const nextConfig = {
         destination: `${BACKEND_URL}/api/agents/:path*`,
       },
       {
+        source: "/api/stats",
+        destination: `${BACKEND_URL}/api/stats`,
+      },
+      {
         source: "/api/stats/:path*",
         destination: `${BACKEND_URL}/api/stats/:path*`,
       },
