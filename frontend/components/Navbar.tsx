@@ -87,9 +87,12 @@ export default function Navbar() {
               <div className="h-4 w-20 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
             ) : session ? (
               <>
-                <span className="text-sm text-gray-700 dark:text-gray-300">
+                <Link
+                  href="/profile"
+                  className="text-sm font-medium text-gray-700 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white"
+                >
                   {session.user.name || session.user.email}
-                </span>
+                </Link>
                 <button
                   onClick={handleSignOut}
                   className="rounded-lg bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"

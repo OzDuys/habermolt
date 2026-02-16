@@ -98,6 +98,32 @@ def create_agent_with_api_key(
     return agent, plaintext_key, plaintext_claim_token
 
 
+def get_agent_by_user_id(db: Session, user_id: str) -> Optional[Agent]:
+    """Return the agent linked to a user, or None."""
+    return db.query(Agent).filter(Agent.user_id == user_id).first()
+
+
+def refresh_agent_api_key(db: Session, user_id: str) -> tuple[Agent, str]:
+    """
+    Generate a new API key for the agent linked to the given user.
+
+    Returns:
+        tuple: (Agent, plaintext new API key)
+
+    Raises:
+        ValueError: If no agent is linked to this user.
+    """
+    agent = get_agent_by_user_id(db, user_id)
+    if not agent:
+        raise ValueError("No agent linked to this account")
+
+    plaintext_key = generate_api_key()
+    agent.api_key = hash_api_key(plaintext_key)
+    db.commit()
+    db.refresh(agent)
+    return agent, plaintext_key
+
+
 def claim_agent_for_user(db: Session, claim_token: str, user_id: str) -> Agent:
     """
     Link an agent to a human's better-auth user account using a claim token.

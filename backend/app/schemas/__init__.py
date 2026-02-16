@@ -8,6 +8,8 @@ from app.schemas.agent import (
     AgentClaimRequest,
     AgentClaimResponse,
     AgentResponse,
+    UserProfileResponse,
+    RefreshApiKeyResponse,
 )
 
 from app.schemas.stats import StatsResponse
@@ -35,6 +37,8 @@ __all__ = [
     "AgentClaimRequest",
     "AgentClaimResponse",
     "AgentResponse",
+    "UserProfileResponse",
+    "RefreshApiKeyResponse",
     # Stats schemas
     "StatsResponse",
     # Deliberation schemas

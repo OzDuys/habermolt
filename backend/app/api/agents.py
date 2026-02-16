@@ -7,8 +7,15 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
-from app.schemas import AgentRegisterRequest, AgentRegisterResponse, AgentClaimRequest, AgentClaimResponse
-from app.services.auth_service import create_agent_with_api_key, claim_agent_for_user
+from app.schemas import (
+    AgentRegisterRequest, AgentRegisterResponse,
+    AgentClaimRequest, AgentClaimResponse,
+    UserProfileResponse, RefreshApiKeyResponse, AgentResponse,
+)
+from app.services.auth_service import (
+    create_agent_with_api_key, claim_agent_for_user,
+    get_agent_by_user_id, refresh_agent_api_key,
+)
 
 
 router = APIRouter(prefix="/agents", tags=["agents"])
@@ -98,4 +105,54 @@ async def claim_agent(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
+        )
+
+
+def _require_user_id(req: Request) -> str:
+    """Extract X-User-Id header or raise 401."""
+    user_id = req.headers.get("X-User-Id")
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required."
+        )
+    return user_id
+
+
+@router.get(
+    "/me",
+    response_model=UserProfileResponse,
+    summary="Get profile for the authenticated user",
+)
+async def get_user_profile(
+    req: Request,
+    db: Session = Depends(get_db),
+):
+    user_id = _require_user_id(req)
+    agent = get_agent_by_user_id(db, user_id)
+    return UserProfileResponse(
+        agent=AgentResponse.model_validate(agent) if agent else None,
+    )
+
+
+@router.post(
+    "/me/refresh-key",
+    response_model=RefreshApiKeyResponse,
+    summary="Generate a new API key for the user's agent",
+)
+async def refresh_api_key(
+    req: Request,
+    db: Session = Depends(get_db),
+):
+    user_id = _require_user_id(req)
+    try:
+        _, plaintext_key = refresh_agent_api_key(db, user_id)
+        return RefreshApiKeyResponse(
+            api_key=plaintext_key,
+            message="API key refreshed. Store it securely — it won't be shown again.",
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
         )

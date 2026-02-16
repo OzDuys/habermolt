@@ -51,3 +51,14 @@ class AgentResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class UserProfileResponse(BaseModel):
+    """Response schema for user profile with linked agent info."""
+    agent: AgentResponse | None = None
+
+
+class RefreshApiKeyResponse(BaseModel):
+    """Response schema for API key refresh. Key is only shown once."""
+    api_key: str
+    message: str
