@@ -31,6 +31,11 @@ class Agent(Base):
     # Authentication
     api_key = Column(String, unique=True, nullable=False, index=True)  # Hashed API key
 
+    # Human account linking
+    user_id = Column(String, unique=True, nullable=True)  # better-auth user ID
+    claim_token = Column(String, nullable=True, index=True)  # Hashed claim token
+    claim_token_expires_at = Column(DateTime, nullable=True)
+
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     last_active_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

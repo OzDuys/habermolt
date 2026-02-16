@@ -5,6 +5,8 @@ Pydantic schemas package for request/response validation.
 from app.schemas.agent import (
     AgentRegisterRequest,
     AgentRegisterResponse,
+    AgentClaimRequest,
+    AgentClaimResponse,
     AgentResponse,
 )
 
@@ -30,6 +32,8 @@ __all__ = [
     # Agent schemas
     "AgentRegisterRequest",
     "AgentRegisterResponse",
+    "AgentClaimRequest",
+    "AgentClaimResponse",
     "AgentResponse",
     # Stats schemas
     "StatsResponse",

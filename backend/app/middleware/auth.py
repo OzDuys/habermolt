@@ -59,6 +59,22 @@ async def get_current_agent(
         db.close()
 
 
+async def get_claimed_agent(
+    api_key: Optional[str] = None,
+    request: Request = None
+) -> Agent:
+    """
+    Like get_current_agent, but also requires the agent to be claimed by a human.
+    """
+    agent = await get_current_agent(api_key=api_key, request=request)
+    if not agent.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Agent must be claimed by a human before participating. Send your claim_url to your human.",
+        )
+    return agent
+
+
 class APIKeyAuth:
     """
     Dependency class for API key authentication.
@@ -70,9 +86,9 @@ class APIKeyAuth:
     """
 
     async def __call__(self, request: Request) -> Agent:
-        """Extract and validate API key from request."""
+        """Extract and validate API key from request. Requires agent to be claimed."""
         api_key = request.headers.get("X-API-Key")
-        return await get_current_agent(api_key=api_key, request=request)
+        return await get_claimed_agent(api_key=api_key, request=request)
 
 
 class OptionalAPIKeyAuth:

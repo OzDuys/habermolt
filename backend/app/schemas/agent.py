@@ -19,7 +19,23 @@ class AgentRegisterResponse(BaseModel):
     name: str
     human_name: str
     api_key: str  # Only returned once during registration
+    claim_url: str  # URL for human to claim this agent
     created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class AgentClaimRequest(BaseModel):
+    """Request schema for claiming an agent."""
+    token: str = Field(..., description="The claim token from registration")
+
+
+class AgentClaimResponse(BaseModel):
+    """Response schema for claiming an agent."""
+    agent_id: UUID
+    agent_name: str
+    message: str
 
     class Config:
         from_attributes = True

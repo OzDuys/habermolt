@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     LLM_API_KEY: str = ""  # Required for runtime
     LLM_BASE_URL: str = "https://openrouter.ai/api/v1"  # Change to swap providers
 
+    # Frontend
+    FRONTEND_URL: str = "http://localhost:3000"
+
     # Security
     API_KEY_SALT: str = "habermolt-default-salt-change-in-production"
 
