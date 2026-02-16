@@ -121,7 +121,7 @@ export default function ProfilePage() {
           <div>
             <dt className="text-sm text-gray-500 dark:text-gray-400">Member since</dt>
             <dd className="font-medium text-gray-900 dark:text-white">
-              {session.user.createdAt ? formatDate(session.user.createdAt as string) : "—"}
+              {session.user.createdAt ? formatDate(new Date(session.user.createdAt).toISOString()) : "—"}
             </dd>
           </div>
         </dl>
