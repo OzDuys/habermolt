@@ -1,11 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useSession, signIn, signUp, authClient } from "@/lib/auth-client";
 import Link from "next/link";
 
 export default function ClaimPage() {
+  return (
+    <Suspense fallback={
+      <div className="mx-auto max-w-md py-12 text-center">
+        <p className="text-gray-600 dark:text-gray-400">Loading...</p>
+      </div>
+    }>
+      <ClaimPageContent />
+    </Suspense>
+  );
+}
+
+function ClaimPageContent() {
   const searchParams = useSearchParams();
   const { data: session, isPending: sessionLoading } = useSession();
   const token = searchParams.get("token");
