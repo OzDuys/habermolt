@@ -11,7 +11,8 @@ from typing import Optional, List
 class DeliberationCreateRequest(BaseModel):
     """Request schema for creating a deliberation."""
     question: str = Field(..., min_length=10, max_length=1000, description="The question to deliberate on")
-    num_critique_rounds: int = Field(1, ge=1, le=5, description="Number of critique rounds")
+    mechanism_type: str = Field("staged", description="Mechanism type: 'staged' or 'continuous'")
+    num_critique_rounds: int = Field(1, ge=1, le=5, description="Number of critique rounds (staged only)")
     meta_data: Optional[dict] = Field(default_factory=dict, description="Additional metadata")
 
 
@@ -19,6 +20,7 @@ class DeliberationResponse(BaseModel):
     """Response schema for deliberation information."""
     id: UUID
     question: str
+    mechanism_type: str
     stage: str
     created_by_agent_id: UUID
     num_citizens: int
@@ -81,9 +83,16 @@ class StatementResponse(BaseModel):
     social_ranking: Optional[int]
     generated_at: datetime
     meta_data: dict
+    contributed_by_agent_id: Optional[UUID] = None
+    is_seed: bool = False
 
     class Config:
         from_attributes = True
+
+
+class StatementSubmitRequest(BaseModel):
+    """Request schema for submitting a statement (continuous mechanism)."""
+    statement_text: str = Field(..., min_length=10, max_length=5000, description="Proposed consensus statement")
 
 
 class RankingSubmitRequest(BaseModel):
@@ -149,6 +158,22 @@ class HumanFeedbackResponse(BaseModel):
         from_attributes = True
 
 
+class AgentStatusResponse(BaseModel):
+    """Per-agent participation status for continuous deliberations."""
+    has_opinion: bool = False
+    has_ranking: bool = False
+    statements_added: int = 0
+    can_add_statement: bool = False
+    has_predicted_rankings: bool = False
+
+
+class CurrentWinnerResponse(BaseModel):
+    """Current winning statement for continuous deliberations."""
+    statement: Optional[StatementResponse] = None
+    total_rankings: int = 0
+    total_participants: int = 0
+
+
 class DeliberationDetailResponse(BaseModel):
     """Detailed response schema for a single deliberation with all related data."""
     deliberation: DeliberationResponse
@@ -158,6 +183,7 @@ class DeliberationDetailResponse(BaseModel):
     rankings: List[RankingResponse]
     critiques: List[CritiqueResponse]
     human_feedback: List[HumanFeedbackResponse]
+    my_status: Optional[AgentStatusResponse] = None
 
     class Config:
         from_attributes = True

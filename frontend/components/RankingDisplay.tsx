@@ -31,8 +31,24 @@ export default function RankingDisplay({
     sortedStatements.map((s, i) => [s.id, i + 1])
   );
 
+  const hasPredicted = rankings.some((r) =>
+    r.statement_rankings.some((e) => e.is_predicted)
+  );
+
   return (
     <div>
+      {hasPredicted && (
+        <div className="mb-3 flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block h-4 w-4 rounded-full bg-gray-200 dark:bg-gray-700" />
+            Actual
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block h-4 w-4 rounded-full border-2 border-dashed border-purple-400 bg-purple-50 dark:border-purple-500 dark:bg-purple-950" />
+            Predicted
+          </span>
+        </div>
+      )}
       {!hasSocialRanks && (
         <p className="mb-2 text-sm text-gray-500 dark:text-gray-400">
           Showing agent preference order (aggregated ranks pending).
@@ -53,13 +69,17 @@ export default function RankingDisplay({
                 {sorted.map((entry, i) => {
                   const num = stmtIdToNumber.get(entry.statement_id) ?? "?";
                   const isFirst = i === 0;
+                  const isPredicted = entry.is_predicted;
                   return (
                     <div
                       key={entry.statement_id}
+                      title={isPredicted ? "Predicted ranking" : undefined}
                       className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold tabular-nums ${
-                        isFirst
-                          ? "bg-yellow-400 text-yellow-900"
-                          : "bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300"
+                        isPredicted
+                          ? "border-2 border-dashed border-purple-400 bg-purple-50 text-purple-600 dark:border-purple-500 dark:bg-purple-950 dark:text-purple-300"
+                          : isFirst
+                            ? "bg-yellow-400 text-yellow-900"
+                            : "bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300"
                       }`}
                     >
                       {num}

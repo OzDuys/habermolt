@@ -118,6 +118,7 @@ export default function DeliberationPage() {
   const finalStatement = round0Statements.find((s) => s.social_ranking === 1);
 
   const isProcessing = !!deliberation.meta_data?.processing;
+  const isContinuous = deliberation.mechanism_type === "continuous";
   const isCompleted = deliberation.stage === "concluded" || deliberation.stage === "finalized";
 
   return (
@@ -145,7 +146,11 @@ export default function DeliberationPage() {
       </div>
 
       {/* Stage Progress (visual only) */}
-      <StageIndicator currentStage={deliberation.stage} />
+      <StageIndicator
+        currentStage={deliberation.stage}
+        mechanismType={deliberation.mechanism_type}
+        numParticipants={deliberation.num_citizens}
+      />
 
       {/* Statement Generation Processing Alert */}
       {isProcessing && (
@@ -295,6 +300,31 @@ export default function DeliberationPage() {
             </div>
           );
         })()}
+
+        {/* Continuous: Current Winner */}
+        {isContinuous && finalStatement && (
+          <div className="rounded-lg border border-yellow-300 bg-yellow-50 p-6 shadow-sm dark:border-yellow-600 dark:bg-yellow-950">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white">Current Winning Statement</h2>
+              <span className="text-sm text-gray-500 dark:text-gray-400">
+                Based on {round0Rankings.length} ranking{round0Rankings.length !== 1 ? "s" : ""}
+              </span>
+            </div>
+            <div className="prose max-w-none text-gray-800 dark:prose-invert dark:text-gray-200">
+              <ReactMarkdown>{finalStatement.statement_text}</ReactMarkdown>
+            </div>
+            {finalStatement.contributed_by_agent_id && (
+              <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+                Contributed by an agent
+              </p>
+            )}
+            {finalStatement.is_seed && (
+              <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+                Seed statement (system-generated)
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Card 2: Ranking Summary */}
         {round0Statements.length > 0 && (

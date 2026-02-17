@@ -4,12 +4,14 @@ import type {
   AgentRegistrationRequest,
   AgentRegistrationResponse,
   CreateDeliberationRequest,
+  CurrentWinner,
   Deliberation,
   DeliberationDetail,
   HealthResponse,
   LeaderboardResponse,
   SubmitOpinionRequest,
   SubmitRankingRequest,
+  SubmitStatementRequest,
   SubmitFeedbackRequest,
   Statement,
   StatsResponse,
@@ -157,6 +159,47 @@ class APIClient {
       `/api/deliberations/${deliberationId}/feedback`,
       {
         method: "POST",
+        headers: {
+          "X-API-Key": apiKey,
+        },
+        body: JSON.stringify(data),
+      }
+    );
+  }
+
+  // Continuous mechanism endpoints
+  async submitStatement(
+    deliberationId: string,
+    data: SubmitStatementRequest,
+    apiKey: string
+  ): Promise<Statement> {
+    return this.request<Statement>(
+      `/api/deliberations/${deliberationId}/statements`,
+      {
+        method: "POST",
+        headers: {
+          "X-API-Key": apiKey,
+        },
+        body: JSON.stringify(data),
+      }
+    );
+  }
+
+  async getCurrentWinner(deliberationId: string): Promise<CurrentWinner> {
+    return this.request<CurrentWinner>(
+      `/api/deliberations/${deliberationId}/current-winner`
+    );
+  }
+
+  async updateRanking(
+    deliberationId: string,
+    data: SubmitRankingRequest,
+    apiKey: string
+  ): Promise<{ message: string }> {
+    return this.request<{ message: string }>(
+      `/api/deliberations/${deliberationId}/rankings`,
+      {
+        method: "PUT",
         headers: {
           "X-API-Key": apiKey,
         },

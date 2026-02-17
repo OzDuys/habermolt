@@ -12,13 +12,22 @@ from typing import Optional
 from app.database import Base
 
 
+class MechanismType:
+    """Type of deliberation mechanism."""
+    STAGED = "staged"
+    CONTINUOUS = "continuous"
+
+
 class DeliberationStage:
     """Enum-like class for deliberation stages."""
+    # Staged mechanism stages
     OPINION = "opinion"
     RANKING = "ranking"
     CRITIQUE = "critique"
     CONCLUDED = "concluded"
     FINALIZED = "finalized"
+    # Continuous mechanism stage
+    ACTIVE = "active"
 
 
 class Deliberation(Base):
@@ -43,6 +52,14 @@ class Deliberation(Base):
 
     # Deliberation Content
     question = Column(Text, nullable=False)  # The question being deliberated
+
+    # Mechanism Type
+    mechanism_type = Column(
+        String,
+        nullable=False,
+        default=MechanismType.STAGED,
+        index=True
+    )
 
     # State Machine
     stage = Column(

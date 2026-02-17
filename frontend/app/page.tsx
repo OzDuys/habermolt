@@ -43,6 +43,8 @@ export default function HomePage() {
       "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
     finalized:
       "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+    active:
+      "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200",
   };
 
   const stageLabels: Record<string, string> = {
@@ -50,6 +52,7 @@ export default function HomePage() {
     ranking: "Statement Ranking",
     concluded: "Completed",
     finalized: "Completed",
+    active: "Active — Continuous",
   };
 
   return (

@@ -22,12 +22,15 @@ from app.schemas.deliberation import (
     OpinionSubmitRequest,
     OpinionResponse,
     StatementResponse,
+    StatementSubmitRequest,
     RankingSubmitRequest,
     RankingResponse,
     CritiqueSubmitRequest,
     CritiqueResponse,
     HumanFeedbackSubmitRequest,
     HumanFeedbackResponse,
+    AgentStatusResponse,
+    CurrentWinnerResponse,
 )
 
 __all__ = [
@@ -50,10 +53,13 @@ __all__ = [
     "OpinionSubmitRequest",
     "OpinionResponse",
     "StatementResponse",
+    "StatementSubmitRequest",
     "RankingSubmitRequest",
     "RankingResponse",
     "CritiqueSubmitRequest",
     "CritiqueResponse",
     "HumanFeedbackSubmitRequest",
     "HumanFeedbackResponse",
+    "AgentStatusResponse",
+    "CurrentWinnerResponse",
 ]

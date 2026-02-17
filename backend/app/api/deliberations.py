@@ -11,9 +11,10 @@ import threading
 import asyncio
 
 from app.database import get_db, SessionLocal
-from app.models import Agent, Deliberation, DeliberationStage, Opinion, Ranking, Critique, HumanFeedback
+from app.models import Agent, Deliberation, DeliberationStage, MechanismType, Opinion, Ranking, Critique, HumanFeedback
 from app.middleware.auth import APIKeyAuth, OptionalAPIKeyAuth
 from app.services.deliberation_service import DeliberationService
+from app.services.continuous_deliberation_service import ContinuousDeliberationService
 from app.schemas import (
     DeliberationCreateRequest,
     DeliberationResponse,
@@ -91,14 +92,33 @@ async def create_deliberation(
     Returns:
         DeliberationResponse with created deliberation details
     """
-    service = DeliberationService(db)
-
-    deliberation = service.create_deliberation(
-        question=request.question,
-        creator_agent=agent,
-        num_critique_rounds=request.num_critique_rounds,
-        meta_data=request.meta_data
-    )
+    if request.mechanism_type == MechanismType.CONTINUOUS:
+        service = ContinuousDeliberationService(db)
+        try:
+            deliberation = await service.create_deliberation(
+                question=request.question,
+                creator_agent=agent,
+                meta_data=request.meta_data,
+            )
+        except Exception as e:
+            error_msg = str(e)
+            if "429" in error_msg or "quota" in error_msg.lower() or "rate" in error_msg.lower():
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail=f"LLM API rate limit exceeded. Error: {error_msg}"
+                )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to create deliberation: {error_msg}"
+            )
+    else:
+        service = DeliberationService(db)
+        deliberation = service.create_deliberation(
+            question=request.question,
+            creator_agent=agent,
+            num_critique_rounds=request.num_critique_rounds,
+            meta_data=request.meta_data
+        )
 
     return DeliberationResponse.from_orm(deliberation)
 
@@ -185,6 +205,14 @@ async def get_deliberation(
     else:
         opinions = list(deliberation.opinions)
 
+    # Compute my_status for continuous deliberations when agent is authenticated
+    my_status = None
+    if agent and deliberation.mechanism_type == MechanismType.CONTINUOUS:
+        from app.schemas import AgentStatusResponse
+        cont_service = ContinuousDeliberationService(db)
+        status_dict = cont_service.get_agent_status(deliberation, agent)
+        my_status = AgentStatusResponse(**status_dict)
+
     return DeliberationDetailResponse(
         deliberation=DeliberationResponse.from_orm(deliberation),
         created_by=creator,
@@ -192,7 +220,8 @@ async def get_deliberation(
         statements=[StatementResponse.from_orm(s) for s in deliberation.statements],
         rankings=[RankingResponse.from_orm(r) for r in deliberation.rankings],
         critiques=[CritiqueResponse.from_orm(c) for c in deliberation.critiques],
-        human_feedback=[HumanFeedbackResponse.from_orm(f) for f in deliberation.human_feedback]
+        human_feedback=[HumanFeedbackResponse.from_orm(f) for f in deliberation.human_feedback],
+        my_status=my_status,
     )
 
 
@@ -232,6 +261,17 @@ async def submit_opinion(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Deliberation not found"
         )
+
+    # Handle continuous mechanism
+    if deliberation.mechanism_type == MechanismType.CONTINUOUS:
+        service = ContinuousDeliberationService(db)
+        try:
+            opinion = service.submit_opinion(deliberation, agent, request.opinion_text)
+        except ValueError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        return OpinionResponse.from_orm(opinion)
+
+    # --- Staged mechanism logic below ---
 
     # Check if deliberation is accepting opinions
     if deliberation.stage != DeliberationStage.OPINION:
@@ -447,6 +487,17 @@ async def submit_ranking(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Deliberation not found"
         )
+
+    # Handle continuous mechanism
+    if deliberation.mechanism_type == MechanismType.CONTINUOUS:
+        service = ContinuousDeliberationService(db)
+        try:
+            ranking = service.submit_ranking(deliberation, agent, request.statement_rankings)
+        except ValueError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        return RankingResponse.from_orm(ranking)
+
+    # --- Staged mechanism logic below ---
 
     # Check if deliberation is in ranking stage
     if deliberation.stage != DeliberationStage.RANKING:

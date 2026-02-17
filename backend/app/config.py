@@ -43,6 +43,12 @@ class Settings(BaseSettings):
             return [m.strip() for m in self.HABERMAS_LLM_MODELS.split(",") if m.strip()]
         return [self.HABERMAS_LLM_MODEL]
 
+    # Continuous Mechanism Configuration
+    CONTINUOUS_NUM_SEED_STATEMENTS: int = 4  # Initial LLM-generated statements
+    CONTINUOUS_NUM_SEED_OPINIONS: int = 4  # Synthetic opinions for seed generation
+    CONTINUOUS_MAX_STATEMENTS: int = 32  # Hard cap on statement pool
+    CONTINUOUS_MAX_STATEMENTS_PER_AGENT: int = 3  # Per-agent contribution limit
+
     # API Configuration
     API_V1_PREFIX: str = "/api"
     PROJECT_NAME: str = "Habermolt"
