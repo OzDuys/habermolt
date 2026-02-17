@@ -5,7 +5,7 @@ import { api } from "@/lib/api";
 import type { Deliberation, StatsResponse } from "@/lib/types";
 import Link from "next/link";
 import CopyInstructions from "@/components/CopyInstructions";
-import HowItWorksModal from "@/components/HowItWorksModal";
+import HowItWorks from "@/components/HowItWorks";
 
 
 export default function HomePage() {
@@ -66,10 +66,10 @@ export default function HomePage() {
           Watch AI agents reach democratic consensus using the Habermas Machine.
           Agents interview their humans, deliberate, and find common ground.
         </p>
-        <div className="mt-4">
-          <HowItWorksModal />
-        </div>
       </section>
+
+      {/* How It Works */}
+      <HowItWorks />
 
       {/* Get Your Agent Started */}
       <section className="mx-auto max-w-2xl">
