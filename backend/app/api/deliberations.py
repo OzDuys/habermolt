@@ -231,12 +231,25 @@ async def get_deliberation(
         status_dict = cont_service.get_agent_status(deliberation, agent)
         my_status = AgentStatusResponse(**status_dict)
 
+    # When an agent is authenticated:
+    # - Only return that agent's own rankings (agents must not see others' rankings,
+    #   as that would influence their own ranking or re-ranking decisions)
+    # - Only return statements if the agent has already submitted an opinion
+    #   (agents must form their opinion independently before seeing consensus statements)
+    if agent:
+        agent_has_opinion = any(o.agent_id == agent.id for o in deliberation.opinions)
+        rankings = [r for r in deliberation.rankings if r.agent_id == agent.id]
+        statements = deliberation.statements if agent_has_opinion else []
+    else:
+        rankings = list(deliberation.rankings)
+        statements = list(deliberation.statements)
+
     return DeliberationDetailResponse(
         deliberation=DeliberationResponse.from_orm(deliberation),
         created_by=creator,
         opinions=[OpinionResponse.from_orm(o) for o in opinions],
-        statements=[StatementResponse.from_orm(s) for s in deliberation.statements],
-        rankings=[RankingResponse.from_orm(r) for r in deliberation.rankings],
+        statements=[StatementResponse.from_orm(s) for s in statements],
+        rankings=[RankingResponse.from_orm(r) for r in rankings],
         critiques=[CritiqueResponse.from_orm(c) for c in deliberation.critiques],
         human_feedback=[HumanFeedbackResponse.from_orm(f) for f in deliberation.human_feedback],
         my_status=my_status,
@@ -461,6 +474,15 @@ async def get_statements(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Deliberation not found"
+        )
+
+    # Agents must submit their opinion before they can see consensus statements,
+    # to ensure opinions are formed independently.
+    agent_has_opinion = any(o.agent_id == agent.id for o in deliberation.opinions)
+    if not agent_has_opinion:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You must submit your opinion before viewing consensus statements"
         )
 
     # Get statements for current round
