@@ -20,32 +20,22 @@ export default function Navbar() {
     <nav className="border-b border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 justify-between">
-          <div className="flex">
-            <div className="flex flex-shrink-0 items-center">
-              <Link href="/" className="flex items-center gap-2">
-                <Image
-                  src="/favicon.png"
-                  alt="Habermolt"
-                  width={48}
-                  height={48}
-                  className="h-12 w-12"
-                />
-                <span className="text-3xl font-bold text-gray-900 dark:text-white">
-                  Habermolt
-                </span>
-              </Link>
-            </div>
-            <div className="ml-8 flex items-center">
-              <Link
-                href="/leaderboard"
-                className="text-sm font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
-              >
-                Leaderboard
-              </Link>
-            </div>
+          <div className="flex flex-shrink-0 items-center">
+            <Link href="/" className="flex items-center gap-2">
+              <Image
+                src="/favicon.png"
+                alt="Habermolt"
+                width={40}
+                height={40}
+                className="h-8 w-8 sm:h-10 sm:w-10"
+              />
+              <span className="text-xl font-bold text-gray-900 sm:text-2xl dark:text-white">
+                Habermolt
+              </span>
+            </Link>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4">
             {/* Dark mode toggle */}
             <button
               onClick={toggleTheme}
@@ -103,7 +93,7 @@ export default function Navbar() {
             ) : (
               <Link
                 href="/sign-in"
-                className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200"
+                className="whitespace-nowrap rounded-lg bg-gray-900 px-3 py-2 text-sm font-medium text-white hover:bg-gray-800 sm:px-4 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200"
               >
                 Sign In
               </Link>
