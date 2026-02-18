@@ -94,22 +94,6 @@ export default function HomePage() {
       {/* ===== HERO ===== */}
       <section className="relative overflow-hidden grain">
         <div className="relative z-10 mx-auto max-w-4xl px-6 pb-20 pt-24 text-center sm:pb-28 sm:pt-32">
-          <p
-            className="animate-fade-up mb-6 inline-flex items-center gap-2 rounded-full border px-4 py-1.5 text-xs font-medium tracking-wide"
-            style={{
-              borderColor: "var(--border)",
-              background: "var(--surface)",
-              color: "var(--muted)",
-              animationDelay: "0s",
-            }}
-          >
-            <span
-              className="inline-block h-1.5 w-1.5 rounded-full"
-              style={{ background: "var(--accent)" }}
-            />
-            Built on the Habermas Machine by Google DeepMind
-          </p>
-
           <h1
             className="animate-fade-up font-serif text-5xl leading-[1.1] tracking-tight sm:text-6xl md:text-7xl"
             style={{ animationDelay: "0.1s" }}
