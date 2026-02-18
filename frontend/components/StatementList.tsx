@@ -11,6 +11,18 @@ interface StatementListProps {
   highlightWinner?: boolean;
   columns?: 1 | 2;
   mode?: "grid" | "preview-carousel" | "carousel";
+  agentNames?: Record<string, string>;
+}
+
+function timeAgo(dateStr: string): string {
+  const seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
 }
 
 function StatementCard({
@@ -19,15 +31,20 @@ function StatementCard({
   highlightWinner = true,
   className = "",
   capped = false,
+  agentNames = {},
 }: {
   statement: Statement;
   showRanking: boolean;
   highlightWinner?: boolean;
   className?: string;
   capped?: boolean;
+  agentNames?: Record<string, string>;
 }) {
   const [expanded, setCardExpanded] = useState(false);
   const isWinner = highlightWinner && statement.social_ranking === 1;
+  const contributorName = statement.contributed_by_agent_id
+    ? agentNames[statement.contributed_by_agent_id] || "An agent"
+    : null;
 
   return (
     <div
@@ -55,6 +72,12 @@ function StatementCard({
               Winner
             </span>
           )}
+        </div>
+        <div className="text-right text-[11px] leading-tight" style={{ color: "var(--muted)" }}>
+          {contributorName && <div>by {contributorName}</div>}
+          {statement.is_seed && <div>seed statement</div>}
+          {!contributorName && !statement.is_seed && <div>AI-generated</div>}
+          <div>{timeAgo(statement.generated_at)}</div>
         </div>
       </div>
       <div className="relative">
@@ -98,6 +121,7 @@ export default function StatementList({
   highlightWinner = true,
   columns = 1,
   mode = "grid",
+  agentNames = {},
 }: StatementListProps) {
   const [expanded, setExpanded] = useState(false);
 
@@ -129,6 +153,7 @@ export default function StatementList({
             statement={statement}
             showRanking={showRanking}
             highlightWinner={highlightWinner}
+            agentNames={agentNames}
             capped
             className="min-w-[85vw] max-w-[400px] flex-shrink-0 snap-start sm:min-w-[300px]"
           />
@@ -144,7 +169,7 @@ export default function StatementList({
     return (
       <div>
         {winner && (
-          <StatementCard statement={winner} showRanking={showRanking} highlightWinner={highlightWinner} />
+          <StatementCard statement={winner} showRanking={showRanking} highlightWinner={highlightWinner} agentNames={agentNames} />
         )}
         {rest.length > 0 && (
           <div className="mt-4">
@@ -186,7 +211,7 @@ export default function StatementList({
   return (
     <div className={columns === 2 ? "grid grid-cols-1 gap-4 md:grid-cols-2" : "space-y-4"}>
       {sortedStatements.map((statement) => (
-        <StatementCard key={statement.id} statement={statement} showRanking={showRanking} highlightWinner={highlightWinner} />
+        <StatementCard key={statement.id} statement={statement} showRanking={showRanking} highlightWinner={highlightWinner} agentNames={agentNames} />
       ))}
     </div>
   );

@@ -1,19 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { api } from "@/lib/api";
-import type { DeliberationDetail } from "@/lib/types";
+import type { DeliberationDetail, Opinion, Ranking, HumanFeedback } from "@/lib/types";
 import ReactMarkdown from "react-markdown";
 import StageIndicator from "@/components/StageIndicator";
 import ActivityFeed from "@/components/ActivityFeed";
-import OpinionList from "@/components/OpinionList";
 import StatementList from "@/components/StatementList";
-import RankingDisplay from "@/components/RankingDisplay";
-import ConsensusChart from "@/components/ConsensusChart";
-import SchulzeVisualization from "@/components/SchulzeVisualization";
-import ScrollableCarousel from "@/components/ScrollableCarousel";
 import LoadingSpinner from "@/components/LoadingSpinner";
 
 export default function DeliberationPage() {
@@ -24,19 +19,9 @@ export default function DeliberationPage() {
   const [result, setResult] = useState<DeliberationDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const consensusRef = useRef<HTMLDivElement>(null);
-  const [consensusHeight, setConsensusHeight] = useState(0);
+  const [expandedAgent, setExpandedAgent] = useState<string | null>(null);
   const [joinWindowRemaining, setJoinWindowRemaining] = useState<number | null>(null);
-
-  useEffect(() => {
-    const el = consensusRef.current;
-    if (!el) return;
-    const observer = new ResizeObserver(([entry]) => {
-      setConsensusHeight(entry.contentRect.height);
-    });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [data, result]);
+  const [showTimeline, setShowTimeline] = useState(false);
 
   // Tick the join window countdown every second
   useEffect(() => {
@@ -60,7 +45,6 @@ export default function DeliberationPage() {
 
   useEffect(() => {
     loadDeliberation();
-
     const interval = setInterval(loadDeliberation, 5000);
     return () => clearInterval(interval);
   }, [id]);
@@ -86,20 +70,27 @@ export default function DeliberationPage() {
   };
 
   if (loading) {
-    return <LoadingSpinner message="Loading deliberation..." />;
+    return (
+      <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
+        <LoadingSpinner message="Loading deliberation..." />
+      </div>
+    );
   }
 
   if (error || !data) {
     return (
-      <div className="rounded-lg bg-red-50 p-8 dark:bg-red-950">
-        <h3 className="text-lg font-semibold text-red-800 dark:text-red-300">Error</h3>
-        <p className="mt-2 text-red-700 dark:text-red-400">{error || "Deliberation not found"}</p>
-        <Link
-          href="/"
-          className="mt-4 inline-block rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
-        >
-          Back to Home
-        </Link>
+      <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
+        <div className="rounded-xl border p-8" style={{ borderColor: "#fca5a5", background: "#fef2f2" }}>
+          <h3 className="font-semibold text-red-800">Error</h3>
+          <p className="mt-2 text-sm text-red-700">{error || "Deliberation not found"}</p>
+          <Link
+            href="/"
+            className="mt-4 inline-block rounded-lg px-4 py-2 text-sm font-medium text-white"
+            style={{ background: "var(--accent)" }}
+          >
+            Back to Home
+          </Link>
+        </div>
       </div>
     );
   }
@@ -107,325 +98,539 @@ export default function DeliberationPage() {
   const { deliberation, opinions, statements, rankings, human_feedback } = data;
   const created_by = data.created_by || null;
 
-  // Use result data when available (finalized stage has complete data)
   const displayOpinions = result?.opinions ?? opinions;
   const displayStatements = result?.statements ?? statements;
   const displayRankings = result?.rankings ?? rankings;
   const displayFeedback = result?.human_feedback ?? human_feedback;
 
-  // Round 0 data (no more critique rounds)
   const round0Statements = displayStatements.filter((s) => s.round_number === 0);
   const round0Rankings = displayRankings.filter((r) => r.round_number === 0);
   const finalStatement = round0Statements.find((s) => s.social_ranking === 1);
 
   const isProcessing = !!deliberation.meta_data?.processing;
   const isContinuous = deliberation.mechanism_type === "continuous";
-  const isCompleted = deliberation.stage === "concluded" || deliberation.stage === "finalized";
+  const isLive = isContinuous || deliberation.stage === "ranking" || deliberation.stage === "active";
+  // Build agent data map
+  const agentMap = new Map<string, {
+    agent: { id: string; name: string; human_name: string };
+    opinion?: Opinion;
+    ranking?: Ranking;
+    feedback?: HumanFeedback;
+  }>();
+
+  for (const op of displayOpinions) {
+    if (op.agent) {
+      agentMap.set(op.agent_id, {
+        agent: op.agent,
+        opinion: op,
+      });
+    }
+  }
+  for (const r of displayRankings) {
+    const existing = agentMap.get(r.agent_id);
+    if (existing) {
+      existing.ranking = r;
+    } else if (r.agent) {
+      agentMap.set(r.agent_id, { agent: r.agent, ranking: r });
+    }
+  }
+  for (const f of displayFeedback) {
+    const existing = agentMap.get(f.agent_id);
+    if (existing) {
+      existing.feedback = f;
+    } else if (f.agent) {
+      agentMap.set(f.agent_id, { agent: f.agent, feedback: f });
+    }
+  }
+
+  const agents = Array.from(agentMap.values());
+
+  // Build agent name lookup for statements
+  const agentNames: Record<string, string> = {};
+  for (const [agentId, entry] of agentMap) {
+    agentNames[agentId] = entry.agent.name;
+  }
+
+  // Build agent → contributed statements map
+  const agentStatements = new Map<string, typeof round0Statements>();
+  for (const s of round0Statements) {
+    if (s.contributed_by_agent_id) {
+      const existing = agentStatements.get(s.contributed_by_agent_id) || [];
+      existing.push(s);
+      agentStatements.set(s.contributed_by_agent_id, existing);
+    }
+  }
+
+  // Human feedback stats
+  const hasFeedback = displayFeedback.length > 0;
+  const avgAgreement = hasFeedback
+    ? displayFeedback.reduce((sum, f) => sum + f.agreement_level, 0) / displayFeedback.length
+    : 0;
+
+  const agreementLabels: Record<number, string> = {
+    1: "Strongly Disagree", 2: "Disagree", 3: "Neutral", 4: "Agree", 5: "Strongly Agree",
+  };
+  const agreementColors: Record<number, string> = {
+    1: "#ef4444", 2: "#f97316", 3: "#a8a29e", 4: "#22c55e", 5: "#16a34a",
+  };
+
+  // Helper to get statement text by ID (truncated)
+  const getStatementPreview = (statementId: string) => {
+    const s = round0Statements.find((st) => st.id === statementId);
+    if (!s) return "Unknown statement";
+    const text = s.statement_text.replace(/[#*_]/g, "");
+    return text.length > 60 ? text.slice(0, 60) + "..." : text;
+  };
 
   return (
-    <div>
-      {/* Header */}
+    <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
+      {/* ===== HEADER ===== */}
       <div className="mb-8">
         <Link
           href="/"
-          className="mb-4 inline-flex items-center text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
+          className="mb-4 inline-flex items-center gap-1 text-sm transition-colors hover:opacity-80"
+          style={{ color: "var(--muted)" }}
         >
-          ← Back to deliberations
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+          </svg>
+          Back to deliberations
         </Link>
-        <h1 className="mb-2 text-4xl font-bold text-gray-900 dark:text-white">
+
+        <h1 className="mb-3 font-serif text-3xl tracking-tight sm:text-4xl">
           {deliberation.question}
         </h1>
-        {created_by && (
-          <p className="text-gray-600 dark:text-gray-400">
-            Created by {created_by.name} (representing {created_by.human_name})
-          </p>
-        )}
-        <div className="mt-2 flex gap-4 text-sm text-gray-600 dark:text-gray-400">
-          <span>Participants: {deliberation.num_citizens}</span>
-          <span>Created {new Date(deliberation.created_at).toLocaleString()}</span>
+
+        <div className="flex flex-wrap items-center gap-3 text-sm" style={{ color: "var(--muted)" }}>
+          {created_by && (
+            <span>Created by {created_by.name}</span>
+          )}
+          <span className="hidden sm:inline">·</span>
+          <span>{deliberation.num_citizens} participants</span>
+          <span className="hidden sm:inline">·</span>
+          <span>{new Date(deliberation.created_at).toLocaleDateString()}</span>
+        </div>
+
+        <div className="mt-4">
+          <StageIndicator
+            currentStage={deliberation.stage}
+            mechanismType={deliberation.mechanism_type}
+            numParticipants={deliberation.num_citizens}
+          />
         </div>
       </div>
 
-      {/* Stage Progress (visual only) */}
-      <StageIndicator
-        currentStage={deliberation.stage}
-        mechanismType={deliberation.mechanism_type}
-        numParticipants={deliberation.num_citizens}
-      />
-
-      {/* Statement Generation Processing Alert */}
+      {/* Processing alert */}
       {isProcessing && (
-        <div className="mb-6 rounded-lg bg-purple-50 p-6 dark:bg-purple-950">
-          <div className="flex items-center gap-4">
-            <div className="h-10 w-10 animate-spin rounded-full border-4 border-purple-600 border-t-transparent"></div>
-            <div>
-              <h3 className="font-semibold text-purple-900 dark:text-purple-200">
-                Generating Group Statements
-              </h3>
-              <p className="text-sm text-purple-800 dark:text-purple-300">
-                Synthesizing candidate consensus statements from agent opinions...
-                This takes 30-60 seconds.
-              </p>
-            </div>
+        <div
+          className="mb-8 flex items-center gap-4 rounded-xl border p-6"
+          style={{ borderColor: "var(--accent)", background: "var(--accent-light)" }}
+        >
+          <div
+            className="h-8 w-8 animate-spin rounded-full border-[3px] border-t-transparent"
+            style={{ borderColor: "var(--accent)", borderTopColor: "transparent" }}
+          />
+          <div>
+            <p className="font-semibold">Generating group statements</p>
+            <p className="text-sm" style={{ color: "var(--muted)" }}>
+              Synthesizing candidate consensus statements from agent opinions... This takes 30-60 seconds.
+            </p>
           </div>
         </div>
       )}
 
-      {/* Mobile activity feed */}
-      <div className="mb-6 lg:hidden">
-        <details className="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
-          <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-300">
-            Activity Feed
-          </summary>
-          <div className="border-t border-gray-200 px-4 py-3 dark:border-gray-700">
-            <ActivityFeed data={data} />
+      {/* Join window countdown */}
+      {deliberation.stage === "opinion" && joinWindowRemaining !== null && joinWindowRemaining > 0 && (
+        <div
+          className="mb-8 rounded-xl border p-6 text-center"
+          style={{ borderColor: "var(--border)", background: "var(--surface)" }}
+        >
+          <div className="text-3xl font-semibold tabular-nums" style={{ color: "var(--accent)" }}>
+            {Math.floor(joinWindowRemaining / 60)}:{String(joinWindowRemaining % 60).padStart(2, "0")}
           </div>
-        </details>
-      </div>
+          <p className="mt-2 text-sm" style={{ color: "var(--muted)" }}>
+            Join window open — waiting for the timer to expire or the creator to start early.
+          </p>
+        </div>
+      )}
+      {deliberation.stage === "opinion" && joinWindowRemaining === 0 && (
+        <div className="mb-8 rounded-xl border p-6 text-center" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+          <p className="text-sm" style={{ color: "var(--muted)" }}>
+            Join window has closed. Deliberation is starting...
+          </p>
+        </div>
+      )}
+      {deliberation.stage === "opinion" && !deliberation.join_window_deadline && opinions.length < 2 && (
+        <div className="mb-8 rounded-xl border p-6 text-center" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+          <p className="text-sm" style={{ color: "var(--muted)" }}>
+            Waiting for {2 - opinions.length} more opinion(s) to start the join window countdown.
+          </p>
+        </div>
+      )}
 
-      {/* Main content + sidebar */}
-      <div className="flex gap-8">
-      {/* Dashboard — 3 summary cards */}
-      <div className="min-w-0 flex-1 space-y-8">
-        {/* Card 1: Consensus Summary */}
-        {isCompleted && finalStatement && (() => {
-          const hasFeedback = displayFeedback.length > 0;
-          const averageAgreement = hasFeedback
-            ? displayFeedback.reduce((sum, f) => sum + f.agreement_level, 0) / displayFeedback.length
-            : 0;
-          const strongAgreement = displayFeedback.filter((f) => f.agreement_level >= 4).length;
-          const partialAgreement = displayFeedback.filter((f) => f.agreement_level === 3).length;
-          const disagreement = displayFeedback.filter((f) => f.agreement_level <= 2).length;
+      <div className="space-y-10">
+        {/* ===== CONSENSUS CARD ===== */}
+        {finalStatement && (
+          <section>
+            <div className="mb-4 flex items-center gap-3">
+              <h2 className="font-serif text-2xl tracking-tight">Current consensus</h2>
+              {isLive && (
+                <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Live
+                </span>
+              )}
+            </div>
 
-          const agreementLabels: Record<number, string> = {
-            1: "Strongly Disagree", 2: "Disagree", 3: "Neutral", 4: "Agree", 5: "Strongly Agree",
-          };
-          const agreementColors: Record<number, string> = {
-            1: "text-red-600 dark:text-red-400", 2: "text-orange-600 dark:text-orange-400",
-            3: "text-gray-600 dark:text-gray-400", 4: "text-green-600 dark:text-green-400",
-            5: "text-green-700 dark:text-green-300",
-          };
-
-          return (
-            <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-              {/* Card title + status badge */}
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-lg font-bold text-gray-900 dark:text-white">Consensus Summary</h2>
-                <div className="flex items-center gap-2">
-                  <svg className="h-5 w-5 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  <span className="text-sm font-semibold text-green-900 dark:text-green-200">
-                    {deliberation.stage === "finalized" ? "Deliberation Complete" : "Awaiting Human Feedback"}
-                  </span>
-                </div>
+            <div
+              className="rounded-xl border-l-4 p-6"
+              style={{
+                borderLeftColor: "var(--accent)",
+                borderTop: "1px solid var(--border)",
+                borderRight: "1px solid var(--border)",
+                borderBottom: "1px solid var(--border)",
+                background: "var(--surface)",
+              }}
+            >
+              <div className="prose max-w-none dark:prose-invert">
+                <ReactMarkdown>{finalStatement.statement_text}</ReactMarkdown>
               </div>
 
-              {/* Human feedback section */}
-              {hasFeedback && (
-                <>
-                  {/* Summary stats + chart */}
-                  <div className="flex items-start justify-between gap-8">
-                    <div className="grid flex-1 gap-4 sm:grid-cols-3">
-                      <div>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">Responses</p>
-                        <p className="text-2xl font-bold text-gray-900 dark:text-white">{displayFeedback.length}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">Avg Agreement</p>
-                        <p className="text-2xl font-bold text-gray-900 dark:text-white">{averageAgreement.toFixed(1)} / 5</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">Consensus</p>
-                        <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                          {averageAgreement >= 4 ? "High" : averageAgreement >= 3 ? "Medium" : "Low"}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="hidden sm:block">
-                      <ConsensusChart
-                        strongAgreement={strongAgreement}
-                        partialAgreement={partialAgreement}
-                        disagreement={disagreement}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="my-6 border-t border-gray-200 dark:border-gray-700" />
-                </>
-              )}
-
-              {/* Final statement (left) + Human feedback cards (right, vertical scroll) */}
-              <div className="flex flex-col gap-6 lg:flex-row">
-                {/* Winning statement */}
-                <div className="flex-1 min-w-0">
-                  <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                    Final Consensus Statement
-                  </p>
-                  <div ref={consensusRef} className="rounded-lg border border-yellow-400 bg-yellow-50 p-6 shadow-sm dark:border-yellow-600 dark:bg-yellow-950">
-                    <div className="prose max-w-none text-gray-800 dark:prose-invert dark:text-gray-200">
-                      <ReactMarkdown>{finalStatement.statement_text}</ReactMarkdown>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Individual feedback - vertical scrolling carousel */}
-                {hasFeedback && (
-                  <div className="w-full lg:w-[380px] flex-shrink-0">
-                    <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                      Human Feedback
-                    </p>
-                    <ScrollableCarousel direction="vertical" maxHeight={consensusHeight > 0 ? `${consensusHeight}px` : "360px"}>
-                      {displayFeedback.map((item) => (
-                        <div
-                          key={item.id}
-                          className="flex-shrink-0 rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900"
-                        >
-                          <div className="mb-2 flex items-center justify-between">
-                            <div>
-                              <p className="font-semibold text-gray-900 dark:text-white">
-                                {item.agent?.name || "Unknown Agent"}
-                              </p>
-                              {item.agent?.human_name && (
-                                <p className="text-xs text-gray-600 dark:text-gray-400">
-                                  Human: {item.agent.human_name}
-                                </p>
-                              )}
-                            </div>
-                            <span className={`text-sm font-semibold ${agreementColors[item.agreement_level]}`}>
-                              {agreementLabels[item.agreement_level]}
-                            </span>
-                          </div>
-                          <div className="prose prose-sm max-w-none text-gray-800 dark:prose-invert dark:text-gray-200">
-                            <ReactMarkdown>{item.feedback_text}</ReactMarkdown>
-                          </div>
-                        </div>
-                      ))}
-                    </ScrollableCarousel>
-                  </div>
+              <div className="mt-4 flex flex-wrap items-center gap-3 text-xs" style={{ color: "var(--muted)" }}>
+                <span>Ranked #1 via the Schulze voting method across {round0Rankings.length} agent{round0Rankings.length !== 1 ? "s" : ""}</span>
+                {finalStatement.contributed_by_agent_id && (
+                  <>
+                    <span>·</span>
+                    <span>Contributed by an agent</span>
+                  </>
+                )}
+                {finalStatement.is_seed && (
+                  <>
+                    <span>·</span>
+                    <span>System-generated seed</span>
+                  </>
                 )}
               </div>
 
-              {/* Waiting for feedback */}
-              {deliberation.stage === "concluded" && human_feedback.length < deliberation.num_citizens && (
-                <p className="mt-4 text-center text-sm text-gray-600 dark:text-gray-400">
-                  Waiting for {deliberation.num_citizens - human_feedback.length} more feedback submission(s)...
-                </p>
+              {/* Inline human feedback summary */}
+              {hasFeedback && (
+                <div
+                  className="mt-4 flex flex-wrap items-center gap-3 rounded-lg p-3 text-sm"
+                  style={{ background: "var(--surface-dim)" }}
+                >
+                  <span className="font-semibold">{avgAgreement.toFixed(1)} / 5</span>
+                  <span style={{ color: "var(--muted)" }}>avg agreement</span>
+                  <span style={{ color: "var(--muted)" }}>·</span>
+                  <span>{displayFeedback.length} response{displayFeedback.length !== 1 ? "s" : ""}</span>
+                  <span style={{ color: "var(--muted)" }}>·</span>
+                  <span
+                    className="rounded-full px-2 py-0.5 text-xs font-medium"
+                    style={{
+                      background: avgAgreement >= 4 ? "#dcfce7" : avgAgreement >= 3 ? "#fef9c3" : "#fee2e2",
+                      color: avgAgreement >= 4 ? "#166534" : avgAgreement >= 3 ? "#854d0e" : "#991b1b",
+                    }}
+                  >
+                    {avgAgreement >= 4 ? "High" : avgAgreement >= 3 ? "Medium" : "Low"} consensus
+                  </span>
+                </div>
               )}
             </div>
-          );
-        })()}
-
-        {/* Continuous: Current Winner */}
-        {isContinuous && finalStatement && (
-          <div className="rounded-lg border border-yellow-300 bg-yellow-50 p-6 shadow-sm dark:border-yellow-600 dark:bg-yellow-950">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-gray-900 dark:text-white">Current Winning Statement</h2>
-              <span className="text-sm text-gray-500 dark:text-gray-400">
-                Based on {round0Rankings.length} ranking{round0Rankings.length !== 1 ? "s" : ""}
-              </span>
-            </div>
-            <div className="prose max-w-none text-gray-800 dark:prose-invert dark:text-gray-200">
-              <ReactMarkdown>{finalStatement.statement_text}</ReactMarkdown>
-            </div>
-            {finalStatement.contributed_by_agent_id && (
-              <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
-                Contributed by an agent
-              </p>
-            )}
-            {finalStatement.is_seed && (
-              <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
-                Seed statement (system-generated)
-              </p>
-            )}
-          </div>
+          </section>
         )}
 
-        {/* Card 2: Ranking Summary */}
+        {/* ===== ALL STATEMENTS ===== */}
         {round0Statements.length > 0 && (
-          <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-            <h2 className="mb-4 text-lg font-bold text-gray-900 dark:text-white">Ranking</h2>
+          <section>
+            <div className="mb-4">
+              <div className="flex items-center gap-3">
+                <h2 className="font-serif text-2xl tracking-tight">All statements</h2>
+                <span
+                  className="rounded-full px-2.5 py-0.5 text-xs font-medium"
+                  style={{ background: "var(--surface-dim)", color: "var(--muted)" }}
+                >
+                  {round0Statements.length}
+                </span>
+              </div>
+              <p className="mt-1 text-sm" style={{ color: "var(--muted)" }}>
+                Agents propose and rank these. The highest-ranked becomes the consensus.
+              </p>
+            </div>
 
-            {/* Winning statement on top */}
             <StatementList
               statements={round0Statements}
               showRanking={true}
-              highlightWinner={false}
+              highlightWinner={true}
               mode="carousel"
+              agentNames={agentNames}
             />
 
-            {/* Agent rankings + Schulze visualization side by side */}
-            {round0Rankings.length > 0 && (
-              <>
-                <div className="my-6 border-t border-gray-200 dark:border-gray-700" />
-                <div className="flex flex-col gap-6 lg:flex-row">
-                  <div className="flex-1 min-w-0">
-                    <p className="mb-3 text-sm font-medium text-gray-600 dark:text-gray-400">Agent Rankings</p>
-                    <RankingDisplay
-                      rankings={round0Rankings}
-                      statements={round0Statements}
-                    />
-                  </div>
-                  <div className="flex-shrink-0">
-                    <SchulzeVisualization
-                      rankings={round0Rankings}
-                      statements={round0Statements}
-                    />
-                  </div>
-                </div>
-              </>
-            )}
-
             {deliberation.stage === "ranking" && round0Rankings.length < deliberation.num_citizens && (
-              <p className="mt-4 text-center text-sm text-gray-600 dark:text-gray-400">
+              <p className="mt-4 text-center text-sm" style={{ color: "var(--muted)" }}>
                 Waiting for {deliberation.num_citizens - round0Rankings.length} more ranking(s)...
               </p>
             )}
-          </div>
+          </section>
         )}
 
-        {/* Card 3: Initial Opinions */}
-        {displayOpinions.length > 0 && (
-          <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-            <h2 className="mb-4 text-lg font-bold text-gray-900 dark:text-white">Initial Opinions</h2>
-            <OpinionList opinions={displayOpinions} layout="carousel" />
-            {deliberation.stage === "opinion" && joinWindowRemaining !== null && joinWindowRemaining > 0 && (
-              <div className="mt-4 rounded-lg bg-blue-50 p-4 dark:bg-blue-950">
-                <div className="flex items-center justify-center gap-3">
-                  <div className="flex items-baseline gap-1 tabular-nums">
-                    <span className="text-2xl font-bold text-blue-700 dark:text-blue-300">
-                      {Math.floor(joinWindowRemaining / 60)}:{String(joinWindowRemaining % 60).padStart(2, "0")}
-                    </span>
-                  </div>
-                </div>
-                <p className="mt-2 text-center text-sm text-blue-700 dark:text-blue-300">
-                  Join window open — waiting for the timer to expire, or the deliberation creator can start it early at any time.
-                </p>
+        {/* ===== AGENTS ===== */}
+        {agents.length > 0 && (
+          <section>
+            <div className="mb-4">
+              <div className="flex items-center gap-3">
+                <h2 className="font-serif text-2xl tracking-tight">Agents</h2>
+                <span
+                  className="rounded-full px-2.5 py-0.5 text-xs font-medium"
+                  style={{ background: "var(--surface-dim)", color: "var(--muted)" }}
+                >
+                  {agents.length}
+                </span>
               </div>
-            )}
-            {deliberation.stage === "opinion" && joinWindowRemaining === 0 && (
-              <p className="mt-4 text-center text-sm text-gray-600 dark:text-gray-400">
-                Join window has closed. Deliberation is starting...
+              <p className="mt-1 text-sm" style={{ color: "var(--muted)" }}>
+                Each agent represents a human&apos;s views. Click to see their opinion and rankings.
               </p>
-            )}
-            {deliberation.stage === "opinion" && !deliberation.join_window_deadline && opinions.length < 2 && (
-              <div className="mt-4 rounded-lg bg-gray-50 p-4 dark:bg-gray-900">
-                <p className="text-center text-sm text-gray-600 dark:text-gray-400">
-                  Waiting for {2 - opinions.length} more opinion(s) to start the join window countdown.
-                  The deliberation creator can also start it early at any time.
-                </p>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+            </div>
 
-      {/* Desktop activity sidebar */}
-      <aside className="hidden w-72 flex-shrink-0 lg:block">
-        <div className="sticky top-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-          <ActivityFeed data={data} />
-        </div>
-      </aside>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {agents.map(({ agent, opinion, ranking, feedback }) => {
+                const isExpanded = expandedAgent === agent.id;
+                const contributed = agentStatements.get(agent.id) || [];
+
+                return (
+                  <div
+                    key={agent.id}
+                    className="rounded-xl border transition-all"
+                    style={{
+                      borderColor: isExpanded ? "var(--accent)" : "var(--border)",
+                      background: "var(--surface)",
+                    }}
+                  >
+                    {/* Collapsed card */}
+                    <button
+                      onClick={() => setExpandedAgent(isExpanded ? null : agent.id)}
+                      className="flex w-full items-start gap-3 p-4 text-left"
+                    >
+                      {/* Avatar */}
+                      <div
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold"
+                        style={{ background: "var(--accent-light)", color: "var(--accent)" }}
+                      >
+                        {agent.name.charAt(0).toUpperCase()}
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-sm truncate">{agent.name}</span>
+                          {agent.human_name && (
+                            <span className="text-xs truncate" style={{ color: "var(--muted)" }}>
+                              for {agent.human_name}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Badges */}
+                        <div className="mt-1.5 flex flex-wrap gap-1.5">
+                          {opinion && (
+                            <span className="rounded-full px-2 py-0.5 text-[10px] font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
+                              Opinion
+                            </span>
+                          )}
+                          {ranking && (
+                            <span className="rounded-full px-2 py-0.5 text-[10px] font-medium bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300">
+                              Ranked
+                            </span>
+                          )}
+                          {contributed.length > 0 && (
+                            <span className="rounded-full px-2 py-0.5 text-[10px] font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                              {contributed.length} statement{contributed.length !== 1 ? "s" : ""}
+                            </span>
+                          )}
+                          {feedback && (
+                            <span
+                              className="rounded-full px-2 py-0.5 text-[10px] font-medium"
+                              style={{
+                                background: feedback.agreement_level >= 4 ? "#dcfce7" : feedback.agreement_level >= 3 ? "#fef9c3" : "#fee2e2",
+                                color: feedback.agreement_level >= 4 ? "#166534" : feedback.agreement_level >= 3 ? "#854d0e" : "#991b1b",
+                              }}
+                            >
+                              {agreementLabels[feedback.agreement_level]}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Opinion preview when collapsed */}
+                        {!isExpanded && opinion && (
+                          <p className="mt-1.5 text-xs line-clamp-1" style={{ color: "var(--muted)" }}>
+                            {opinion.opinion_text.replace(/[#*_]/g, "").slice(0, 100)}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Expand chevron */}
+                      <svg
+                        className={`h-4 w-4 shrink-0 transition-transform ${isExpanded ? "rotate-180" : ""}`}
+                        style={{ color: "var(--muted)" }}
+                        fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+
+                    {/* Expanded content */}
+                    {isExpanded && (
+                      <div className="border-t px-4 pb-4 pt-3 space-y-4" style={{ borderColor: "var(--border)" }}>
+                        {/* Initial opinion */}
+                        {opinion && (
+                          <div>
+                            <p className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--accent)" }}>
+                              Initial opinion
+                            </p>
+                            <div
+                              className="rounded-lg p-3 prose prose-sm max-w-none dark:prose-invert"
+                              style={{ background: "var(--surface-dim)" }}
+                            >
+                              <ReactMarkdown>{opinion.opinion_text}</ReactMarkdown>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Contributed statements */}
+                        {contributed.length > 0 && (
+                          <div>
+                            <p className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--accent)" }}>
+                              Contributed statements
+                            </p>
+                            <div className="space-y-1.5">
+                              {contributed.map((s) => (
+                                <div
+                                  key={s.id}
+                                  className="flex items-start gap-2 rounded-lg border p-2"
+                                  style={{ borderColor: "#86efac", background: "#f0fdf4" }}
+                                >
+                                  {s.social_ranking !== null && (
+                                    <span
+                                      className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold"
+                                      style={{
+                                        background: s.social_ranking === 1 ? "var(--accent)" : "var(--border)",
+                                        color: s.social_ranking === 1 ? "white" : "var(--muted)",
+                                      }}
+                                    >
+                                      #{s.social_ranking}
+                                    </span>
+                                  )}
+                                  <span className="text-xs leading-relaxed" style={{ color: "var(--muted)" }}>
+                                    {s.statement_text.replace(/[#*_]/g, "").slice(0, 80)}
+                                    {s.statement_text.length > 80 ? "..." : ""}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Rankings */}
+                        {ranking && (
+                          <div>
+                            <p className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--accent)" }}>
+                              Statement rankings
+                            </p>
+                            <div className="space-y-1.5">
+                              {ranking.statement_rankings
+                                .slice()
+                                .sort((a, b) => a.rank - b.rank)
+                                .map((entry) => (
+                                  <div
+                                    key={entry.statement_id}
+                                    className={`flex items-start gap-2 rounded-lg p-2 text-sm ${entry.is_predicted ? "border border-dashed" : ""}`}
+                                    style={{
+                                      background: entry.is_predicted ? "transparent" : entry.rank === 1 ? "var(--accent-light)" : "var(--surface-dim)",
+                                      borderColor: entry.is_predicted ? "var(--border)" : undefined,
+                                      opacity: entry.is_predicted ? 0.6 : 1,
+                                    }}
+                                  >
+                                    <span
+                                      className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold"
+                                      style={{
+                                        background: entry.is_predicted ? "transparent" : entry.rank === 1 ? "var(--accent)" : "var(--border)",
+                                        color: entry.is_predicted ? "var(--muted)" : entry.rank === 1 ? "white" : "var(--muted)",
+                                        border: entry.is_predicted ? "1px dashed var(--muted)" : "none",
+                                      }}
+                                    >
+                                      {entry.rank}
+                                    </span>
+                                    <span className="text-xs leading-relaxed" style={{ color: "var(--muted)" }}>
+                                      {getStatementPreview(entry.statement_id)}
+                                    </span>
+                                  </div>
+                                ))}
+                            </div>
+                            {ranking.statement_rankings.some((e) => e.is_predicted) && (
+                              <p className="mt-2 flex items-center gap-1.5 text-[10px]" style={{ color: "var(--muted)" }}>
+                                <span className="inline-block h-3 w-3 rounded border border-dashed" style={{ borderColor: "var(--muted)" }} />
+                                Dashed = predicted by AI (agent hasn&apos;t ranked yet)
+                              </p>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Human feedback */}
+                        {feedback && (
+                          <div>
+                            <p className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--accent)" }}>
+                              Feedback on consensus
+                            </p>
+                            <div className="flex items-center gap-2 mb-2">
+                              <span
+                                className="inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold text-white"
+                                style={{ background: agreementColors[feedback.agreement_level] }}
+                              >
+                                {feedback.agreement_level}
+                              </span>
+                              <span className="text-sm font-medium">
+                                {agreementLabels[feedback.agreement_level]}
+                              </span>
+                            </div>
+                            <div
+                              className="rounded-lg p-3 prose prose-sm max-w-none dark:prose-invert"
+                              style={{ background: "var(--surface-dim)" }}
+                            >
+                              <ReactMarkdown>{feedback.feedback_text}</ReactMarkdown>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        {/* ===== TIMELINE ===== */}
+        <section>
+          <button
+            onClick={() => setShowTimeline(!showTimeline)}
+            className="flex w-full items-center gap-3 text-left"
+          >
+            <h2 className="font-serif text-2xl tracking-tight">Timeline</h2>
+            <svg
+              className={`h-4 w-4 transition-transform ${showTimeline ? "rotate-180" : ""}`}
+              style={{ color: "var(--muted)" }}
+              fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+
+          {showTimeline && (
+            <div
+              className="mt-4 rounded-xl border p-4"
+              style={{ borderColor: "var(--border)", background: "var(--surface)" }}
+            >
+              <ActivityFeed data={data} />
+            </div>
+          )}
+        </section>
       </div>
     </div>
   );
