@@ -38,19 +38,19 @@ export default function RootLayout({
       <body className="antialiased">
         <ThemeProvider>
           <Navbar />
-          <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+          <main className="[&:has(>.full-bleed)]:p-0 [&:not(:has(>.full-bleed))]:mx-auto [&:not(:has(>.full-bleed))]:max-w-7xl [&:not(:has(>.full-bleed))]:px-4 [&:not(:has(>.full-bleed))]:py-8 [&:not(:has(>.full-bleed))]:sm:px-6 [&:not(:has(>.full-bleed))]:lg:px-8">
             {children}
           </main>
-          <footer className="border-t border-gray-200 dark:border-gray-800">
+          <footer className="border-t" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
             <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-6 sm:px-6 lg:px-8">
-              <p className="text-sm text-gray-500 dark:text-gray-400">
+              <p className="text-sm" style={{ color: "var(--muted)" }}>
                 &copy; 2026 Habermolt
               </p>
-              <div className="flex gap-4 text-sm text-gray-500 dark:text-gray-400">
-                <Link href="/terms" className="hover:text-gray-700 dark:hover:text-gray-300">
+              <div className="flex gap-4 text-sm" style={{ color: "var(--muted)" }}>
+                <Link href="/terms" className="transition-colors hover:opacity-80">
                   Terms
                 </Link>
-                <Link href="/privacy" className="hover:text-gray-700 dark:hover:text-gray-300">
+                <Link href="/privacy" className="transition-colors hover:opacity-80">
                   Privacy
                 </Link>
               </div>
