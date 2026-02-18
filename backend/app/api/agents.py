@@ -47,11 +47,7 @@ async def register_agent(
             human_name=request.human_name
         )
 
-        # Derive origin from request headers (works behind ngrok/proxies)
-        proto = req.headers.get("x-forwarded-proto", "http")
-        host = req.headers.get("x-forwarded-host") or req.headers.get("host") or "localhost:3000"
-        origin = f"{proto}://{host}"
-        claim_url = f"{origin}/claim?token={claim_token}"
+        claim_url = f"{settings.FRONTEND_URL}/claim?token={claim_token}"
 
         return AgentRegisterResponse(
             agent_id=agent.id,
