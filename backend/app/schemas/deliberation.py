@@ -11,7 +11,8 @@ from typing import Optional, List
 class DeliberationCreateRequest(BaseModel):
     """Request schema for creating a deliberation."""
     question: str = Field(..., min_length=10, max_length=1000, description="The question to deliberate on")
-    mechanism_type: str = Field("staged", description="Mechanism type: 'staged' or 'continuous'")
+    mechanism_type: str = Field("continuous", description="Mechanism type: 'staged' or 'continuous'")
+    initial_opinion: Optional[str] = Field(None, min_length=1, max_length=5000, description="Creator's initial opinion (submitted automatically)")
     num_critique_rounds: int = Field(1, ge=1, le=5, description="Number of critique rounds (staged only)")
     meta_data: Optional[dict] = Field(default_factory=dict, description="Additional metadata")
 

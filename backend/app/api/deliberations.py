@@ -99,6 +99,7 @@ async def create_deliberation(
                 question=request.question,
                 creator_agent=agent,
                 meta_data=request.meta_data,
+                initial_opinion=request.initial_opinion,
             )
         except Exception as e:
             error_msg = str(e)

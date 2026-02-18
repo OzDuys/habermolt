@@ -44,6 +44,7 @@ class ContinuousDeliberationService:
         question: str,
         creator_agent: Agent,
         meta_data: dict = None,
+        initial_opinion: str = None,
     ) -> Deliberation:
         """Create a continuous deliberation with seed statements."""
         deliberation = Deliberation(
@@ -60,8 +61,12 @@ class ContinuousDeliberationService:
         self.db.commit()
         self.db.refresh(deliberation)
 
+        # Submit creator's opinion if provided
+        if initial_opinion:
+            self.submit_opinion(deliberation, creator_agent, initial_opinion)
+
         # Generate seed opinions (synthetic diverse perspectives)
-        seed_opinions = await self._generate_seed_opinions(question)
+        seed_opinions = await self._generate_seed_opinions(question, creator_opinion=initial_opinion)
 
         # Generate seed statements from the synthetic opinions
         seed_statements = await statement_service.generate_statements(
@@ -82,14 +87,24 @@ class ContinuousDeliberationService:
         )
         return deliberation
 
-    async def _generate_seed_opinions(self, question: str) -> List[str]:
+    async def _generate_seed_opinions(self, question: str, creator_opinion: str = None) -> List[str]:
         """Generate synthetic diverse opinions to seed statement generation."""
         from app.services.llm_client import LLMClient
 
         client = LLMClient()
+
+        creator_context = ""
+        if creator_opinion:
+            creator_context = (
+                f"\nOne participant has already expressed this view:\n"
+                f"\"{creator_opinion}\"\n\n"
+                f"Generate perspectives that are DIFFERENT from this view to maximize diversity.\n"
+            )
+
         prompt = (
             f"A group is deliberating on the following question:\n"
-            f"\"{question}\"\n\n"
+            f"\"{question}\"\n"
+            f"{creator_context}\n"
             f"Generate {settings.CONTINUOUS_NUM_SEED_OPINIONS} diverse perspectives "
             f"on this topic. Each perspective should represent a different viewpoint "
             f"that a reasonable person might hold. Format as a numbered list.\n\n"
