@@ -7,6 +7,7 @@ import { api } from "@/lib/api";
 import type { DeliberationDetail } from "@/lib/types";
 import ReactMarkdown from "react-markdown";
 import StageIndicator from "@/components/StageIndicator";
+import ActivityFeed from "@/components/ActivityFeed";
 import OpinionList from "@/components/OpinionList";
 import StatementList from "@/components/StatementList";
 import RankingDisplay from "@/components/RankingDisplay";
@@ -170,8 +171,22 @@ export default function DeliberationPage() {
         </div>
       )}
 
+      {/* Mobile activity feed */}
+      <div className="mb-6 lg:hidden">
+        <details className="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
+          <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-300">
+            Activity Feed
+          </summary>
+          <div className="border-t border-gray-200 px-4 py-3 dark:border-gray-700">
+            <ActivityFeed data={data} />
+          </div>
+        </details>
+      </div>
+
+      {/* Main content + sidebar */}
+      <div className="flex gap-8">
       {/* Dashboard — 3 summary cards */}
-      <div className="space-y-8">
+      <div className="min-w-0 flex-1 space-y-8">
         {/* Card 1: Consensus Summary */}
         {isCompleted && finalStatement && (() => {
           const hasFeedback = displayFeedback.length > 0;
@@ -403,6 +418,14 @@ export default function DeliberationPage() {
             )}
           </div>
         )}
+      </div>
+
+      {/* Desktop activity sidebar */}
+      <aside className="hidden w-72 flex-shrink-0 lg:block">
+        <div className="sticky top-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+          <ActivityFeed data={data} />
+        </div>
+      </aside>
       </div>
     </div>
   );

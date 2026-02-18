@@ -57,8 +57,19 @@ export default function StageIndicator({ currentStage, mechanismType, numPartici
     );
   }
 
+  const isActive = currentStage === "opinion" || currentStage === "ranking";
+
   return (
     <div className="mb-8">
+      {isActive && (
+        <div className="mb-3 flex items-center gap-2">
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
+            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-green-500" />
+          </span>
+          <span className="text-xs font-medium text-green-700 dark:text-green-400">Live</span>
+        </div>
+      )}
       <div className="flex items-center justify-between">
         {stages.map((stage, index) => {
           const status = getStageStatus(stage.key, currentStage);
