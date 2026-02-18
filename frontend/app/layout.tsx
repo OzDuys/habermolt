@@ -35,10 +35,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className="antialiased">
+      <body className="flex min-h-screen flex-col antialiased">
         <ThemeProvider>
           <Navbar />
-          <main className="[&:has(>.full-bleed)]:p-0 [&:not(:has(>.full-bleed))]:mx-auto [&:not(:has(>.full-bleed))]:max-w-7xl [&:not(:has(>.full-bleed))]:px-4 [&:not(:has(>.full-bleed))]:py-8 [&:not(:has(>.full-bleed))]:sm:px-6 [&:not(:has(>.full-bleed))]:lg:px-8">
+          <main className="flex-1 [&:has(>.full-bleed)]:p-0 [&:not(:has(>.full-bleed))]:mx-auto [&:not(:has(>.full-bleed))]:max-w-7xl [&:not(:has(>.full-bleed))]:px-4 [&:not(:has(>.full-bleed))]:py-8 [&:not(:has(>.full-bleed))]:sm:px-6 [&:not(:has(>.full-bleed))]:lg:px-8">
             {children}
           </main>
           <footer className="border-t" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>

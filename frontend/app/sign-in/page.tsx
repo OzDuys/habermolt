@@ -51,26 +51,27 @@ export default function SignInPage() {
 
   return (
     <div className="mx-auto max-w-md py-12">
-      <h1 className="mb-8 text-center text-3xl font-bold text-gray-900 dark:text-white">
+      <h1 className="mb-8 text-center font-serif text-3xl" style={{ color: "var(--foreground)" }}>
         Sign In
       </h1>
 
       {error && (
-        <div className="mb-4 rounded-lg bg-red-50 p-4 text-sm text-red-700 dark:bg-red-950 dark:text-red-400">
+        <div className="mb-4 rounded-lg p-4 text-sm" style={{ background: "var(--accent-light)", color: "var(--accent)" }}>
           {error}
         </div>
       )}
 
       {needsVerification && (
-        <div className="mb-4 rounded-lg bg-yellow-50 p-4 text-sm text-yellow-800 dark:bg-yellow-950 dark:text-yellow-300">
+        <div className="mb-4 rounded-lg p-4 text-sm" style={{ background: "var(--surface-dim)", color: "var(--foreground)" }}>
           <p className="mb-2">Your email is not verified yet. Check your inbox for a verification link.</p>
           {resendStatus === "sent" ? (
-            <p className="font-medium text-green-700 dark:text-green-400">Verification email sent!</p>
+            <p className="font-medium" style={{ color: "var(--accent)" }}>Verification email sent!</p>
           ) : (
             <button
               onClick={handleResendVerification}
               disabled={resendStatus === "sending"}
-              className="font-medium text-blue-600 hover:text-blue-500 disabled:opacity-50"
+              className="font-medium disabled:opacity-50"
+              style={{ color: "var(--accent)" }}
             >
               {resendStatus === "sending" ? "Sending..." : "Resend verification email"}
             </button>
@@ -80,7 +81,8 @@ export default function SignInPage() {
 
       <button
         onClick={handleGoogleSignIn}
-        className="mb-3 flex w-full items-center justify-center gap-3 rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+        className="mb-3 flex w-full items-center justify-center gap-3 rounded-lg border px-4 py-3 text-sm font-medium transition-colors hover:opacity-80"
+        style={{ borderColor: "var(--border)", background: "var(--surface)", color: "var(--foreground)" }}
       >
         <svg className="h-5 w-5" viewBox="0 0 24 24">
           <path
@@ -105,7 +107,8 @@ export default function SignInPage() {
 
       <button
         onClick={handleTwitterSignIn}
-        className="mb-6 flex w-full items-center justify-center gap-3 rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+        className="mb-6 flex w-full items-center justify-center gap-3 rounded-lg border px-4 py-3 text-sm font-medium transition-colors hover:opacity-80"
+        style={{ borderColor: "var(--border)", background: "var(--surface)", color: "var(--foreground)" }}
       >
         <svg className="h-5 w-5" viewBox="0 0 24 24">
           <path
@@ -117,16 +120,17 @@ export default function SignInPage() {
       </button>
 
       <div className="mb-6 flex items-center gap-4">
-        <div className="h-px flex-1 bg-gray-300 dark:bg-gray-600" />
-        <span className="text-sm text-gray-500 dark:text-gray-400">or</span>
-        <div className="h-px flex-1 bg-gray-300 dark:bg-gray-600" />
+        <div className="h-px flex-1" style={{ background: "var(--border)" }} />
+        <span className="text-sm" style={{ color: "var(--muted)" }}>or</span>
+        <div className="h-px flex-1" style={{ background: "var(--border)" }} />
       </div>
 
       <form onSubmit={handleEmailSignIn} className="space-y-4">
         <div>
           <label
             htmlFor="email"
-            className="block text-sm font-medium text-gray-700 dark:text-gray-300"
+            className="block text-sm font-medium"
+            style={{ color: "var(--foreground)" }}
           >
             Email
           </label>
@@ -136,14 +140,16 @@ export default function SignInPage() {
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+            className="mt-1 block w-full rounded-lg border px-3 py-2 outline-none transition-colors"
+            style={{ borderColor: "var(--border)", background: "var(--surface)", color: "var(--foreground)" }}
           />
         </div>
 
         <div>
           <label
             htmlFor="password"
-            className="block text-sm font-medium text-gray-700 dark:text-gray-300"
+            className="block text-sm font-medium"
+            style={{ color: "var(--foreground)" }}
           >
             Password
           </label>
@@ -153,24 +159,27 @@ export default function SignInPage() {
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+            className="mt-1 block w-full rounded-lg border px-3 py-2 outline-none transition-colors"
+            style={{ borderColor: "var(--border)", background: "var(--surface)", color: "var(--foreground)" }}
           />
         </div>
 
         <button
           type="submit"
           disabled={loading}
-          className="w-full rounded-lg bg-gray-900 px-4 py-3 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200"
+          className="w-full rounded-lg px-4 py-3 text-sm font-medium text-white transition-colors disabled:opacity-50"
+          style={{ background: "var(--accent)" }}
         >
           {loading ? "Signing in..." : "Sign In"}
         </button>
       </form>
 
-      <p className="mt-6 text-center text-sm text-gray-600 dark:text-gray-400">
+      <p className="mt-6 text-center text-sm" style={{ color: "var(--muted)" }}>
         Don&apos;t have an account?{" "}
         <Link
           href="/sign-up"
-          className="font-medium text-blue-600 hover:text-blue-500"
+          className="font-medium transition-colors hover:opacity-80"
+          style={{ color: "var(--accent)" }}
         >
           Sign up
         </Link>

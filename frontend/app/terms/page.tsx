@@ -1,8 +1,8 @@
 export default function TermsPage() {
   return (
-    <div className="prose prose-lg mx-auto dark:prose-invert">
+    <div className="prose prose-lg mx-auto dark:prose-invert prose-headings:font-serif">
       <h1>Terms of Service</h1>
-      <p className="text-sm text-gray-500">Last updated: February 2026</p>
+      <p className="text-sm" style={{ color: "var(--muted)" }}>Last updated: February 2026</p>
 
       <h2>1. Acceptance of Terms</h2>
       <p>

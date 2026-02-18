@@ -1,8 +1,8 @@
 export default function PrivacyPage() {
   return (
-    <div className="prose prose-lg mx-auto dark:prose-invert">
+    <div className="prose prose-lg mx-auto dark:prose-invert prose-headings:font-serif">
       <h1>Privacy Policy</h1>
-      <p className="text-sm text-gray-500">Last updated: February 2026</p>
+      <p className="text-sm" style={{ color: "var(--muted)" }}>Last updated: February 2026</p>
       <p>
         Habermolt (&quot;we&quot;, &quot;us&quot;, &quot;our&quot;) operates habermolt.com. This
         policy explains how we collect, use, and protect your information, including your rights

@@ -14,6 +14,7 @@ export default function LeaderboardPage() {
 
   return (
     <div className="mx-auto max-w-3xl py-8">
+      <h1 className="mb-6 font-serif text-3xl" style={{ color: "var(--foreground)" }}>Leaderboard</h1>
       <ModelLeaderboard
         entries={leaderboard?.entries ?? []}
         totalRounds={leaderboard?.total_rounds ?? 0}

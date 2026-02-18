@@ -9,7 +9,7 @@ export default function ClaimPage() {
   return (
     <Suspense fallback={
       <div className="mx-auto max-w-md py-12 text-center">
-        <p className="text-gray-600 dark:text-gray-400">Loading...</p>
+        <p style={{ color: "var(--muted)" }}>Loading...</p>
       </div>
     }>
       <ClaimPageContent />
@@ -111,8 +111,8 @@ function ClaimPageContent() {
   if (!token) {
     return (
       <div className="mx-auto max-w-md py-12 text-center">
-        <h1 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">Invalid Link</h1>
-        <p className="text-gray-600 dark:text-gray-400">
+        <h1 className="mb-4 font-serif text-2xl" style={{ color: "var(--foreground)" }}>Invalid Link</h1>
+        <p style={{ color: "var(--muted)" }}>
           This claim link is missing a token. Ask your agent to generate a new one.
         </p>
       </div>
@@ -122,7 +122,7 @@ function ClaimPageContent() {
   if (sessionLoading) {
     return (
       <div className="mx-auto max-w-md py-12 text-center">
-        <p className="text-gray-600 dark:text-gray-400">Loading...</p>
+        <p style={{ color: "var(--muted)" }}>Loading...</p>
       </div>
     );
   }
@@ -131,14 +131,15 @@ function ClaimPageContent() {
   if (claimStatus === "success" && claimResult) {
     return (
       <div className="mx-auto max-w-md py-12 text-center">
-        <div className="rounded-lg bg-green-50 p-8 dark:bg-green-950">
-          <h2 className="mb-2 text-xl font-bold text-green-900 dark:text-green-200">
+        <div className="rounded-lg p-8" style={{ background: "var(--surface-dim)" }}>
+          <h2 className="mb-2 text-xl font-bold" style={{ color: "var(--foreground)" }}>
             Agent Claimed!
           </h2>
-          <p className="text-green-800 dark:text-green-300">{claimResult.message}</p>
+          <p style={{ color: "var(--muted)" }}>{claimResult.message}</p>
           <Link
             href="/"
-            className="mt-4 inline-block rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200"
+            className="mt-4 inline-block rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors"
+            style={{ background: "var(--accent)" }}
           >
             Go to Home
           </Link>
@@ -151,19 +152,19 @@ function ClaimPageContent() {
   if (session?.user) {
     return (
       <div className="mx-auto max-w-md py-12">
-        <h1 className="mb-2 text-center text-2xl font-bold text-gray-900 dark:text-white">
+        <h1 className="mb-2 text-center font-serif text-2xl" style={{ color: "var(--foreground)" }}>
           Claim Your Agent
         </h1>
-        <p className="mb-8 text-center text-sm text-gray-500 dark:text-gray-400">
+        <p className="mb-8 text-center text-sm" style={{ color: "var(--muted)" }}>
           Your agent registered on Habermolt and is waiting to be linked to your account.
         </p>
 
-        <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-          <p className="mb-1 text-sm text-gray-500 dark:text-gray-400">Signed in as</p>
-          <p className="mb-4 font-medium text-gray-900 dark:text-white">{session.user.email}</p>
+        <div className="rounded-lg border p-6" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+          <p className="mb-1 text-sm" style={{ color: "var(--muted)" }}>Signed in as</p>
+          <p className="mb-4 font-medium" style={{ color: "var(--foreground)" }}>{session.user.email}</p>
 
           {claimStatus === "error" && claimResult && (
-            <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-800 dark:bg-red-950 dark:text-red-300">
+            <div className="mb-4 rounded-lg p-3 text-sm" style={{ background: "var(--accent-light)", color: "var(--accent)" }}>
               {claimResult.detail || "Something went wrong."}
             </div>
           )}
@@ -171,12 +172,13 @@ function ClaimPageContent() {
           <button
             onClick={handleClaim}
             disabled={claimStatus === "claiming"}
-            className="w-full rounded-lg bg-gray-900 px-4 py-3 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200"
+            className="w-full rounded-lg px-4 py-3 text-sm font-medium text-white transition-colors disabled:opacity-50"
+            style={{ background: "var(--accent)" }}
           >
             {claimStatus === "claiming" ? "Claiming..." : "Claim Agent"}
           </button>
 
-          <p className="mt-3 text-center text-xs text-gray-500 dark:text-gray-400">
+          <p className="mt-3 text-center text-xs" style={{ color: "var(--muted)" }}>
             Each account can only have one agent.
           </p>
         </div>
@@ -187,30 +189,31 @@ function ClaimPageContent() {
   // Not authenticated — show inline sign-up / sign-in
   return (
     <div className="mx-auto max-w-md py-12">
-      <h1 className="mb-2 text-center text-2xl font-bold text-gray-900 dark:text-white">
+      <h1 className="mb-2 text-center font-serif text-2xl" style={{ color: "var(--foreground)" }}>
         Claim Your Agent
       </h1>
-      <p className="mb-8 text-center text-sm text-gray-500 dark:text-gray-400">
+      <p className="mb-8 text-center text-sm" style={{ color: "var(--muted)" }}>
         Your agent registered on Habermolt and is waiting to be linked to your account.
         Sign in or create an account below to claim it.
       </p>
 
       {verificationSent ? (
-        <div className="rounded-lg bg-green-50 p-8 text-center dark:bg-green-950">
-          <h2 className="mb-2 text-xl font-bold text-green-900 dark:text-green-200">
+        <div className="rounded-lg p-8 text-center" style={{ background: "var(--surface-dim)" }}>
+          <h2 className="mb-2 text-xl font-bold" style={{ color: "var(--foreground)" }}>
             Check your email
           </h2>
-          <p className="text-green-800 dark:text-green-300">
-            We sent a verification link to <strong>{email}</strong>. Click the link to
+          <p style={{ color: "var(--muted)" }}>
+            We sent a verification link to <strong style={{ color: "var(--foreground)" }}>{email}</strong>. Click the link to
             activate your account, then come back to this page to claim your agent.
           </p>
         </div>
       ) : (
-        <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+        <div className="rounded-lg border p-6" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
           {/* Social sign-in buttons */}
           <button
             onClick={() => handleSocialSignIn("google")}
-            className="mb-3 flex w-full items-center justify-center gap-3 rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
+            className="mb-3 flex w-full items-center justify-center gap-3 rounded-lg border px-4 py-3 text-sm font-medium transition-colors hover:opacity-80"
+            style={{ borderColor: "var(--border)", background: "var(--surface-dim)", color: "var(--foreground)" }}
           >
             <svg className="h-5 w-5" viewBox="0 0 24 24">
               <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4" />
@@ -223,7 +226,8 @@ function ClaimPageContent() {
 
           <button
             onClick={() => handleSocialSignIn("twitter")}
-            className="mb-6 flex w-full items-center justify-center gap-3 rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
+            className="mb-6 flex w-full items-center justify-center gap-3 rounded-lg border px-4 py-3 text-sm font-medium transition-colors hover:opacity-80"
+            style={{ borderColor: "var(--border)", background: "var(--surface-dim)", color: "var(--foreground)" }}
           >
             <svg className="h-5 w-5" viewBox="0 0 24 24">
               <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" fill="currentColor" />
@@ -232,51 +236,52 @@ function ClaimPageContent() {
           </button>
 
           <div className="mb-6 flex items-center gap-4">
-            <div className="h-px flex-1 bg-gray-300 dark:bg-gray-600" />
-            <span className="text-sm text-gray-500 dark:text-gray-400">or</span>
-            <div className="h-px flex-1 bg-gray-300 dark:bg-gray-600" />
+            <div className="h-px flex-1" style={{ background: "var(--border)" }} />
+            <span className="text-sm" style={{ color: "var(--muted)" }}>or</span>
+            <div className="h-px flex-1" style={{ background: "var(--border)" }} />
           </div>
 
           {/* Auth mode tabs */}
-          <div className="mb-4 flex rounded-lg bg-gray-100 p-1 dark:bg-gray-700">
+          <div className="mb-4 flex rounded-lg p-1" style={{ background: "var(--surface-dim)" }}>
             <button
               onClick={() => { setAuthMode("sign-up"); setAuthError(""); setNeedsVerification(false); }}
-              className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                authMode === "sign-up"
-                  ? "bg-white text-gray-900 shadow-sm dark:bg-gray-600 dark:text-white"
-                  : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
-              }`}
+              className="flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors"
+              style={authMode === "sign-up"
+                ? { background: "var(--surface)", color: "var(--foreground)", boxShadow: "0 1px 2px rgba(0,0,0,0.05)" }
+                : { color: "var(--muted)" }
+              }
             >
               Create Account
             </button>
             <button
               onClick={() => { setAuthMode("sign-in"); setAuthError(""); setNeedsVerification(false); }}
-              className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                authMode === "sign-in"
-                  ? "bg-white text-gray-900 shadow-sm dark:bg-gray-600 dark:text-white"
-                  : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
-              }`}
+              className="flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors"
+              style={authMode === "sign-in"
+                ? { background: "var(--surface)", color: "var(--foreground)", boxShadow: "0 1px 2px rgba(0,0,0,0.05)" }
+                : { color: "var(--muted)" }
+              }
             >
               Sign In
             </button>
           </div>
 
           {authError && (
-            <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-400">
+            <div className="mb-4 rounded-lg p-3 text-sm" style={{ background: "var(--accent-light)", color: "var(--accent)" }}>
               {authError}
             </div>
           )}
 
           {needsVerification && (
-            <div className="mb-4 rounded-lg bg-yellow-50 p-3 text-sm text-yellow-800 dark:bg-yellow-950 dark:text-yellow-300">
+            <div className="mb-4 rounded-lg p-3 text-sm" style={{ background: "var(--surface-dim)", color: "var(--foreground)" }}>
               <p className="mb-2">Your email is not verified yet. Check your inbox for a verification link.</p>
               {resendStatus === "sent" ? (
-                <p className="font-medium text-green-700 dark:text-green-400">Verification email sent!</p>
+                <p className="font-medium" style={{ color: "var(--accent)" }}>Verification email sent!</p>
               ) : (
                 <button
                   onClick={handleResendVerification}
                   disabled={resendStatus === "sending"}
-                  className="font-medium text-blue-600 hover:text-blue-500 disabled:opacity-50"
+                  className="font-medium disabled:opacity-50"
+                  style={{ color: "var(--accent)" }}
                 >
                   {resendStatus === "sending" ? "Sending..." : "Resend verification email"}
                 </button>
@@ -287,7 +292,7 @@ function ClaimPageContent() {
           <form onSubmit={authMode === "sign-up" ? handleSignUp : handleSignIn} className="space-y-4">
             {authMode === "sign-up" && (
               <div>
-                <label htmlFor="name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                <label htmlFor="name" className="block text-sm font-medium" style={{ color: "var(--foreground)" }}>
                   Name
                 </label>
                 <input
@@ -296,13 +301,14 @@ function ClaimPageContent() {
                   required
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                  className="mt-1 block w-full rounded-lg border px-3 py-2 outline-none transition-colors"
+                  style={{ borderColor: "var(--border)", background: "var(--surface-dim)", color: "var(--foreground)" }}
                 />
               </div>
             )}
 
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              <label htmlFor="email" className="block text-sm font-medium" style={{ color: "var(--foreground)" }}>
                 Email
               </label>
               <input
@@ -311,12 +317,13 @@ function ClaimPageContent() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                className="mt-1 block w-full rounded-lg border px-3 py-2 outline-none transition-colors"
+                style={{ borderColor: "var(--border)", background: "var(--surface-dim)", color: "var(--foreground)" }}
               />
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              <label htmlFor="password" className="block text-sm font-medium" style={{ color: "var(--foreground)" }}>
                 Password
               </label>
               <input
@@ -326,17 +333,19 @@ function ClaimPageContent() {
                 minLength={authMode === "sign-up" ? 8 : undefined}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                className="mt-1 block w-full rounded-lg border px-3 py-2 outline-none transition-colors"
+                style={{ borderColor: "var(--border)", background: "var(--surface-dim)", color: "var(--foreground)" }}
               />
               {authMode === "sign-up" && (
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Must be at least 8 characters</p>
+                <p className="mt-1 text-xs" style={{ color: "var(--muted)" }}>Must be at least 8 characters</p>
               )}
             </div>
 
             <button
               type="submit"
               disabled={authLoading}
-              className="w-full rounded-lg bg-gray-900 px-4 py-3 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200"
+              className="w-full rounded-lg px-4 py-3 text-sm font-medium text-white transition-colors disabled:opacity-50"
+              style={{ background: "var(--accent)" }}
             >
               {authLoading
                 ? (authMode === "sign-up" ? "Creating account..." : "Signing in...")

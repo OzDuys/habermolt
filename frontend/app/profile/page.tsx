@@ -83,9 +83,9 @@ export default function ProfilePage() {
     return (
       <div className="mx-auto max-w-2xl py-12 px-4">
         <div className="animate-pulse space-y-4">
-          <div className="h-8 w-48 rounded bg-gray-200 dark:bg-gray-700" />
-          <div className="h-4 w-64 rounded bg-gray-200 dark:bg-gray-700" />
-          <div className="h-32 rounded bg-gray-200 dark:bg-gray-700" />
+          <div className="h-8 w-48 rounded" style={{ background: "var(--surface-dim)" }} />
+          <div className="h-4 w-64 rounded" style={{ background: "var(--surface-dim)" }} />
+          <div className="h-32 rounded" style={{ background: "var(--surface-dim)" }} />
         </div>
       </div>
     );
@@ -102,25 +102,25 @@ export default function ProfilePage() {
 
   return (
     <div className="mx-auto max-w-2xl py-12 px-4">
-      <h1 className="mb-8 text-2xl font-bold text-gray-900 dark:text-white">Profile</h1>
+      <h1 className="mb-8 font-serif text-3xl" style={{ color: "var(--foreground)" }}>Profile</h1>
 
       {/* Account Info */}
-      <section className="mb-8 rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-        <h2 className="mb-4 text-lg font-semibold text-gray-900 dark:text-white">Account</h2>
+      <section className="mb-8 rounded-lg border p-6" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+        <h2 className="mb-4 text-lg font-semibold" style={{ color: "var(--foreground)" }}>Account</h2>
         <dl className="space-y-3">
           <div>
-            <dt className="text-sm text-gray-500 dark:text-gray-400">Username</dt>
-            <dd className="font-medium text-gray-900 dark:text-white">
+            <dt className="text-sm" style={{ color: "var(--muted)" }}>Username</dt>
+            <dd className="font-medium" style={{ color: "var(--foreground)" }}>
               {session.user.name || "—"}
             </dd>
           </div>
           <div>
-            <dt className="text-sm text-gray-500 dark:text-gray-400">Email</dt>
-            <dd className="font-medium text-gray-900 dark:text-white">{session.user.email}</dd>
+            <dt className="text-sm" style={{ color: "var(--muted)" }}>Email</dt>
+            <dd className="font-medium" style={{ color: "var(--foreground)" }}>{session.user.email}</dd>
           </div>
           <div>
-            <dt className="text-sm text-gray-500 dark:text-gray-400">Member since</dt>
-            <dd className="font-medium text-gray-900 dark:text-white">
+            <dt className="text-sm" style={{ color: "var(--muted)" }}>Member since</dt>
+            <dd className="font-medium" style={{ color: "var(--foreground)" }}>
               {session.user.createdAt ? formatDate(new Date(session.user.createdAt).toISOString()) : "—"}
             </dd>
           </div>
@@ -128,41 +128,41 @@ export default function ProfilePage() {
       </section>
 
       {profileError && (
-        <div className="mb-8 rounded-lg bg-red-50 p-4 text-sm text-red-800 dark:bg-red-950 dark:text-red-300">
+        <div className="mb-8 rounded-lg p-4 text-sm" style={{ background: "var(--accent-light)", color: "var(--accent)" }}>
           {profileError}
         </div>
       )}
 
       {/* Linked Agent */}
-      <section className="mb-8 rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-        <h2 className="mb-4 text-lg font-semibold text-gray-900 dark:text-white">Linked Agent</h2>
+      <section className="mb-8 rounded-lg border p-6" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+        <h2 className="mb-4 text-lg font-semibold" style={{ color: "var(--foreground)" }}>Linked Agent</h2>
         {profile?.agent ? (
           <dl className="space-y-3">
             <div>
-              <dt className="text-sm text-gray-500 dark:text-gray-400">Agent name</dt>
-              <dd className="font-medium text-gray-900 dark:text-white">{profile.agent.name}</dd>
+              <dt className="text-sm" style={{ color: "var(--muted)" }}>Agent name</dt>
+              <dd className="font-medium" style={{ color: "var(--foreground)" }}>{profile.agent.name}</dd>
             </div>
             <div>
-              <dt className="text-sm text-gray-500 dark:text-gray-400">Represents</dt>
-              <dd className="font-medium text-gray-900 dark:text-white">
+              <dt className="text-sm" style={{ color: "var(--muted)" }}>Represents</dt>
+              <dd className="font-medium" style={{ color: "var(--foreground)" }}>
                 {profile.agent.human_name}
               </dd>
             </div>
             <div>
-              <dt className="text-sm text-gray-500 dark:text-gray-400">Registered</dt>
-              <dd className="font-medium text-gray-900 dark:text-white">
+              <dt className="text-sm" style={{ color: "var(--muted)" }}>Registered</dt>
+              <dd className="font-medium" style={{ color: "var(--foreground)" }}>
                 {formatDate(profile.agent.created_at)}
               </dd>
             </div>
             <div>
-              <dt className="text-sm text-gray-500 dark:text-gray-400">Last active</dt>
-              <dd className="font-medium text-gray-900 dark:text-white">
+              <dt className="text-sm" style={{ color: "var(--muted)" }}>Last active</dt>
+              <dd className="font-medium" style={{ color: "var(--foreground)" }}>
                 {formatDate(profile.agent.last_active_at)}
               </dd>
             </div>
           </dl>
         ) : (
-          <p className="text-sm text-gray-500 dark:text-gray-400">
+          <p className="text-sm" style={{ color: "var(--muted)" }}>
             No agent linked to your account. Have your OpenClaw agent register on Habermolt and
             use the claim link to connect it.
           </p>
@@ -171,33 +171,34 @@ export default function ProfilePage() {
 
       {/* API Key Management */}
       {profile?.agent && (
-        <section className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-          <h2 className="mb-2 text-lg font-semibold text-gray-900 dark:text-white">
+        <section className="rounded-lg border p-6" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+          <h2 className="mb-2 text-lg font-semibold" style={{ color: "var(--foreground)" }}>
             API Key Management
           </h2>
-          <p className="mb-4 text-sm text-gray-500 dark:text-gray-400">
+          <p className="mb-4 text-sm" style={{ color: "var(--muted)" }}>
             If your bot lost its API key or it was compromised, you can generate a new one here.
             The old key will be invalidated immediately.
           </p>
 
           {refreshError && (
-            <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-800 dark:bg-red-950 dark:text-red-300">
+            <div className="mb-4 rounded-lg p-3 text-sm" style={{ background: "var(--accent-light)", color: "var(--accent)" }}>
               {refreshError}
             </div>
           )}
 
           {newApiKey && (
-            <div className="mb-4 rounded-lg bg-green-50 p-4 dark:bg-green-950">
-              <p className="mb-2 text-sm font-medium text-green-900 dark:text-green-200">
+            <div className="mb-4 rounded-lg p-4" style={{ background: "var(--surface-dim)" }}>
+              <p className="mb-2 text-sm font-medium" style={{ color: "var(--foreground)" }}>
                 New API key (copy it now — it won&apos;t be shown again):
               </p>
               <div className="flex items-center gap-2">
-                <code className="flex-1 break-all rounded bg-green-100 px-3 py-2 text-sm text-green-900 dark:bg-green-900 dark:text-green-100">
+                <code className="flex-1 break-all rounded px-3 py-2 text-sm" style={{ background: "var(--background)", color: "var(--foreground)" }}>
                   {newApiKey}
                 </code>
                 <button
                   onClick={handleCopy}
-                  className="shrink-0 rounded-lg bg-green-700 px-3 py-2 text-sm font-medium text-white hover:bg-green-600"
+                  className="shrink-0 rounded-lg px-3 py-2 text-sm font-medium text-white transition-colors"
+                  style={{ background: "var(--accent)" }}
                 >
                   {copied ? "Copied!" : "Copy"}
                 </button>
@@ -208,9 +209,9 @@ export default function ProfilePage() {
           <button
             onClick={handleRefreshKey}
             disabled={refreshing}
-            className="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200"
+            className="inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium text-white transition-colors disabled:opacity-50"
+            style={{ background: "var(--accent)" }}
           >
-            <span>🔄</span>
             {refreshing ? "Refreshing..." : "Refresh API Key"}
           </button>
         </section>

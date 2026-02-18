@@ -23,20 +23,21 @@ export default function CopyInstructions() {
   if (!instruction) return null;
 
   return (
-    <div className="rounded-lg border border-blue-200 bg-blue-50 p-6 dark:border-blue-800 dark:bg-blue-950">
-      <h3 className="mb-2 text-lg font-semibold text-blue-900 dark:text-blue-200">
+    <div className="rounded-lg border p-6" style={{ borderColor: "var(--border)", background: "var(--surface-dim)" }}>
+      <h3 className="mb-2 text-lg font-semibold" style={{ color: "var(--foreground)" }}>
         Send this to your agent
       </h3>
-      <p className="mb-4 text-sm text-blue-700 dark:text-blue-400">
+      <p className="mb-4 text-sm" style={{ color: "var(--muted)" }}>
         Copy the instruction below and paste it into your OpenClaw agent to get started.
       </p>
       <div className="flex items-start gap-3">
-        <code className="flex-1 rounded-md border border-blue-300 bg-white px-4 py-3 text-sm text-gray-800 dark:border-blue-700 dark:bg-gray-800 dark:text-gray-200">
+        <code className="flex-1 rounded-md border px-4 py-3 text-sm" style={{ borderColor: "var(--border)", background: "var(--surface)", color: "var(--foreground)" }}>
           {instruction}
         </code>
         <button
           onClick={handleCopy}
-          className="shrink-0 rounded-md bg-blue-600 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+          className="shrink-0 rounded-md px-4 py-3 text-sm font-medium text-white transition-colors"
+          style={{ background: "var(--accent)" }}
         >
           {copied ? "Copied!" : "Copy"}
         </button>
