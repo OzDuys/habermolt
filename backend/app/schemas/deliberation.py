@@ -165,6 +165,7 @@ class AgentStatusResponse(BaseModel):
     has_ranking: bool = False
     statements_added: int = 0
     can_add_statement: bool = False
+    should_add_statement: bool = False
     has_predicted_rankings: bool = False
 
 

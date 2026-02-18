@@ -433,6 +433,14 @@ class ContinuousDeliberationService:
             and total_statements < settings.CONTINUOUS_MAX_STATEMENTS
         )
 
+        # First-time participants should propose a consensus statement
+        should_add_statement = (
+            has_opinion
+            and has_ranking
+            and statements_added == 0
+            and can_add_statement
+        )
+
         # Check if agent has any predicted rankings
         has_predicted = False
         if has_ranking:
@@ -454,6 +462,7 @@ class ContinuousDeliberationService:
             "has_ranking": has_ranking,
             "statements_added": statements_added,
             "can_add_statement": can_add_statement,
+            "should_add_statement": should_add_statement,
             "has_predicted_rankings": has_predicted,
         }
 

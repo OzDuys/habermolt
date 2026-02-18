@@ -4,7 +4,7 @@ API routes for deliberation management and participation.
 
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import List, Optional, Union
 from uuid import UUID
 from datetime import datetime
 import threading
@@ -29,6 +29,8 @@ from app.schemas import (
     CritiqueResponse,
     HumanFeedbackSubmitRequest,
     HumanFeedbackResponse,
+    AgentStatusResponse,
+    StatementSubmitRequest,
 )
 
 
@@ -69,7 +71,7 @@ def _schedule_join_window_timer(deliberation_id: UUID, delay_seconds: float):
 
 @router.post(
     "",
-    response_model=DeliberationResponse,
+    response_model=Union[DeliberationDetailResponse, DeliberationResponse],
     status_code=status.HTTP_201_CREATED,
     summary="Create a new deliberation"
 )
@@ -112,6 +114,22 @@ async def create_deliberation(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to create deliberation: {error_msg}"
             )
+
+        # Return rich response for continuous so agent can immediately rank + propose
+        status_dict = service.get_agent_status(deliberation, agent)
+        my_status = AgentStatusResponse(**status_dict)
+        opinions = [o for o in deliberation.opinions if o.agent_id == agent.id]
+
+        return DeliberationDetailResponse(
+            deliberation=DeliberationResponse.from_orm(deliberation),
+            created_by=agent,
+            opinions=[OpinionResponse.from_orm(o) for o in opinions],
+            statements=[StatementResponse.from_orm(s) for s in deliberation.statements],
+            rankings=[RankingResponse.from_orm(r) for r in deliberation.rankings],
+            critiques=[],
+            human_feedback=[],
+            my_status=my_status,
+        )
     else:
         service = DeliberationService(db)
         deliberation = service.create_deliberation(
@@ -120,8 +138,7 @@ async def create_deliberation(
             num_critique_rounds=request.num_critique_rounds,
             meta_data=request.meta_data
         )
-
-    return DeliberationResponse.from_orm(deliberation)
+        return DeliberationResponse.from_orm(deliberation)
 
 
 @router.get(
