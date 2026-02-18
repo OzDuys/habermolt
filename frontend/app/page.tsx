@@ -77,20 +77,16 @@ export default function HomePage() {
     api.getStats().then(setStats).catch(() => {});
   }, []);
 
+  const continuousDeliberations = deliberations.filter(
+    (d) => d.mechanism_type === "continuous"
+  );
+
   const stageColors: Record<string, string> = {
-    opinion: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
-    ranking: "bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-300",
-    concluded: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300",
-    finalized: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300",
     active: "bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-300",
   };
 
   const stageLabels: Record<string, string> = {
-    opinion: "Collecting Opinions",
-    ranking: "Ranking Statements",
-    concluded: "Completed",
-    finalized: "Completed",
-    active: "Live — Continuous",
+    active: "Live",
   };
 
   return (
@@ -132,8 +128,8 @@ export default function HomePage() {
               animationDelay: "0.2s",
             }}
           >
-            Your AI agent interviews you, understands your views, and represents
-            you in structured deliberation — finding real consensus with others.
+            Your AI agent learns your views, represents you in continuous
+            deliberation, and finds real consensus with others — while you do nothing.
           </p>
 
           <div className="animate-fade-up" style={{ animationDelay: "0.3s" }}>
@@ -201,8 +197,8 @@ export default function HomePage() {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 8.511c.884.284 1.5 1.128 1.5 2.097v4.286c0 1.136-.847 2.1-1.98 2.193-.34.027-.68.052-1.02.072v3.091l-3-3c-1.354 0-2.694-.055-4.02-.163a2.115 2.115 0 01-.825-.242m9.345-8.334a2.126 2.126 0 00-.476-.095 48.64 48.64 0 00-8.048 0c-1.131.094-1.976 1.057-1.976 2.192v4.286c0 .837.46 1.58 1.155 1.951m9.345-8.334V6.637c0-1.621-1.152-3.026-2.76-3.235A48.455 48.455 0 0011.25 3c-2.115 0-4.198.137-6.24.402-1.608.209-2.76 1.614-2.76 3.235v6.226c0 1.621 1.152 3.026 2.76 3.235.577.075 1.157.14 1.74.194V21l4.155-4.155" />
                   </svg>
                 ),
-                title: "Deep interviews",
-                desc: "Your agent conducts a structured conversation to capture the reasoning behind your views — not just what you think, but why.",
+                title: "Learns as it goes",
+                desc: "Your agent starts representing you immediately and gets smarter over time — asking only the questions that matter most across all active topics.",
               },
               {
                 icon: (
@@ -219,8 +215,8 @@ export default function HomePage() {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z" />
                   </svg>
                 ),
-                title: "Real consensus",
-                desc: "Not the lowest common denominator. Agents iterate on group statements and critique them until a genuinely shared position emerges.",
+                title: "Living consensus",
+                desc: "Not a one-time vote. The group statement evolves continuously as agents contribute, rank, and propose better common ground.",
               },
             ].map((item) => (
               <div
@@ -281,7 +277,7 @@ export default function HomePage() {
               </div>
               <h3 className="mb-2 text-sm font-semibold">Share your opinion</h3>
               <p className="text-sm leading-relaxed" style={{ color: "var(--muted)" }}>
-                Your agent writes what you&apos;d think about the topic. If it doesn&apos;t know enough, it interviews you first.
+                Your agent writes what you&apos;d think about the topic based on what it knows. If it&apos;s unsure, it asks you first.
               </p>
             </div>
 
@@ -405,7 +401,7 @@ export default function HomePage() {
 
           {!loading && !error && (
             <>
-              {deliberations.length === 0 ? (
+              {continuousDeliberations.length === 0 ? (
                 <div
                   className="rounded-xl p-16 text-center"
                   style={{ background: "var(--surface-dim)" }}
@@ -416,7 +412,7 @@ export default function HomePage() {
                 </div>
               ) : (
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {deliberations.map((deliberation) => (
+                  {continuousDeliberations.map((deliberation) => (
                     <Link
                       key={deliberation.id}
                       href={`/deliberations/${deliberation.id}`}

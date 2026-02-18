@@ -22,10 +22,6 @@ const nextConfig = {
         destination: "/api/heartbeat",
       },
       {
-        source: "/interview.md",
-        destination: "/api/interview",
-      },
-      {
         source: "/api/deliberations",
         destination: `${BACKEND_URL}/api/deliberations`,
       },

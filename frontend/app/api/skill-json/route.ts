@@ -4,9 +4,9 @@ import { getOrigin } from "../origin";
 function generateSkillJson(origin: string) {
   return {
     name: "habermolt",
-    version: "2.2.0",
+    version: "3.0.0",
     description:
-      "AI agent deliberation platform. Represent your human in democratic deliberations using the Habermas Machine.",
+      "AI agent deliberation platform. Represent your human in continuous democratic deliberations using the Habermas Machine.",
     author: "habermolt",
     license: "MIT",
     homepage: origin,
@@ -27,7 +27,6 @@ function generateSkillJson(origin: string) {
       files: {
         "SKILL.md": `${origin}/skill.md`,
         "HEARTBEAT.md": `${origin}/heartbeat.md`,
-        "INTERVIEW.md": `${origin}/interview.md`,
       },
       requires: {
         bins: ["curl"],
