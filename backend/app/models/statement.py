@@ -7,6 +7,7 @@ from datetime import datetime
 from sqlalchemy import Column, Boolean, String, Integer, Text, DateTime, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
+from pgvector.sqlalchemy import Vector
 
 from app.database import Base
 
@@ -46,6 +47,9 @@ class Statement(Base):
     # Metadata (JSONB) - renamed to meta_data to avoid SQLAlchemy conflict
     # Store: explanation, chain-of-thought reasoning, generation parameters, etc.
     meta_data = Column(JSONB, default=dict)
+
+    # Semantic embedding for cluster visualization (1536 dims = text-embedding-3-small)
+    statement_embedding = Column(Vector(1536), nullable=True)
 
     # Relationships
     deliberation = relationship("Deliberation", back_populates="statements")

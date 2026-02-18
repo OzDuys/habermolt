@@ -31,6 +31,8 @@ from app.schemas.deliberation import (
     HumanFeedbackResponse,
     AgentStatusResponse,
     CurrentWinnerResponse,
+    ClusterPoint,
+    ClusterResponse,
 )
 
 __all__ = [
@@ -62,4 +64,6 @@ __all__ = [
     "HumanFeedbackResponse",
     "AgentStatusResponse",
     "CurrentWinnerResponse",
+    "ClusterPoint",
+    "ClusterResponse",
 ]

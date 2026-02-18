@@ -10,11 +10,16 @@ from datetime import datetime
 import threading
 import asyncio
 
+import numpy as np
+from sqlalchemy import text
+
 from app.database import get_db, SessionLocal
-from app.models import Agent, Deliberation, DeliberationStage, MechanismType, Opinion, Ranking, Critique, HumanFeedback
+from app.models import Agent, Deliberation, DeliberationStage, MechanismType, Opinion, Ranking, Critique, HumanFeedback, Statement as StatementModel
 from app.middleware.auth import APIKeyAuth, OptionalAPIKeyAuth
 from app.services.deliberation_service import DeliberationService
 from app.services.continuous_deliberation_service import ContinuousDeliberationService
+from app.services.embedding_service import get_question_embedding, get_statement_embeddings
+from app.config import settings
 from app.schemas import (
     DeliberationCreateRequest,
     DeliberationResponse,
@@ -31,6 +36,8 @@ from app.schemas import (
     HumanFeedbackResponse,
     AgentStatusResponse,
     StatementSubmitRequest,
+    ClusterPoint,
+    ClusterResponse,
 )
 
 
@@ -94,6 +101,40 @@ async def create_deliberation(
     Returns:
         DeliberationResponse with created deliberation details
     """
+    # --- Similarity check: reject if a near-duplicate deliberation already exists ---
+    embedding = get_question_embedding(request.question)
+    if embedding is not None:
+        similar_rows = db.execute(text("""
+            SELECT id, question, stage,
+                   1 - (question_embedding <=> CAST(:emb AS vector)) AS similarity
+            FROM deliberations
+            WHERE question_embedding IS NOT NULL
+              AND 1 - (question_embedding <=> CAST(:emb AS vector)) > :threshold
+            ORDER BY similarity DESC
+            LIMIT 3
+        """), {
+            "emb": str(embedding),
+            "threshold": settings.SIMILARITY_THRESHOLD,
+        }).fetchall()
+
+        if similar_rows:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "message": "Similar deliberations already exist. Consider joining one instead.",
+                    "similar_deliberations": [
+                        {
+                            "id": str(row.id),
+                            "question": row.question,
+                            "stage": row.stage,
+                            "similarity": round(float(row.similarity), 4),
+                        }
+                        for row in similar_rows
+                    ],
+                }
+            )
+    # --------------------------------------------------------------------------
+
     if request.mechanism_type == MechanismType.CONTINUOUS:
         service = ContinuousDeliberationService(db)
         try:
@@ -114,6 +155,11 @@ async def create_deliberation(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to create deliberation: {error_msg}"
             )
+
+        # Store embedding on the newly created deliberation
+        if embedding is not None:
+            deliberation.question_embedding = embedding
+            db.commit()
 
         # Return rich response for continuous so agent can immediately rank + propose
         status_dict = service.get_agent_status(deliberation, agent)
@@ -138,6 +184,12 @@ async def create_deliberation(
             num_critique_rounds=request.num_critique_rounds,
             meta_data=request.meta_data
         )
+
+        # Store embedding on the newly created deliberation
+        if embedding is not None:
+            deliberation.question_embedding = embedding
+            db.commit()
+
         return DeliberationResponse.from_orm(deliberation)
 
 
@@ -829,6 +881,79 @@ async def reprocess_deliberation(
         )
 
     return DeliberationResponse.from_orm(deliberation)
+
+
+def _compute_pca_2d(matrix: np.ndarray) -> np.ndarray:
+    """Reduce an (N, D) embedding matrix to (N, 2) via SVD-based PCA."""
+    if matrix.shape[0] < 2:
+        return np.zeros((matrix.shape[0], 2))
+    X = matrix - matrix.mean(axis=0)
+    _, _, Vt = np.linalg.svd(X, full_matrices=False)
+    return X @ Vt[:2].T
+
+
+@router.get(
+    "/{deliberation_id}/cluster",
+    response_model=ClusterResponse,
+    summary="Get PCA-clustered statement positions for visualization"
+)
+async def get_cluster(
+    deliberation_id: UUID,
+    db: Session = Depends(get_db)
+):
+    """
+    Return 2D PCA coordinates for all statements in this deliberation.
+
+    Embeddings are generated lazily on first call and persisted to the DB.
+    Subsequent calls skip re-embedding for statements that already have
+    embeddings stored, so only new statements incur API calls.
+
+    No authentication required — this is a public read-only endpoint.
+    """
+    deliberation = db.query(Deliberation).filter(Deliberation.id == deliberation_id).first()
+    if not deliberation:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Deliberation not found")
+
+    statements = db.query(StatementModel).filter(
+        StatementModel.deliberation_id == deliberation_id
+    ).all()
+
+    if len(statements) < 2:
+        return ClusterResponse(points=[], total=0, deliberation_id=str(deliberation_id))
+
+    # Lazy batch embedding: find statements without embeddings, embed in one call
+    missing = [s for s in statements if s.statement_embedding is None]
+    if missing:
+        embeddings = get_statement_embeddings([s.statement_text for s in missing])
+        if embeddings is not None:
+            for stmt, emb in zip(missing, embeddings):
+                stmt.statement_embedding = emb
+            db.commit()
+            for stmt in missing:
+                db.refresh(stmt)
+
+    # Filter to statements that now have embeddings
+    embedded = [s for s in statements if s.statement_embedding is not None]
+    if len(embedded) < 2:
+        return ClusterResponse(points=[], total=0, deliberation_id=str(deliberation_id))
+
+    # PCA: reduce 1536-dim embeddings to 2D
+    matrix = np.array([list(s.statement_embedding) for s in embedded], dtype=np.float64)
+    coords = _compute_pca_2d(matrix)
+
+    points = [
+        ClusterPoint(
+            id=str(s.id),
+            x=float(coords[i, 0]),
+            y=float(coords[i, 1]),
+            social_ranking=s.social_ranking,
+            statement_text=s.statement_text,
+            round_number=s.round_number,
+        )
+        for i, s in enumerate(embedded)
+    ]
+
+    return ClusterResponse(points=points, total=len(points), deliberation_id=str(deliberation_id))
 
 
 @router.get(

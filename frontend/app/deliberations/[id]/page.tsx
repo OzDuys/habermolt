@@ -4,11 +4,12 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { api } from "@/lib/api";
-import type { DeliberationDetail, Opinion, Ranking, HumanFeedback } from "@/lib/types";
+import type { ClusterPoint, DeliberationDetail, Opinion, Ranking, HumanFeedback } from "@/lib/types";
 import ReactMarkdown from "react-markdown";
 import StageIndicator from "@/components/StageIndicator";
 import ActivityFeed from "@/components/ActivityFeed";
 import StatementList from "@/components/StatementList";
+import StatementCluster from "@/components/StatementCluster";
 import LoadingSpinner from "@/components/LoadingSpinner";
 
 export default function DeliberationPage() {
@@ -22,6 +23,7 @@ export default function DeliberationPage() {
   const [expandedAgent, setExpandedAgent] = useState<string | null>(null);
   const [joinWindowRemaining, setJoinWindowRemaining] = useState<number | null>(null);
   const [showTimeline, setShowTimeline] = useState(false);
+  const [clusterPoints, setClusterPoints] = useState<ClusterPoint[]>([]);
 
   // Tick the join window countdown every second
   useEffect(() => {
@@ -58,6 +60,15 @@ export default function DeliberationPage() {
       if (deliberationData.deliberation.stage === "finalized") {
         const resultData = await api.getDeliberationResult(id);
         setResult(resultData);
+      }
+
+      if (deliberationData.statements.length >= 2) {
+        try {
+          const clusterData = await api.getCluster(id);
+          setClusterPoints(clusterData.points);
+        } catch {
+          // Non-fatal: cluster is optional, embeddings may not be available
+        }
       }
 
       setLoading(false);
@@ -369,6 +380,24 @@ export default function DeliberationPage() {
                 Waiting for {deliberation.num_citizens - round0Rankings.length} more ranking(s)...
               </p>
             )}
+          </section>
+        )}
+
+        {/* ===== STATEMENT CLUSTER ===== */}
+        {clusterPoints.length >= 2 && (
+          <section>
+            <div className="mb-4">
+              <h2 className="font-serif text-2xl tracking-tight">Statement landscape</h2>
+              <p className="mt-1 text-sm" style={{ color: "var(--muted)" }}>
+                Statements clustered by semantic meaning. Proximity indicates similar ideas.
+              </p>
+            </div>
+            <div
+              className="rounded-xl border p-6"
+              style={{ borderColor: "var(--border)", background: "var(--surface)" }}
+            >
+              <StatementCluster points={clusterPoints} />
+            </div>
           </section>
         )}
 

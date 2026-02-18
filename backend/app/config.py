@@ -30,8 +30,8 @@ class Settings(BaseSettings):
     HABERMAS_NUM_CANDIDATES: int = 6
     HABERMAS_NUM_CRITIQUE_ROUNDS: int = 1
     HABERMAS_CRITIQUE_ENABLED: bool = False  # Skip critique stage; go ranking → concluded
-    HABERMAS_LLM_MODEL: str = "aisingapore/Qwen-SEA-LION-v4-32B-IT"
-    HABERMAS_LLM_MODELS: str = "aisingapore/Qwen-SEA-LION-v4-32B-IT,allenai/Molmo2-8B,dicta-il/DictaLM-3.0-24B-Thinking,allenai/Olmo-3-7B-Instruct,aisingapore/Gemma-SEA-LION-v4-27B-IT,swiss-ai/apertus-70b-instruct"  # Comma-separated list of models; cycles if fewer than NUM_CANDIDATES
+    HABERMAS_LLM_MODEL: str = ""
+    HABERMAS_LLM_MODELS: str = "x-ai/grok-4.1-fast, arcee-ai/trinity-large-preview:free, minimax/minimax-m2.5, moonshotai/kimi-k2.5, z-ai/glm-5, google/gemini-3-flash-preview, deepseek/deepseek-v3.2"  # Comma-separated list of models; cycles if fewer than NUM_CANDIDATES
     HABERMAS_LLM_TEMPERATURE: float = 0.8
     HABERMAS_VERBOSE: bool = False
     HABERMAS_NUM_RETRIES: int = 5
@@ -48,6 +48,13 @@ class Settings(BaseSettings):
     CONTINUOUS_NUM_SEED_OPINIONS: int = 4  # Synthetic opinions for seed generation
     CONTINUOUS_MAX_STATEMENTS: int = 32  # Hard cap on statement pool
     CONTINUOUS_MAX_STATEMENTS_PER_AGENT: int = 3  # Per-agent contribution limit
+
+    # Similarity checking for duplicate deliberation detection
+    # Model name for embeddings — OpenRouter format by default.
+    # If using direct OpenAI, change to "text-embedding-3-small".
+    EMBEDDING_MODEL: str = "openai/text-embedding-3-small"
+    # Cosine similarity threshold above which deliberations are considered too similar (0–1).
+    SIMILARITY_THRESHOLD: float = 0.85
 
     # API Configuration
     API_V1_PREFIX: str = "/api"

@@ -8,6 +8,7 @@ from sqlalchemy import Column, String, Integer, DateTime, Text, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from typing import Optional
+from pgvector.sqlalchemy import Vector
 
 from app.database import Base
 
@@ -87,6 +88,9 @@ class Deliberation(Base):
 
     # Metadata (JSONB for flexibility) - renamed to meta_data to avoid SQLAlchemy conflict
     meta_data = Column(JSONB, default=dict)  # Store additional context, tags, etc.
+
+    # Semantic embedding for duplicate detection (1536 dims = text-embedding-3-small)
+    question_embedding = Column(Vector(1536), nullable=True)
 
     # Relationships
     creator = relationship("Agent", back_populates="created_deliberations", foreign_keys=[created_by_agent_id])

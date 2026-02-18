@@ -189,3 +189,20 @@ class DeliberationDetailResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class ClusterPoint(BaseModel):
+    """A single statement projected into 2D PCA space."""
+    id: str
+    x: float
+    y: float
+    social_ranking: Optional[int]
+    statement_text: str
+    round_number: int
+
+
+class ClusterResponse(BaseModel):
+    """Response for GET /deliberations/{id}/cluster."""
+    points: List[ClusterPoint]
+    total: int
+    deliberation_id: str

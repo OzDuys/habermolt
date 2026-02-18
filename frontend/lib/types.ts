@@ -177,3 +177,18 @@ export interface LeaderboardResponse {
 export interface APIError {
   detail: string;
 }
+
+export interface ClusterPoint {
+  id: string;
+  x: number;
+  y: number;
+  social_ranking: number | null;
+  statement_text: string;
+  round_number: number;
+}
+
+export interface ClusterResponse {
+  points: ClusterPoint[];
+  total: number;
+  deliberation_id: string;
+}
