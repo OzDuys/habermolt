@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import type { Statement } from "@/lib/types";
 import ScrollableCarousel from "./ScrollableCarousel";
@@ -41,28 +41,36 @@ function StatementCard({
   agentNames?: Record<string, string>;
 }) {
   const [expanded, setCardExpanded] = useState(false);
+  const [hasOverflow, setHasOverflow] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
   const isWinner = highlightWinner && statement.social_ranking === 1;
   const contributorName = statement.contributed_by_agent_id
     ? agentNames[statement.contributed_by_agent_id] || "An agent"
     : null;
 
+  useEffect(() => {
+    if (!capped || expanded) return;
+    const el = contentRef.current;
+    if (!el) return;
+    // Add tolerance for prose bottom margin on last paragraph (~20px)
+    setHasOverflow(el.scrollHeight > el.clientHeight + 20);
+  }, [capped, expanded, statement.statement_text]);
+
   return (
     <div
-      className={`rounded-lg border p-6 shadow-sm ${
-        isWinner
-          ? "border-yellow-400 bg-yellow-50 dark:border-yellow-600 dark:bg-yellow-950"
-          : "border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800"
+      className={`rounded-lg border p-4 shadow-sm ${
+        isWinner ? "border-yellow-400 bg-yellow-50 dark:border-yellow-600 dark:bg-yellow-950" : ""
       } ${className}`}
+      style={!isWinner ? { borderColor: "var(--border)", background: "var(--surface)" } : undefined}
     >
       <div className="mb-3 flex items-start justify-between">
         <div className="flex items-center gap-3">
           {showRanking && statement.social_ranking !== null && (
             <div
               className={`flex h-10 w-10 items-center justify-center rounded-full font-bold ${
-                isWinner
-                  ? "bg-yellow-400 text-yellow-900"
-                  : "bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300"
+                isWinner ? "bg-yellow-400 text-yellow-900" : ""
               }`}
+              style={!isWinner ? { background: "var(--surface-dim)", color: "var(--muted)" } : undefined}
             >
               #{statement.social_ranking}
             </div>
@@ -82,21 +90,20 @@ function StatementCard({
       </div>
       <div className="relative">
         <div
-          className={`prose prose-sm max-w-none text-gray-800 dark:prose-invert dark:text-gray-200 ${
-            capped && !expanded ? "max-h-[400px] overflow-hidden" : ""
+          ref={contentRef}
+          className={`prose prose-sm max-w-none dark:prose-invert ${
+            capped && !expanded ? "max-h-[140px] overflow-hidden" : ""
           }`}
         >
           <ReactMarkdown>{statement.statement_text}</ReactMarkdown>
         </div>
-        {capped && !expanded && (
-          <div className="absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-t from-white dark:from-gray-800" />
-        )}
       </div>
-      {capped && (
+      {hasOverflow && (
         <button
           type="button"
           onClick={() => setCardExpanded(!expanded)}
-          className="mt-1 text-xs font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+          className="mt-2 text-xs font-medium hover:opacity-70 transition-opacity"
+          style={{ color: "var(--accent)" }}
         >
           {expanded ? "Show less" : "Read more"}
         </button>

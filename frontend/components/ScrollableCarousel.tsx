@@ -67,21 +67,15 @@ export default function ScrollableCarousel({
       {/* Start fade + arrow */}
       {canScrollStart && (
         <>
-          <div
-            className={`pointer-events-none absolute z-10 ${
-              isHorizontal
-                ? "left-0 top-0 bottom-0 w-12 bg-gradient-to-r"
-                : "left-0 right-0 top-0 h-12 bg-gradient-to-b"
-            } from-white dark:from-gray-800 to-transparent`}
-          />
           <button
             type="button"
             onClick={() => scroll("start")}
-            className={`absolute z-20 hidden items-center justify-center rounded-full bg-white shadow-md border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-600 dark:hover:text-white sm:flex ${
+            className={`absolute z-20 hidden items-center justify-center rounded-full shadow-md sm:flex ${
               isHorizontal
                 ? "left-1 top-1/2 -translate-y-1/2 h-8 w-8"
                 : "top-1 left-1/2 -translate-x-1/2 h-8 w-8"
             }`}
+            style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--muted)" }}
             aria-label={`Scroll ${isHorizontal ? "left" : "up"}`}
           >
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -111,21 +105,15 @@ export default function ScrollableCarousel({
       {/* End fade + arrow */}
       {canScrollEnd && (
         <>
-          <div
-            className={`pointer-events-none absolute z-10 ${
-              isHorizontal
-                ? "right-0 top-0 bottom-0 w-12 bg-gradient-to-l"
-                : "left-0 right-0 bottom-0 h-12 bg-gradient-to-t"
-            } from-white dark:from-gray-800 to-transparent`}
-          />
           <button
             type="button"
             onClick={() => scroll("end")}
-            className={`absolute z-20 hidden items-center justify-center rounded-full bg-white shadow-md border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-600 dark:hover:text-white sm:flex ${
+            className={`absolute z-20 hidden items-center justify-center rounded-full shadow-md sm:flex ${
               isHorizontal
                 ? "right-1 top-1/2 -translate-y-1/2 h-8 w-8"
                 : "bottom-1 left-1/2 -translate-x-1/2 h-8 w-8"
             }`}
+            style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--muted)" }}
             aria-label={`Scroll ${isHorizontal ? "right" : "down"}`}
           >
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

@@ -390,7 +390,7 @@ export default function DeliberationPage() {
               </p>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-3 sm:grid-cols-2 items-start">
               {agents.map(({ agent, opinion, ranking, feedback }) => {
                 const isExpanded = expandedAgent === agent.id;
                 const contributed = agentStatements.get(agent.id) || [];
@@ -504,7 +504,7 @@ export default function DeliberationPage() {
                                 <div
                                   key={s.id}
                                   className="flex items-start gap-2 rounded-lg border p-2"
-                                  style={{ borderColor: "#86efac", background: "#f0fdf4" }}
+                                  style={{ borderColor: "var(--border)", background: "var(--surface-dim)" }}
                                 >
                                   {s.social_ranking !== null && (
                                     <span
