@@ -67,7 +67,7 @@ function StatementCard({
         <div className="flex items-center gap-3">
           {showRanking && statement.social_ranking !== null && (
             <div
-              className={`flex h-10 w-10 items-center justify-center rounded-full font-bold ${
+              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full font-bold ${
                 isWinner ? "bg-yellow-400 text-yellow-900" : ""
               }`}
               style={!isWinner ? { background: "var(--surface-dim)", color: "var(--muted)" } : undefined}
@@ -75,11 +75,16 @@ function StatementCard({
               #{statement.social_ranking}
             </div>
           )}
-          {isWinner && (
-            <span className="rounded-full bg-yellow-400 px-3 py-1 text-xs font-semibold text-yellow-900">
-              Winner
-            </span>
-          )}
+          <div>
+            {statement.title && (
+              <p className="font-semibold text-sm leading-snug">{statement.title}</p>
+            )}
+            {isWinner && (
+              <span className="rounded-full bg-yellow-400 px-3 py-1 text-xs font-semibold text-yellow-900">
+                Winner
+              </span>
+            )}
+          </div>
         </div>
         <div className="text-right text-[11px] leading-tight" style={{ color: "var(--muted)" }}>
           {contributorName && <div>by {contributorName}</div>}

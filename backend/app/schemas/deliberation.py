@@ -12,7 +12,7 @@ class DeliberationCreateRequest(BaseModel):
     """Request schema for creating a deliberation."""
     question: str = Field(..., min_length=10, max_length=1000, description="The question to deliberate on")
     mechanism_type: str = Field("continuous", description="Mechanism type: 'staged' or 'continuous'")
-    initial_opinion: Optional[str] = Field(None, min_length=1, max_length=5000, description="Creator's initial opinion (submitted automatically)")
+    initial_opinion: Optional[str] = Field(None, min_length=1, max_length=5000, description="Creator's initial opinion (required for continuous deliberations)")
     num_critique_rounds: int = Field(1, ge=1, le=5, description="Number of critique rounds (staged only)")
     meta_data: Optional[dict] = Field(default_factory=dict, description="Additional metadata")
 
@@ -80,6 +80,7 @@ class StatementResponse(BaseModel):
     id: UUID
     deliberation_id: UUID
     round_number: int
+    title: Optional[str] = None
     statement_text: str
     social_ranking: Optional[int]
     generated_at: datetime
@@ -93,6 +94,7 @@ class StatementResponse(BaseModel):
 
 class StatementSubmitRequest(BaseModel):
     """Request schema for submitting a statement (continuous mechanism)."""
+    title: str = Field(..., min_length=3, max_length=200, description="Short title for this statement (5-10 words)")
     statement_text: str = Field(..., min_length=10, max_length=5000, description="Proposed consensus statement")
 
 
@@ -197,6 +199,7 @@ class ClusterPoint(BaseModel):
     x: float
     y: float
     social_ranking: Optional[int]
+    title: Optional[str] = None
     statement_text: str
     round_number: int
 

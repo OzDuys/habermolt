@@ -35,6 +35,9 @@ Always respond in exactly this format:
 REASONING:
 <your analysis of the opinions, noting agreement and disagreement>
 
+TITLE:
+<a short title of 5-10 words that captures the essence of the statement>
+
 STATEMENT:
 <the consensus statement, 1-3 sentences>\
 """
@@ -89,23 +92,36 @@ def _build_opinion_critique_prompt(
 # ---------------------------------------------------------------------------
 
 _STATEMENT_RE = re.compile(
+    r"REASONING:\s*(.+?)\s*TITLE:\s*(.+?)\s*STATEMENT:\s*(.+)",
+    re.DOTALL,
+)
+
+# Fallback for responses without TITLE field (backward compat)
+_STATEMENT_RE_NO_TITLE = re.compile(
     r"REASONING:\s*(.+?)\s*STATEMENT:\s*(.+)",
     re.DOTALL,
 )
 
 
-def _parse_response(response: str) -> Tuple[str, str]:
-    """Extract statement and reasoning from the model response.
+def _parse_response(response: str) -> Tuple[str, str, str]:
+    """Extract statement, title, and reasoning from the model response.
 
     Returns:
-        (statement, reasoning). Falls back to ("", "PARSE_FAILED") on failure.
+        (statement, title, reasoning). Falls back to ("", "", "PARSE_FAILED") on failure.
     """
     match = _STATEMENT_RE.search(response)
     if match:
         reasoning = match.group(1).strip()
+        title = match.group(2).strip()
+        statement = match.group(3).strip()
+        return statement, title, reasoning
+    # Fallback: no TITLE section
+    match = _STATEMENT_RE_NO_TITLE.search(response)
+    if match:
+        reasoning = match.group(1).strip()
         statement = match.group(2).strip()
-        return statement, reasoning
-    return "", "PARSE_FAILED"
+        return statement, "", reasoning
+    return "", "", "PARSE_FAILED"
 
 
 # ---------------------------------------------------------------------------
@@ -134,8 +150,8 @@ class StatementService:
         opinions: list[str],
         previous_winner: Optional[str] = None,
         critiques: Optional[list[str]] = None,
-    ) -> Tuple[str, str]:
-        """Generate one candidate statement with retries. Returns (statement, reasoning)."""
+    ) -> Tuple[str, str, str]:
+        """Generate one candidate statement with retries. Returns (statement, title, reasoning)."""
         # Shuffle opinions (and critiques) to avoid ordering bias
         indices = list(range(len(opinions)))
         random.shuffle(indices)
@@ -151,21 +167,21 @@ class StatementService:
 
         seed = random.randint(0, 2**31 - 1)
 
-        statement, reasoning = "", ""
+        statement, title, reasoning = "", "", ""
         for attempt in range(self.num_retries):
             response = client.sample_text(
                 user_prompt, system_prompt=SYSTEM_PROMPT, seed=seed
             )
-            statement, reasoning = _parse_response(response)
+            statement, title, reasoning = _parse_response(response)
             if len(statement) > 5 and reasoning != "PARSE_FAILED":
-                return statement, reasoning
+                return statement, title, reasoning
             seed += 1
             logger.warning(
                 f"Statement generation attempt {attempt + 1}/{self.num_retries} "
                 f"failed (model={client._model_name}): {reasoning[:100]}"
             )
 
-        return statement, reasoning
+        return statement, title, reasoning
 
     async def generate_statements(
         self,
@@ -192,10 +208,10 @@ class StatementService:
                     f"Generating statement {i + 1}/{self.num_candidates} "
                     f"(model={model_name}) for deliberation {deliberation.id}"
                 )
-                stmt, reasoning = self._generate_single_statement(
+                stmt, title, reasoning = self._generate_single_statement(
                     client, deliberation.question, opinions, previous_winner, critiques
                 )
-                results.append((stmt, reasoning, model_name))
+                results.append((stmt, title, reasoning, model_name))
             return results
 
         # Run blocking LLM calls in thread pool
@@ -203,11 +219,12 @@ class StatementService:
 
         # Store in database — social_ranking is NULL at this point
         statements = []
-        for stmt_text, reasoning, model_name in results:
+        for stmt_text, title, reasoning, model_name in results:
             if stmt_text:  # Skip empty statements from failed generations
                 statement = Statement(
                     deliberation_id=deliberation.id,
                     round_number=round_number,
+                    title=title or None,
                     statement_text=stmt_text,
                     social_ranking=None,
                     meta_data={"reasoning": reasoning, "model": model_name},

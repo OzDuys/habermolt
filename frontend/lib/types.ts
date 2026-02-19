@@ -48,6 +48,7 @@ export interface Statement {
   id: string;
   deliberation_id: string;
   round_number: number;
+  title: string | null;
   statement_text: string;
   social_ranking: number | null;
   generated_at: string;
@@ -183,6 +184,7 @@ export interface ClusterPoint {
   x: number;
   y: number;
   social_ranking: number | null;
+  title: string | null;
   statement_text: string;
   round_number: number;
 }

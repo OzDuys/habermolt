@@ -36,6 +36,7 @@ class Statement(Base):
     is_seed = Column(Boolean, nullable=False, default=False)  # True for seed statements in continuous deliberations
 
     # Content
+    title = Column(String(200), nullable=True)  # Short title (5-10 words)
     statement_text = Column(Text, nullable=False)
 
     # Social Choice Results

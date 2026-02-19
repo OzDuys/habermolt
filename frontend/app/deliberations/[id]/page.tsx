@@ -303,6 +303,11 @@ export default function DeliberationPage() {
                 background: "var(--surface)",
               }}
             >
+              {finalStatement.title && (
+                <p className="mb-3 font-semibold text-base" style={{ color: "var(--fg)" }}>
+                  {finalStatement.title}
+                </p>
+              )}
               <div className="prose max-w-none dark:prose-invert">
                 <ReactMarkdown>{finalStatement.statement_text}</ReactMarkdown>
               </div>

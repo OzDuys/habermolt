@@ -136,13 +136,18 @@ async def create_deliberation(
     # --------------------------------------------------------------------------
 
     if request.mechanism_type == MechanismType.CONTINUOUS:
+        if not request.initial_opinion:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="initial_opinion is required when creating a continuous deliberation",
+            )
         service = ContinuousDeliberationService(db)
         try:
             deliberation = await service.create_deliberation(
                 question=request.question,
                 creator_agent=agent,
-                meta_data=request.meta_data,
                 initial_opinion=request.initial_opinion,
+                meta_data=request.meta_data,
             )
         except Exception as e:
             error_msg = str(e)

@@ -43,10 +43,17 @@ class ContinuousDeliberationService:
         self,
         question: str,
         creator_agent: Agent,
+        initial_opinion: str,
         meta_data: dict = None,
-        initial_opinion: str = None,
     ) -> Deliberation:
-        """Create a continuous deliberation with seed statements."""
+        """Create a continuous deliberation with seed statements.
+
+        Requires an initial_opinion from the creator — this seeds the diverse
+        perspectives used to generate the initial statement pool.
+        """
+        if not initial_opinion or not initial_opinion.strip():
+            raise ValueError("initial_opinion is required to create a continuous deliberation")
+
         deliberation = Deliberation(
             question=question,
             mechanism_type=MechanismType.CONTINUOUS,
@@ -61,9 +68,8 @@ class ContinuousDeliberationService:
         self.db.commit()
         self.db.refresh(deliberation)
 
-        # Submit creator's opinion if provided
-        if initial_opinion:
-            self.submit_opinion(deliberation, creator_agent, initial_opinion)
+        # Submit creator's opinion before generating seed statements
+        self.submit_opinion(deliberation, creator_agent, initial_opinion)
 
         # Generate seed opinions (synthetic diverse perspectives)
         seed_opinions = await self._generate_seed_opinions(question, creator_opinion=initial_opinion)
@@ -223,6 +229,7 @@ class ContinuousDeliberationService:
         deliberation: Deliberation,
         agent: Agent,
         statement_text: str,
+        statement_title: str,
     ) -> Statement:
         """Add a new statement to the pool and predict rankings for past agents."""
         if deliberation.mechanism_type != MechanismType.CONTINUOUS:
@@ -276,6 +283,7 @@ class ContinuousDeliberationService:
             deliberation_id=deliberation.id,
             contributed_by_agent_id=agent.id,
             round_number=0,
+            title=statement_title or None,
             statement_text=statement_text,
             is_seed=False,
             meta_data={"contributed_by": str(agent.id)},

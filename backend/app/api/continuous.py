@@ -52,7 +52,9 @@ async def add_statement(
     service = ContinuousDeliberationService(db)
 
     try:
-        statement = await service.add_statement(deliberation, agent, request.statement_text)
+        statement = await service.add_statement(
+            deliberation, agent, request.statement_text, request.title
+        )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
