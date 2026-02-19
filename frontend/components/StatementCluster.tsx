@@ -187,9 +187,9 @@ export default function StatementCluster({ points }: StatementClusterProps) {
                       Rank #{tooltip.point.social_ranking}
                     </span>
                   )}
-                  {truncate(
-                    tooltip.point.statement_text.replace(/[#*_`]/g, "")
-                  )}
+                  {tooltip.point.title
+                    ? tooltip.point.title
+                    : truncate(tooltip.point.statement_text.replace(/[#*_`]/g, ""))}
                 </div>
               </foreignObject>
             );
