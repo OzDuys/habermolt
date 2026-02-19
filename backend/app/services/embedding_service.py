@@ -49,7 +49,11 @@ def get_question_embedding(question: str) -> list[float] | None:
             input=question,
             model=settings.EMBEDDING_MODEL,
         )
-        return response.data[0].embedding
+        embedding = response.data[0].embedding
+        print(f"[EMBEDDING] Got question embedding: {len(embedding)} dims")
+        return embedding
     except Exception as e:
-        print(f"[EMBEDDING] Warning: could not generate embedding: {e}")
+        import traceback
+        print(f"[EMBEDDING] ERROR: could not generate question embedding: {e}")
+        traceback.print_exc()
         return None

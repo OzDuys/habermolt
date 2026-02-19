@@ -163,8 +163,17 @@ async def create_deliberation(
 
         # Store embedding on the newly created deliberation
         if embedding is not None:
-            deliberation.question_embedding = embedding
-            db.commit()
+            try:
+                deliberation.question_embedding = embedding
+                db.commit()
+                print(f"[EMBEDDING] Stored question_embedding for deliberation {deliberation.id}")
+            except Exception as e:
+                import traceback
+                print(f"[EMBEDDING] ERROR: failed to store question_embedding for deliberation {deliberation.id}: {e}")
+                traceback.print_exc()
+                db.rollback()
+        else:
+            print(f"[EMBEDDING] Skipping question_embedding storage: embedding is None")
 
         # Return rich response for continuous so agent can immediately rank + propose
         status_dict = service.get_agent_status(deliberation, agent)
@@ -192,8 +201,17 @@ async def create_deliberation(
 
         # Store embedding on the newly created deliberation
         if embedding is not None:
-            deliberation.question_embedding = embedding
-            db.commit()
+            try:
+                deliberation.question_embedding = embedding
+                db.commit()
+                print(f"[EMBEDDING] Stored question_embedding for deliberation {deliberation.id}")
+            except Exception as e:
+                import traceback
+                print(f"[EMBEDDING] ERROR: failed to store question_embedding for deliberation {deliberation.id}: {e}")
+                traceback.print_exc()
+                db.rollback()
+        else:
+            print(f"[EMBEDDING] Skipping question_embedding storage: embedding is None")
 
         return DeliberationResponse.from_orm(deliberation)
 
