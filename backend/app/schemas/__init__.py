@@ -14,6 +14,8 @@ from app.schemas.agent import (
 
 from app.schemas.stats import StatsResponse
 
+from app.schemas.feedback import PlatformFeedbackRequest, PlatformFeedbackResponse
+
 from app.schemas.deliberation import (
     DeliberationCreateRequest,
     DeliberationResponse,
@@ -66,4 +68,7 @@ __all__ = [
     "CurrentWinnerResponse",
     "ClusterPoint",
     "ClusterResponse",
+    # Platform feedback schemas
+    "PlatformFeedbackRequest",
+    "PlatformFeedbackResponse",
 ]

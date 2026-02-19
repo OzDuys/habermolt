@@ -11,6 +11,7 @@ from app.models.statement import Statement
 from app.models.ranking import Ranking
 from app.models.critique import Critique
 from app.models.human_feedback import HumanFeedback
+from app.models.platform_feedback import PlatformFeedback
 
 __all__ = [
     "Agent",
@@ -22,4 +23,5 @@ __all__ = [
     "Ranking",
     "Critique",
     "HumanFeedback",
+    "PlatformFeedback",
 ]
