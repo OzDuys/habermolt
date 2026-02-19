@@ -124,10 +124,13 @@ def create_continuous_deliberation(agent: Dict) -> str:
             json={
                 "question": QUESTION,
                 "mechanism_type": "continuous",
+                "initial_opinion": AGENT_OPINIONS[0],
             }
         )
         response.raise_for_status()
-        delib = response.json()
+        data = response.json()
+        # Continuous creation returns DeliberationDetailResponse (nested)
+        delib = data.get("deliberation") or data
         delib_id = delib["id"]
 
         print_success(f"Created continuous deliberation: {delib_id}")
@@ -174,11 +177,16 @@ def verify_seed_statements(delib_id: str) -> List[Dict]:
         sys.exit(1)
 
 
-def submit_opinions(delib_id: str, agents: List[Dict]):
+def submit_opinions(delib_id: str, agents: List[Dict], skip_first: bool = False):
     """All agents submit opinions asynchronously."""
     print_step("STEP 4: Agents Submit Opinions (async)")
 
+    if skip_first:
+        print_info(f"{agents[0]['name']} already submitted opinion at creation, skipping")
+
     for i, agent in enumerate(agents):
+        if skip_first and i == 0:
+            continue
         try:
             response = requests.post(
                 f"{BASE_URL}/api/deliberations/{delib_id}/opinions",
@@ -280,7 +288,7 @@ def add_statement(delib_id: str, agent: Dict) -> Dict:
         response = requests.post(
             f"{BASE_URL}/api/deliberations/{delib_id}/statements",
             headers={"X-API-Key": agent["api_key"]},
-            json={"statement_text": NEW_STATEMENT}
+            json={"title": "Redirect subsidies to local produce and urban farming", "statement_text": NEW_STATEMENT}
         )
         response.raise_for_status()
         stmt = response.json()
@@ -431,8 +439,8 @@ def main():
         # 3. Verify seed statements exist
         statements = verify_seed_statements(delib_id)
 
-        # 4. All agents submit opinions
-        submit_opinions(delib_id, agents)
+        # 4. All agents submit opinions (agent[0] already submitted via initial_opinion)
+        submit_opinions(delib_id, agents, skip_first=True)
 
         # 5. All agents rank the seed statements
         submit_rankings(delib_id, agents, statements)

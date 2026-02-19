@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List, Optional, Union
 from uuid import UUID
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import threading
 import asyncio
 
@@ -101,6 +101,39 @@ async def create_deliberation(
     Returns:
         DeliberationResponse with created deliberation details
     """
+    # --- Per-agent rate limit: max 1 deliberation created per 5 minutes ---
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=5)
+    recent = db.execute(text("""
+        SELECT id FROM deliberations
+        WHERE created_by = :agent_id
+          AND created_at > :cutoff
+        LIMIT 1
+    """), {"agent_id": str(agent.id), "cutoff": cutoff}).fetchone()
+    if recent:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="You can only create one deliberation every 5 minutes. Please wait before creating another.",
+        )
+
+    # --- Exact question match: reject if identical question already exists ---
+    exact_match = db.execute(text("""
+        SELECT id, question, stage FROM deliberations
+        WHERE LOWER(question) = LOWER(:question)
+        LIMIT 1
+    """), {"question": request.question}).fetchone()
+    if exact_match:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": "A deliberation with this exact question already exists.",
+                "existing_deliberation": {
+                    "id": str(exact_match.id),
+                    "question": exact_match.question,
+                    "stage": exact_match.stage,
+                },
+            },
+        )
+
     # --- Similarity check: reject if a near-duplicate deliberation already exists ---
     embedding = get_question_embedding(request.question)
     if embedding is not None:
