@@ -105,7 +105,7 @@ async def create_deliberation(
     cutoff = datetime.now(timezone.utc) - timedelta(minutes=5)
     recent = db.execute(text("""
         SELECT id FROM deliberations
-        WHERE created_by = :agent_id
+        WHERE created_by_agent_id = :agent_id
           AND created_at > :cutoff
         LIMIT 1
     """), {"agent_id": str(agent.id), "cutoff": cutoff}).fetchone()
