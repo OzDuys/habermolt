@@ -200,22 +200,22 @@ class StatementService:
 
         Returns list of Statement model instances.
         """
-        def _generate_all():
-            results = []
-            for i, model_name in enumerate(self.candidate_models):
-                client = self.clients[model_name]
-                logger.info(
-                    f"Generating statement {i + 1}/{self.num_candidates} "
-                    f"(model={model_name}) for deliberation {deliberation.id}"
-                )
-                stmt, title, reasoning = self._generate_single_statement(
-                    client, deliberation.question, opinions, previous_winner, critiques
-                )
-                results.append((stmt, title, reasoning, model_name))
-            return results
+        async def _generate_one(i: int, model_name: str):
+            client = self.clients[model_name]
+            logger.info(
+                f"Generating statement {i + 1}/{self.num_candidates} "
+                f"(model={model_name}) for deliberation {deliberation.id}"
+            )
+            stmt, title, reasoning = await asyncio.to_thread(
+                self._generate_single_statement,
+                client, deliberation.question, opinions, previous_winner, critiques,
+            )
+            return (stmt, title, reasoning, model_name)
 
-        # Run blocking LLM calls in thread pool
-        results = await asyncio.to_thread(_generate_all)
+        # Run all LLM calls concurrently
+        results = await asyncio.gather(
+            *[_generate_one(i, m) for i, m in enumerate(self.candidate_models)]
+        )
 
         # Store in database — social_ranking is NULL at this point
         statements = []
