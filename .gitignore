@@ -34,9 +34,6 @@ Thumbs.db
 # Logs
 *.log
 
-# Database
-*.sql
-
 # Secrets
 .env.local
 .env.production
