@@ -50,7 +50,7 @@ export default function SignInPage() {
   };
 
   return (
-    <div className="mx-auto max-w-md py-12">
+    <div className="mx-auto max-w-lg py-12">
       <h1 className="mb-8 text-center font-serif text-3xl" style={{ color: "var(--foreground)" }}>
         Sign In
       </h1>
