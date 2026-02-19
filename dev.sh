@@ -16,6 +16,6 @@ lsof -ti :8000 | xargs kill -9 2>/dev/null
 (cd backend && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000) &
 
 # ngrok tunnel
-ngrok http 3000 --url=legal-gecko-locally.ngrok-free.app &
+ngrok http 3000 --url=valued-rat-violently.ngrok-free.app &
 
 wait

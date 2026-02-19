@@ -74,6 +74,15 @@ class ContinuousDeliberationService:
         # Generate seed opinions (synthetic diverse perspectives)
         seed_opinions = await self._generate_seed_opinions(question, creator_opinion=initial_opinion)
 
+        # Always include the creator's real opinion so the LLM has substantive input
+        if initial_opinion.strip() not in seed_opinions:
+            seed_opinions.insert(0, initial_opinion.strip())
+
+        logger.info(
+            f"Generating seed statements from {len(seed_opinions)} opinions "
+            f"for deliberation {deliberation.id}"
+        )
+
         # Generate seed statements from the synthetic opinions
         seed_statements = await statement_service.generate_statements(
             self.db,
@@ -94,7 +103,12 @@ class ContinuousDeliberationService:
         return deliberation
 
     async def _generate_seed_opinions(self, question: str, creator_opinion: str = None) -> List[str]:
-        """Generate synthetic diverse opinions to seed statement generation."""
+        """Generate synthetic diverse opinions to seed statement generation.
+
+        Retries up to 3 times if the LLM call fails or returns unparseable output.
+        Always includes the creator_opinion as the first opinion to guarantee
+        at least one substantive opinion in the list.
+        """
         from app.services.llm_client import LLMClient
 
         client = LLMClient()
@@ -116,27 +130,58 @@ class ContinuousDeliberationService:
             f"that a reasonable person might hold. Format as a numbered list.\n\n"
             f"Return ONLY the numbered list, one perspective per line."
         )
-        response = await asyncio.to_thread(
-            client.sample_text, prompt, temperature=0.9
+
+        max_attempts = 3
+        for attempt in range(max_attempts):
+            response = await asyncio.to_thread(
+                client.sample_text, prompt, temperature=0.9
+            )
+
+            if not response or not response.strip():
+                logger.warning(
+                    f"Seed opinion generation attempt {attempt + 1}/{max_attempts} "
+                    f"returned empty response (model={client._model_name})"
+                )
+                continue
+
+            # Parse numbered list
+            opinions = []
+            for line in response.strip().split("\n"):
+                line = line.strip()
+                if line and line[0].isdigit():
+                    # Strip the number prefix (e.g. "1. opinion text" or "1) opinion text")
+                    for sep in [".", ")", ":"]:
+                        idx = line.find(sep)
+                        if idx != -1 and line[:idx].strip().isdigit():
+                            text = line[idx + 1:].strip()
+                            if text:
+                                opinions.append(text)
+                            break
+
+            # Filter out any empty strings that slipped through
+            opinions = [o for o in opinions if o.strip()]
+
+            if len(opinions) >= 2:
+                return opinions[:settings.CONTINUOUS_NUM_SEED_OPINIONS]
+
+            logger.warning(
+                f"Seed opinion generation attempt {attempt + 1}/{max_attempts} "
+                f"parsed only {len(opinions)} opinions from response: "
+                f"{response[:200]}"
+            )
+
+        # All retries exhausted — use creator opinion as the sole seed opinion
+        # so statement generation at least has something substantive to work with
+        if creator_opinion and creator_opinion.strip():
+            logger.warning(
+                "Seed opinion generation failed after all retries. "
+                "Falling back to creator opinion only."
+            )
+            return [creator_opinion.strip()]
+
+        raise RuntimeError(
+            "Failed to generate seed opinions after all retries and no creator opinion available"
         )
-
-        # Parse numbered list
-        opinions = []
-        for line in response.strip().split("\n"):
-            line = line.strip()
-            if line and line[0].isdigit():
-                # Strip the number prefix
-                parts = line.split(".", 1)
-                if len(parts) > 1:
-                    opinions.append(parts[1].strip())
-                else:
-                    opinions.append(line)
-
-        # Fallback if parsing fails
-        if len(opinions) < 2:
-            opinions = [response.strip()]
-
-        return opinions[:settings.CONTINUOUS_NUM_SEED_OPINIONS]
 
     def submit_opinion(
         self,
