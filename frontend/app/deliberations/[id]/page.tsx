@@ -193,6 +193,7 @@ export default function DeliberationPage() {
   const getStatementPreview = (statementId: string) => {
     const s = round0Statements.find((st) => st.id === statementId);
     if (!s) return "Unknown statement";
+    if (s.title) return s.title;
     const text = s.statement_text.replace(/[#*_]/g, "");
     return text.length > 60 ? text.slice(0, 60) + "..." : text;
   };
