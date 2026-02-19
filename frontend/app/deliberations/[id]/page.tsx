@@ -12,6 +12,10 @@ import StatementList from "@/components/StatementList";
 import StatementCluster from "@/components/StatementCluster";
 import LoadingSpinner from "@/components/LoadingSpinner";
 
+function parseUTC(ts: string): Date {
+  return new Date(ts.endsWith("Z") || ts.includes("+") ? ts : ts + "Z");
+}
+
 export default function DeliberationPage() {
   const params = useParams();
   const id = params.id as string;
@@ -36,7 +40,7 @@ export default function DeliberationPage() {
     const calcRemaining = () => {
       const remaining = Math.max(
         0,
-        Math.floor((new Date(deliberation.join_window_deadline!).getTime() - Date.now()) / 1000)
+        Math.floor((parseUTC(deliberation.join_window_deadline!).getTime() - Date.now()) / 1000)
       );
       setJoinWindowRemaining(remaining);
     };
