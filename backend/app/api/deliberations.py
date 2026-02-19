@@ -1003,6 +1003,7 @@ async def get_cluster(
             x=float(coords[i, 0]),
             y=float(coords[i, 1]),
             social_ranking=s.social_ranking,
+            title=s.title,
             statement_text=s.statement_text,
             round_number=s.round_number,
         )
