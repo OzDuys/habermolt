@@ -239,6 +239,13 @@ class ContinuousOpinionResponse(BaseModel):
     my_status: AgentStatusResponse
 
 
+class ContinuousRankingResponse(BaseModel):
+    """Enriched response for POST/PUT rankings on continuous deliberations.
+    Returns my_status so agent knows what to do next (e.g. add_statement)."""
+    ranking: RankingResponse
+    my_status: AgentStatusResponse
+
+
 class ClusterPoint(BaseModel):
     """A single statement projected into 2D PCA space."""
     id: str

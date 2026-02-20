@@ -36,7 +36,9 @@ REASONING:
 <your analysis of the opinions, noting agreement and disagreement>
 
 TITLE:
-<a short title of 5-10 words that captures the essence of the statement>
+<a short, distinctive title of 5-10 words that captures what makes THIS \
+statement UNIQUE compared to other possible statements. Focus on the \
+specific angle, tradeoff, or framing — not a generic summary of the topic.>
 
 STATEMENT:
 <the consensus statement, 1-3 sentences>\
@@ -234,11 +236,80 @@ class StatementService:
 
         db.commit()
 
+        # Post-hoc: regenerate titles to ensure they differentiate the statements
+        await self._differentiate_titles(db, statements)
+
         logger.info(
             f"Generated {len(statements)} statements for deliberation "
             f"{deliberation.id} round {round_number}"
         )
         return statements
+
+    async def _differentiate_titles(
+        self,
+        db: Session,
+        statements: List[Statement],
+    ) -> None:
+        """Regenerate titles so each one highlights what makes that statement unique."""
+        if len(statements) < 2:
+            return
+
+        # Pick any available client
+        client = next(iter(self.clients.values()))
+
+        statements_text = "\n".join(
+            f"{i + 1}. {s.statement_text}" for i, s in enumerate(statements)
+        )
+
+        prompt = (
+            f"Below are {len(statements)} candidate consensus statements on the same topic. "
+            f"Each needs a SHORT, DISTINCTIVE title (5-10 words max) that highlights "
+            f"what makes it DIFFERENT from the others.\n\n"
+            f"Statements:\n{statements_text}\n\n"
+            f"For each statement, write a title that captures its unique angle, emphasis, "
+            f"or tradeoff. Two titles should NEVER be similar. If statements are similar, "
+            f"titles must emphasize whatever small difference exists.\n\n"
+            f"Respond with ONLY a numbered list of titles, one per line:\n"
+            f"1. <title for statement 1>\n"
+            f"2. <title for statement 2>\n"
+            f"..."
+        )
+
+        try:
+            response = await asyncio.to_thread(
+                client.sample_text, prompt, temperature=0.3
+            )
+
+            if not response or not response.strip():
+                return
+
+            titles = []
+            for line in response.strip().split("\n"):
+                line = line.strip()
+                if line and line[0].isdigit():
+                    for sep in [".", ")", ":"]:
+                        idx = line.find(sep)
+                        if idx != -1 and line[:idx].strip().isdigit():
+                            title = line[idx + 1:].strip()
+                            if title:
+                                titles.append(title[:200])  # Respect max length
+                            break
+
+            # Apply titles if we got the right count
+            if len(titles) == len(statements):
+                for stmt, title in zip(statements, titles):
+                    stmt.title = title
+                db.commit()
+                logger.info(
+                    f"Differentiated {len(titles)} statement titles"
+                )
+            else:
+                logger.warning(
+                    f"Title differentiation returned {len(titles)} titles "
+                    f"for {len(statements)} statements, skipping"
+                )
+        except Exception as e:
+            logger.warning(f"Title differentiation failed: {e}")
 
 
 # Global service instance

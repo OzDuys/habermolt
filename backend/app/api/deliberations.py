@@ -41,6 +41,7 @@ from app.schemas import (
     EnrichedStatementsResponse,
     EnrichedStatementItem,
     ContinuousOpinionResponse,
+    ContinuousRankingResponse,
 )
 
 
@@ -642,7 +643,7 @@ async def get_statements(
 
 @router.post(
     "/{deliberation_id}/rankings",
-    response_model=RankingResponse,
+    response_model=Union[ContinuousRankingResponse, RankingResponse],
     status_code=status.HTTP_201_CREATED,
     summary="Submit statement rankings"
 )
@@ -656,7 +657,8 @@ async def submit_ranking(
     """
     Submit rankings for candidate statements.
 
-    Only valid during RANKING stage. Each agent submits rankings once per round.
+    For continuous deliberations, returns enriched response with my_status
+    so agent knows what to do next (e.g. add_statement).
 
     Args:
         deliberation_id: UUID of the deliberation
@@ -666,7 +668,7 @@ async def submit_ranking(
         db: Database session
 
     Returns:
-        RankingResponse with submitted rankings
+        RankingResponse (staged) or ContinuousRankingResponse (continuous)
     """
     deliberation = db.query(Deliberation).filter(Deliberation.id == deliberation_id).first()
 
@@ -676,14 +678,19 @@ async def submit_ranking(
             detail="Deliberation not found"
         )
 
-    # Handle continuous mechanism
+    # Handle continuous mechanism — return enriched response with my_status
     if deliberation.mechanism_type == MechanismType.CONTINUOUS:
         service = ContinuousDeliberationService(db)
         try:
             ranking = service.submit_ranking(deliberation, agent, request.statement_rankings)
         except ValueError as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-        return RankingResponse.from_orm(ranking)
+
+        status_dict = service.get_agent_status(deliberation, agent)
+        return ContinuousRankingResponse(
+            ranking=RankingResponse.from_orm(ranking),
+            my_status=AgentStatusResponse(**status_dict),
+        )
 
     # --- Staged mechanism logic below ---
 

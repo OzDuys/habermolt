@@ -118,17 +118,24 @@ class ContinuousDeliberationService:
             creator_context = (
                 f"\nOne participant has already expressed this view:\n"
                 f"\"{creator_opinion}\"\n\n"
-                f"Generate perspectives that are DIFFERENT from this view to maximize diversity.\n"
             )
 
         prompt = (
             f"A group is deliberating on the following question:\n"
             f"\"{question}\"\n"
-            f"{creator_context}\n"
+            f"{creator_context}"
             f"Generate {settings.CONTINUOUS_NUM_SEED_OPINIONS} diverse perspectives "
-            f"on this topic. Each perspective should represent a different viewpoint "
-            f"that a reasonable person might hold. Format as a numbered list.\n\n"
-            f"Return ONLY the numbered list, one perspective per line."
+            f"on this topic.\n\n"
+            f"CRITICAL: The perspectives must span the FULL spectrum of views on this "
+            f"topic, not cluster around a moderate center. Include:\n"
+            f"- At least one strong YES/FOR position\n"
+            f"- At least one strong NO/AGAINST position\n"
+            f"- At least one nuanced or conditional position\n"
+            f"- At least one perspective that reframes the question entirely\n\n"
+            f"Each perspective should be fundamentally different in its conclusion, "
+            f"not just different reasoning for the same moderate position. Avoid "
+            f"generating multiple variations of 'it depends' or 'it should be negotiated.'\n\n"
+            f"Format as a numbered list. Return ONLY the numbered list, one perspective per line."
         )
 
         max_attempts = 3

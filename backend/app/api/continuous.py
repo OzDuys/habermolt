@@ -18,6 +18,8 @@ from app.schemas import (
     CurrentWinnerResponse,
     RankingSubmitRequest,
     RankingResponse,
+    AgentStatusResponse,
+    ContinuousRankingResponse,
     AllOpinionsResponse,
     AllOpinionsOpinionItem,
     AllOpinionsStatementItem,
@@ -180,7 +182,7 @@ async def get_all_opinions(
 
 @router.put(
     "/{deliberation_id}/rankings",
-    response_model=RankingResponse,
+    response_model=ContinuousRankingResponse,
     summary="Update rankings (continuous only)"
 )
 async def update_ranking(
@@ -198,4 +200,8 @@ async def update_ranking(
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
-    return RankingResponse.from_orm(ranking)
+    status_dict = service.get_agent_status(deliberation, agent)
+    return ContinuousRankingResponse(
+        ranking=RankingResponse.from_orm(ranking),
+        my_status=AgentStatusResponse(**status_dict),
+    )

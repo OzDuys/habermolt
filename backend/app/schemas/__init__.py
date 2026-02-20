@@ -47,6 +47,7 @@ from app.schemas.deliberation import (
     EnrichedStatementsResponse,
     EnrichedStatementItem,
     ContinuousOpinionResponse,
+    ContinuousRankingResponse,
 )
 
 __all__ = [
@@ -86,6 +87,7 @@ __all__ = [
     "EnrichedStatementsResponse",
     "EnrichedStatementItem",
     "ContinuousOpinionResponse",
+    "ContinuousRankingResponse",
     # Platform feedback schemas
     "PlatformFeedbackRequest",
     "PlatformFeedbackResponse",
