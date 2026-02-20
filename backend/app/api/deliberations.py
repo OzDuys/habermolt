@@ -38,6 +38,9 @@ from app.schemas import (
     StatementSubmitRequest,
     ClusterPoint,
     ClusterResponse,
+    EnrichedStatementsResponse,
+    EnrichedStatementItem,
+    ContinuousOpinionResponse,
 )
 
 
@@ -366,7 +369,7 @@ async def get_deliberation(
 
 @router.post(
     "/{deliberation_id}/opinions",
-    response_model=OpinionResponse,
+    response_model=Union[ContinuousOpinionResponse, OpinionResponse],
     status_code=status.HTTP_201_CREATED,
     summary="Submit an opinion"
 )
@@ -401,14 +404,22 @@ async def submit_opinion(
             detail="Deliberation not found"
         )
 
-    # Handle continuous mechanism
+    # Handle continuous mechanism — return enriched response with statements + status
     if deliberation.mechanism_type == MechanismType.CONTINUOUS:
         service = ContinuousDeliberationService(db)
         try:
             opinion = service.submit_opinion(deliberation, agent, request.opinion_text)
         except ValueError as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-        return OpinionResponse.from_orm(opinion)
+
+        # Return statements inline so agent can immediately rank
+        db.refresh(deliberation)
+        status_dict = service.get_agent_status(deliberation, agent)
+        return ContinuousOpinionResponse(
+            opinion=OpinionResponse.from_orm(opinion),
+            statements=[StatementResponse.from_orm(s) for s in deliberation.statements],
+            my_status=AgentStatusResponse(**status_dict),
+        )
 
     # --- Staged mechanism logic below ---
 
@@ -555,8 +566,8 @@ async def start_deliberation(
 
 @router.get(
     "/{deliberation_id}/statements",
-    response_model=List[StatementResponse],
-    summary="Get statements for ranking"
+    response_model=EnrichedStatementsResponse,
+    summary="Get statements for ranking (with per-agent context)"
 )
 async def get_statements(
     deliberation_id: UUID,
@@ -564,17 +575,13 @@ async def get_statements(
     db: Session = Depends(get_db)
 ):
     """
-    Get candidate statements for the current round.
-
-    Only valid during RANKING or CRITIQUE stages.
-
-    Args:
-        deliberation_id: UUID of the deliberation
-        agent: Authenticated agent
-        db: Database session
+    Get candidate statements for the current round, enriched with per-agent context.
 
     Returns:
-        List of StatementResponse for current round
+    - statements: each with is_new (added after your last ranking) and your_previous_rank
+    - your_opinion: your own opinion text for reference
+
+    Agents must submit their opinion before viewing statements.
     """
     deliberation = db.query(Deliberation).filter(Deliberation.id == deliberation_id).first()
 
@@ -584,10 +591,12 @@ async def get_statements(
             detail="Deliberation not found"
         )
 
-    # Agents must submit their opinion before they can see consensus statements,
-    # to ensure opinions are formed independently.
-    agent_has_opinion = any(o.agent_id == agent.id for o in deliberation.opinions)
-    if not agent_has_opinion:
+    # Agents must submit their opinion before they can see consensus statements
+    agent_opinion = next(
+        (o for o in deliberation.opinions if o.agent_id == agent.id),
+        None
+    )
+    if not agent_opinion:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You must submit your opinion before viewing consensus statements"
@@ -597,7 +606,38 @@ async def get_statements(
     service = DeliberationService(db)
     statements = service.get_current_statements(deliberation)
 
-    return [StatementResponse.from_orm(s) for s in statements]
+    # Get agent's latest ranking to determine is_new and previous ranks
+    agent_ranking = db.query(Ranking).filter(
+        Ranking.deliberation_id == deliberation_id,
+        Ranking.agent_id == agent.id,
+    ).order_by(Ranking.round_number.desc()).first()
+
+    # Build a map of statement_id -> previous rank
+    ranked_statement_ids = set()
+    rank_map = {}
+    if agent_ranking:
+        for entry in agent_ranking.statement_rankings:
+            sid = str(entry.get("statement_id", ""))
+            ranked_statement_ids.add(sid)
+            rank_map[sid] = entry.get("rank")
+
+    enriched = []
+    for s in statements:
+        sid = str(s.id)
+        enriched.append(EnrichedStatementItem(
+            id=s.id,
+            title=s.title,
+            statement_text=s.statement_text,
+            is_new=sid not in ranked_statement_ids,
+            your_previous_rank=rank_map.get(sid),
+            contributed_by_agent_id=s.contributed_by_agent_id,
+            is_seed=s.is_seed,
+        ))
+
+    return EnrichedStatementsResponse(
+        statements=enriched,
+        your_opinion=agent_opinion.opinion_text,
+    )
 
 
 @router.post(

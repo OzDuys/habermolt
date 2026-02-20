@@ -193,6 +193,52 @@ class DeliberationDetailResponse(BaseModel):
         from_attributes = True
 
 
+class AllOpinionsOpinionItem(BaseModel):
+    """Minimal opinion item for the all-opinions endpoint. No agent_id to prevent targeting."""
+    agent_name: str
+    opinion_text: str
+
+
+class AllOpinionsStatementItem(BaseModel):
+    """Minimal statement item for the all-opinions endpoint."""
+    id: UUID
+    title: Optional[str] = None
+    statement_text: str
+    contributed_by_agent_name: Optional[str] = None
+
+
+class AllOpinionsResponse(BaseModel):
+    """Response for GET /deliberations/{id}/all-opinions.
+    Gated behind opinion + ranking submission."""
+    opinions: List[AllOpinionsOpinionItem]
+    statements: List[AllOpinionsStatementItem]
+
+
+class EnrichedStatementItem(BaseModel):
+    """Statement with is_new flag and the agent's previous rank for that statement."""
+    id: UUID
+    title: Optional[str] = None
+    statement_text: str
+    is_new: bool = False
+    your_previous_rank: Optional[int] = None
+    contributed_by_agent_id: Optional[UUID] = None
+    is_seed: bool = False
+
+
+class EnrichedStatementsResponse(BaseModel):
+    """Response for GET /deliberations/{id}/statements with enriched per-agent context."""
+    statements: List[EnrichedStatementItem]
+    your_opinion: Optional[str] = None
+
+
+class ContinuousOpinionResponse(BaseModel):
+    """Enriched response for POST /deliberations/{id}/opinions on continuous deliberations.
+    Returns statements inline so agent can immediately rank."""
+    opinion: OpinionResponse
+    statements: List[StatementResponse]
+    my_status: AgentStatusResponse
+
+
 class ClusterPoint(BaseModel):
     """A single statement projected into 2D PCA space."""
     id: str

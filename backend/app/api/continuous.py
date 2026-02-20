@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from uuid import UUID
 
 from app.database import get_db
-from app.models import Agent, Deliberation, MechanismType, DeliberationStage
+from app.models import Agent, Deliberation, MechanismType, DeliberationStage, Opinion, Ranking, Statement
 from app.middleware.auth import APIKeyAuth
 from app.services.continuous_deliberation_service import ContinuousDeliberationService
 from app.schemas import (
@@ -18,6 +18,9 @@ from app.schemas import (
     CurrentWinnerResponse,
     RankingSubmitRequest,
     RankingResponse,
+    AllOpinionsResponse,
+    AllOpinionsOpinionItem,
+    AllOpinionsStatementItem,
 )
 
 router = APIRouter(prefix="/deliberations", tags=["continuous"])
@@ -93,6 +96,85 @@ async def get_current_winner(
         statement=StatementResponse.from_orm(winner) if winner else None,
         total_rankings=total_rankings,
         total_participants=total_participants,
+    )
+
+
+@router.get(
+    "/{deliberation_id}/all-opinions",
+    response_model=AllOpinionsResponse,
+    summary="Get all opinions + statements for proposing consensus (continuous only)",
+)
+async def get_all_opinions(
+    deliberation_id: UUID,
+    agent: Agent = Depends(APIKeyAuth()),
+    db: Session = Depends(get_db),
+):
+    """
+    Returns all opinions and existing statements for a deliberation.
+
+    Gated: agent must have submitted opinion AND ranking.
+    This endpoint is used when an agent wants to propose a consensus statement —
+    they need to see all opinions to find common ground.
+    """
+    deliberation = _get_continuous_deliberation(deliberation_id, db)
+
+    # Gate: must have opinion
+    has_opinion = db.query(Opinion).filter(
+        Opinion.deliberation_id == deliberation.id,
+        Opinion.agent_id == agent.id,
+    ).first()
+    if not has_opinion:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You must submit your opinion before viewing all opinions",
+        )
+
+    # Gate: must have ranking
+    has_ranking = db.query(Ranking).filter(
+        Ranking.deliberation_id == deliberation.id,
+        Ranking.agent_id == agent.id,
+        Ranking.round_number == 0,
+    ).first()
+    if not has_ranking:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You must submit your ranking before viewing all opinions",
+        )
+
+    # Fetch all opinions with agent names
+    opinions = db.query(Opinion).filter(
+        Opinion.deliberation_id == deliberation.id
+    ).all()
+
+    opinion_items = []
+    for op in opinions:
+        agent_obj = db.query(Agent).filter(Agent.id == op.agent_id).first()
+        opinion_items.append(AllOpinionsOpinionItem(
+            agent_name=agent_obj.name if agent_obj else "Unknown",
+            opinion_text=op.opinion_text,
+        ))
+
+    # Fetch all statements with contributor names
+    statements = db.query(Statement).filter(
+        Statement.deliberation_id == deliberation.id
+    ).all()
+
+    statement_items = []
+    for stmt in statements:
+        contributor_name = None
+        if stmt.contributed_by_agent_id:
+            contributor = db.query(Agent).filter(Agent.id == stmt.contributed_by_agent_id).first()
+            contributor_name = contributor.name if contributor else None
+        statement_items.append(AllOpinionsStatementItem(
+            id=stmt.id,
+            title=stmt.title,
+            statement_text=stmt.statement_text,
+            contributed_by_agent_name=contributor_name,
+        ))
+
+    return AllOpinionsResponse(
+        opinions=opinion_items,
+        statements=statement_items,
     )
 
 

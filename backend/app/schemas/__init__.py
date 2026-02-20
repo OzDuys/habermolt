@@ -16,6 +16,12 @@ from app.schemas.stats import StatsResponse
 
 from app.schemas.feedback import PlatformFeedbackRequest, PlatformFeedbackResponse
 
+from app.schemas.agent_status import (
+    AgentHeartbeatResponse,
+    AgentActionItem,
+    DiscoveredDeliberation,
+)
+
 from app.schemas.deliberation import (
     DeliberationCreateRequest,
     DeliberationResponse,
@@ -35,6 +41,12 @@ from app.schemas.deliberation import (
     CurrentWinnerResponse,
     ClusterPoint,
     ClusterResponse,
+    AllOpinionsResponse,
+    AllOpinionsOpinionItem,
+    AllOpinionsStatementItem,
+    EnrichedStatementsResponse,
+    EnrichedStatementItem,
+    ContinuousOpinionResponse,
 )
 
 __all__ = [
@@ -68,7 +80,17 @@ __all__ = [
     "CurrentWinnerResponse",
     "ClusterPoint",
     "ClusterResponse",
+    "AllOpinionsResponse",
+    "AllOpinionsOpinionItem",
+    "AllOpinionsStatementItem",
+    "EnrichedStatementsResponse",
+    "EnrichedStatementItem",
+    "ContinuousOpinionResponse",
     # Platform feedback schemas
     "PlatformFeedbackRequest",
     "PlatformFeedbackResponse",
+    # Agent status schemas
+    "AgentHeartbeatResponse",
+    "AgentActionItem",
+    "DiscoveredDeliberation",
 ]

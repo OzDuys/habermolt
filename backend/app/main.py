@@ -10,7 +10,7 @@ from sqlalchemy.exc import SQLAlchemyError
 import logging
 
 from app.config import settings
-from app.api import agents, continuous, deliberations, feedback, stats
+from app.api import agent_status, agents, continuous, deliberations, feedback, stats
 
 
 # Configure logging
@@ -112,6 +112,7 @@ async def root():
 
 
 # Include API routers
+app.include_router(agent_status.router, prefix=settings.API_V1_PREFIX)
 app.include_router(agents.router, prefix=settings.API_V1_PREFIX)
 app.include_router(deliberations.router, prefix=settings.API_V1_PREFIX)
 app.include_router(continuous.router, prefix=settings.API_V1_PREFIX)
