@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 
 const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:8000";
+const INTERNAL_API_SECRET = process.env.INTERNAL_API_SECRET || "";
 
 export async function POST() {
   const session = await auth.api.getSession({
@@ -21,6 +22,7 @@ export async function POST() {
     headers: {
       "Content-Type": "application/json",
       "X-User-Id": session.user.id,
+      "X-Internal-Secret": INTERNAL_API_SECRET,
     },
   });
 

@@ -2,7 +2,11 @@
 API routes for deliberation management and participation.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+import logging
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status, BackgroundTasks
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 from typing import List, Optional, Union
 from uuid import UUID
@@ -20,6 +24,9 @@ from app.services.deliberation_service import DeliberationService
 from app.services.continuous_deliberation_service import ContinuousDeliberationService
 from app.services.embedding_service import get_question_embedding, get_statement_embeddings
 from app.config import settings
+
+logger = logging.getLogger(__name__)
+limiter = Limiter(key_func=get_remote_address)
 from app.schemas import (
     DeliberationCreateRequest,
     DeliberationResponse,
@@ -86,8 +93,10 @@ def _schedule_join_window_timer(deliberation_id: UUID, delay_seconds: float):
     status_code=status.HTTP_201_CREATED,
     summary="Create a new deliberation"
 )
+@limiter.limit("10/minute")
 async def create_deliberation(
-    request: DeliberationCreateRequest,
+    body: DeliberationCreateRequest,
+    request: Request,
     agent: Agent = Depends(APIKeyAuth()),
     db: Session = Depends(get_db)
 ):
@@ -124,7 +133,7 @@ async def create_deliberation(
         SELECT id, question, stage FROM deliberations
         WHERE LOWER(question) = LOWER(:question)
         LIMIT 1
-    """), {"question": request.question}).fetchone()
+    """), {"question": body.question}).fetchone()
     if exact_match:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -139,7 +148,7 @@ async def create_deliberation(
         )
 
     # --- Similarity check: reject if a near-duplicate deliberation already exists ---
-    embedding = get_question_embedding(request.question)
+    embedding = get_question_embedding(body.question)
     if embedding is not None:
         similar_rows = db.execute(text("""
             SELECT id, question, stage,
@@ -172,8 +181,8 @@ async def create_deliberation(
             )
     # --------------------------------------------------------------------------
 
-    if request.mechanism_type == MechanismType.CONTINUOUS:
-        if not request.initial_opinion:
+    if body.mechanism_type == MechanismType.CONTINUOUS:
+        if not body.initial_opinion:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="initial_opinion is required when creating a continuous deliberation",
@@ -181,21 +190,22 @@ async def create_deliberation(
         service = ContinuousDeliberationService(db)
         try:
             deliberation = await service.create_deliberation(
-                question=request.question,
+                question=body.question,
                 creator_agent=agent,
-                initial_opinion=request.initial_opinion,
-                meta_data=request.meta_data,
+                initial_opinion=body.initial_opinion,
+                meta_data=body.meta_data,
             )
         except Exception as e:
             error_msg = str(e)
+            logger.error(f"Failed to create deliberation: {error_msg}", exc_info=True)
             if "429" in error_msg or "quota" in error_msg.lower() or "rate" in error_msg.lower():
                 raise HTTPException(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    detail=f"LLM API rate limit exceeded. Error: {error_msg}"
+                    detail="LLM API rate limit exceeded. Please try again later."
                 )
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to create deliberation: {error_msg}"
+                detail="Failed to create deliberation. Please try again later."
             )
 
         # Store embedding on the newly created deliberation
@@ -203,14 +213,12 @@ async def create_deliberation(
             try:
                 deliberation.question_embedding = embedding
                 db.commit()
-                print(f"[EMBEDDING] Stored question_embedding for deliberation {deliberation.id}")
+                logger.info(f"Stored question_embedding for deliberation {deliberation.id}")
             except Exception as e:
-                import traceback
-                print(f"[EMBEDDING] ERROR: failed to store question_embedding for deliberation {deliberation.id}: {e}")
-                traceback.print_exc()
+                logger.error(f"Failed to store question_embedding for deliberation {deliberation.id}: {e}", exc_info=True)
                 db.rollback()
         else:
-            print(f"[EMBEDDING] Skipping question_embedding storage: embedding is None")
+            logger.debug(f"Skipping question_embedding storage: embedding is None")
 
         # Return rich response for continuous so agent can immediately rank + propose
         status_dict = service.get_agent_status(deliberation, agent)
@@ -230,10 +238,10 @@ async def create_deliberation(
     else:
         service = DeliberationService(db)
         deliberation = service.create_deliberation(
-            question=request.question,
+            question=body.question,
             creator_agent=agent,
-            num_critique_rounds=request.num_critique_rounds,
-            meta_data=request.meta_data
+            num_critique_rounds=body.num_critique_rounds,
+            meta_data=body.meta_data
         )
 
         # Store embedding on the newly created deliberation
@@ -241,14 +249,10 @@ async def create_deliberation(
             try:
                 deliberation.question_embedding = embedding
                 db.commit()
-                print(f"[EMBEDDING] Stored question_embedding for deliberation {deliberation.id}")
+                logger.info(f"Stored question_embedding for deliberation {deliberation.id}")
             except Exception as e:
-                import traceback
-                print(f"[EMBEDDING] ERROR: failed to store question_embedding for deliberation {deliberation.id}: {e}")
-                traceback.print_exc()
+                logger.error(f"Failed to store question_embedding for deliberation {deliberation.id}: {e}", exc_info=True)
                 db.rollback()
-        else:
-            print(f"[EMBEDDING] Skipping question_embedding storage: embedding is None")
 
         return DeliberationResponse.from_orm(deliberation)
 
@@ -260,6 +264,8 @@ async def create_deliberation(
 )
 async def list_deliberations(
     stage: str = None,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db)
 ):
     """
@@ -269,6 +275,8 @@ async def list_deliberations(
 
     Args:
         stage: Optional filter by stage (opinion, ranking, critique, concluded, finalized)
+        skip: Number of results to skip (pagination offset)
+        limit: Maximum number of results to return (1-100, default 20)
         db: Database session
 
     Returns:
@@ -279,12 +287,13 @@ async def list_deliberations(
     if stage:
         query = query.filter(Deliberation.stage == stage)
 
-    # Order by most recent first
-    deliberations = query.order_by(Deliberation.created_at.desc()).all()
+    total = query.count()
+
+    deliberations = query.order_by(Deliberation.created_at.desc()).offset(skip).limit(limit).all()
 
     return DeliberationListResponse(
         deliberations=[DeliberationResponse.from_orm(d) for d in deliberations],
-        total=len(deliberations)
+        total=total
     )
 
 
@@ -374,9 +383,11 @@ async def get_deliberation(
     status_code=status.HTTP_201_CREATED,
     summary="Submit an opinion"
 )
+@limiter.limit("10/minute")
 async def submit_opinion(
     deliberation_id: UUID,
-    request: OpinionSubmitRequest,
+    body: OpinionSubmitRequest,
+    request: Request,
     background_tasks: BackgroundTasks,
     agent: Agent = Depends(APIKeyAuth()),
     db: Session = Depends(get_db)
@@ -409,7 +420,7 @@ async def submit_opinion(
     if deliberation.mechanism_type == MechanismType.CONTINUOUS:
         service = ContinuousDeliberationService(db)
         try:
-            opinion = service.submit_opinion(deliberation, agent, request.opinion_text)
+            opinion = service.submit_opinion(deliberation, agent, body.opinion_text)
         except ValueError as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -454,7 +465,7 @@ async def submit_opinion(
     opinion = Opinion(
         deliberation_id=deliberation_id,
         agent_id=agent.id,
-        opinion_text=request.opinion_text
+        opinion_text=body.opinion_text
     )
 
     db.add(opinion)
@@ -484,16 +495,16 @@ async def submit_opinion(
 
         # Check if it's an API quota/rate limit error
         error_msg = str(e)
+        logger.error(f"Transition error after opinion: {error_msg}", exc_info=True)
         if "429" in error_msg or "quota" in error_msg.lower() or "rate" in error_msg.lower():
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=f"LLM API rate limit exceeded. Check LLM_API_KEY in backend/.env. Error: {error_msg}"
+                detail="LLM API rate limit exceeded. Please try again later."
             )
 
-        # For other errors, still fail the request to make issues visible
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to process deliberation: {error_msg}"
+            detail="Failed to process deliberation. Please try again later."
         )
 
     # If the join window deadline was just set, schedule the auto-start timer
@@ -552,14 +563,15 @@ async def start_deliberation(
         )
     except Exception as e:
         error_msg = str(e)
+        logger.error(f"Failed to start deliberation: {error_msg}", exc_info=True)
         if "429" in error_msg or "quota" in error_msg.lower() or "rate" in error_msg.lower():
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=f"LLM API rate limit exceeded. Error: {error_msg}"
+                detail="LLM API rate limit exceeded. Please try again later."
             )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to start deliberation: {error_msg}"
+            detail="Failed to start deliberation. Please try again later."
         )
 
     return DeliberationResponse.from_orm(deliberation)
@@ -647,9 +659,11 @@ async def get_statements(
     status_code=status.HTTP_201_CREATED,
     summary="Submit statement rankings"
 )
+@limiter.limit("20/minute")
 async def submit_ranking(
     deliberation_id: UUID,
-    request: RankingSubmitRequest,
+    body: RankingSubmitRequest,
+    request: Request,
     background_tasks: BackgroundTasks,
     agent: Agent = Depends(APIKeyAuth()),
     db: Session = Depends(get_db)
@@ -682,7 +696,8 @@ async def submit_ranking(
     if deliberation.mechanism_type == MechanismType.CONTINUOUS:
         service = ContinuousDeliberationService(db)
         try:
-            ranking = service.submit_ranking(deliberation, agent, request.statement_rankings)
+            rankings_dicts = [r.model_dump(mode="json") for r in body.statement_rankings]
+            ranking = service.submit_ranking(deliberation, agent, rankings_dicts)
         except ValueError as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -714,12 +729,13 @@ async def submit_ranking(
             detail="Agent has already submitted rankings for this round"
         )
 
-    # Create ranking
+    # Create ranking — convert typed entries to dicts for JSONB storage
+    rankings_dicts = [r.model_dump(mode="json") for r in body.statement_rankings]
     ranking = Ranking(
         deliberation_id=deliberation_id,
         agent_id=agent.id,
         round_number=deliberation.current_critique_round,
-        statement_rankings=request.statement_rankings
+        statement_rankings=rankings_dicts
     )
 
     db.add(ranking)
@@ -839,16 +855,16 @@ async def submit_critique(
 
         # Check if it's an API quota/rate limit error
         error_msg = str(e)
+        logger.error(f"Critique transition error: {error_msg}", exc_info=True)
         if "429" in error_msg or "quota" in error_msg.lower() or "rate" in error_msg.lower():
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=f"LLM API rate limit exceeded. Check LLM_API_KEY in backend/.env. Error: {error_msg}"
+                detail="LLM API rate limit exceeded. Please try again later."
             )
 
-        # For other errors, still fail the request to make issues visible
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to process deliberation: {error_msg}"
+            detail="Failed to process deliberation. Please try again later."
         )
 
     return CritiqueResponse.from_orm(critique)
@@ -954,13 +970,18 @@ async def submit_feedback(
     response_model=DeliberationResponse,
     summary="Retry state transition for a stuck deliberation"
 )
+@limiter.limit("2/minute")
 async def reprocess_deliberation(
     deliberation_id: UUID,
+    request: Request,
+    agent: Agent = Depends(APIKeyAuth()),
     db: Session = Depends(get_db)
 ):
     """
     Re-trigger the state transition for a deliberation that got stuck
     (e.g. due to a failed Habermas Machine call).
+
+    Requires authentication. Only the deliberation creator can reprocess.
     """
     deliberation = db.query(Deliberation).filter(Deliberation.id == deliberation_id).first()
 
@@ -970,17 +991,22 @@ async def reprocess_deliberation(
             detail="Deliberation not found"
         )
 
+    # Authorization: only the creator can reprocess
+    if deliberation.created_by_agent_id != agent.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the deliberation creator can reprocess"
+        )
+
     try:
         service = DeliberationService(db)
         result = await service.check_and_transition_state(deliberation)
-        print(f"[REPROCESS] Transition result: {result}, new stage: {deliberation.stage}")
+        logger.info(f"[REPROCESS] Transition result: {result}, new stage: {deliberation.stage}")
     except Exception as e:
-        print(f"[REPROCESS] Error: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.error(f"[REPROCESS] Error: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Reprocessing failed: {str(e)}"
+            detail="Reprocessing failed. Please try again later."
         )
 
     return DeliberationResponse.from_orm(deliberation)

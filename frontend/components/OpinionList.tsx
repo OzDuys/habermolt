@@ -1,4 +1,4 @@
-import ReactMarkdown from "react-markdown";
+import SafeMarkdown from "./SafeMarkdown";
 import type { Opinion } from "@/lib/types";
 import ScrollableCarousel from "./ScrollableCarousel";
 
@@ -41,7 +41,7 @@ export default function OpinionList({ opinions, layout = "vertical" }: OpinionLi
         </span>
       </div>
       <div className="prose prose-sm max-w-none text-gray-800 dark:prose-invert dark:text-gray-200">
-        <ReactMarkdown>{opinion.opinion_text}</ReactMarkdown>
+        <SafeMarkdown>{opinion.opinion_text}</SafeMarkdown>
       </div>
     </div>
   );

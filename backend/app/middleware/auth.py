@@ -95,6 +95,8 @@ class OptionalAPIKeyAuth:
     """
     Dependency class for optional API key authentication.
     Returns None if no API key is provided (e.g. public frontend requests).
+    Raises 401 if a key IS provided but is invalid — prevents silent
+    downgrade to unauthenticated access on typos or expired keys.
     """
 
     async def __call__(self, request: Request) -> Optional[Agent]:
@@ -102,7 +104,5 @@ class OptionalAPIKeyAuth:
         api_key = request.headers.get("X-API-Key")
         if not api_key:
             return None
-        try:
-            return await get_current_agent(api_key=api_key, request=request)
-        except HTTPException:
-            return None
+        # Key was provided — it MUST be valid; don't silently swallow errors
+        return await get_current_agent(api_key=api_key, request=request)

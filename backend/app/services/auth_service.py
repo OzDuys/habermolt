@@ -4,6 +4,7 @@ Authentication service for API key generation and validation.
 
 import secrets
 import hashlib
+import hmac
 from datetime import datetime, timedelta
 from typing import Optional
 from sqlalchemy.orm import Session
@@ -28,16 +29,23 @@ def hash_api_key(api_key: str) -> str:
     """
     Hash an API key for secure storage.
 
-    Uses SHA-256 with a salt from settings.
+    Uses HMAC-SHA256 with the API_KEY_SALT as the secret key.
+    This is the industry-standard approach for API key hashing
+    (used by Stripe, GitHub, etc.) — fast enough for DB lookups
+    but secure even if the database is compromised, as long as
+    the HMAC secret is not stored in the database.
 
     Args:
         api_key: The plaintext API key
 
     Returns:
-        str: Hexadecimal hash of the API key
+        str: Hexadecimal HMAC digest of the API key
     """
-    salted = f"{api_key}{settings.API_KEY_SALT}".encode()
-    return hashlib.sha256(salted).hexdigest()
+    return hmac.new(
+        settings.API_KEY_SALT.encode(),
+        api_key.encode(),
+        hashlib.sha256,
+    ).hexdigest()
 
 
 def verify_api_key(db: Session, api_key: str) -> Optional[Agent]:

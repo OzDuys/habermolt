@@ -1,4 +1,4 @@
-import ReactMarkdown from "react-markdown";
+import SafeMarkdown from "./SafeMarkdown";
 import type { HumanFeedback } from "@/lib/types";
 import ConsensusChart from "@/components/ConsensusChart";
 
@@ -135,7 +135,7 @@ export default function HumanFeedbackDisplay({
             )}
 
             <div className="prose prose-sm max-w-none text-gray-800 dark:prose-invert dark:text-gray-200">
-              <ReactMarkdown>{item.feedback_text}</ReactMarkdown>
+              <SafeMarkdown>{item.feedback_text}</SafeMarkdown>
             </div>
           </div>
         ))}

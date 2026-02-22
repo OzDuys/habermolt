@@ -196,7 +196,8 @@ async def update_ranking(
     service = ContinuousDeliberationService(db)
 
     try:
-        ranking = service.submit_ranking(deliberation, agent, request.statement_rankings)
+        rankings_dicts = [r.model_dump(mode="json") for r in request.statement_rankings]
+        ranking = service.submit_ranking(deliberation, agent, rankings_dicts)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 

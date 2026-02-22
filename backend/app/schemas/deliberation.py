@@ -2,10 +2,17 @@
 Pydantic schemas for Deliberation endpoints.
 """
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 from datetime import datetime
 from uuid import UUID
 from typing import Optional, List
+
+
+class StatementRankingEntry(BaseModel):
+    """A single entry in a statement ranking."""
+    statement_id: UUID
+    rank: int = Field(..., ge=1, description="Rank position (1 = most preferred)")
+    is_predicted: Optional[bool] = False
 
 
 class DeliberationCreateRequest(BaseModel):
@@ -100,10 +107,26 @@ class StatementSubmitRequest(BaseModel):
 
 class RankingSubmitRequest(BaseModel):
     """Request schema for submitting statement rankings."""
-    statement_rankings: List[dict] = Field(
+    statement_rankings: List[StatementRankingEntry] = Field(
         ...,
+        max_length=1000,
         description="List of {statement_id: UUID, rank: int} ordered by preference"
     )
+
+    @validator("statement_rankings")
+    def validate_ranking_integrity(cls, rankings):
+        # Check for duplicate statement IDs
+        statement_ids = [r.statement_id for r in rankings]
+        if len(statement_ids) != len(set(statement_ids)):
+            raise ValueError("Duplicate statement IDs in ranking")
+
+        # Check for contiguous ranks starting at 1
+        ranks = sorted([r.rank for r in rankings])
+        expected = list(range(1, len(rankings) + 1))
+        if ranks != expected:
+            raise ValueError("Ranks must be contiguous integers from 1 to N")
+
+        return rankings
 
 
 class RankingResponse(BaseModel):

@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import type { ClusterPoint, DeliberationDetail, Opinion, Ranking, HumanFeedback } from "@/lib/types";
-import ReactMarkdown from "react-markdown";
+import SafeMarkdown from "@/components/SafeMarkdown";
 import StageIndicator from "@/components/StageIndicator";
 import ActivityFeed from "@/components/ActivityFeed";
 import StatementList from "@/components/StatementList";
@@ -314,7 +314,7 @@ export default function DeliberationPage() {
                 </p>
               )}
               <div className="prose max-w-none dark:prose-invert">
-                <ReactMarkdown>{finalStatement.statement_text}</ReactMarkdown>
+                <SafeMarkdown>{finalStatement.statement_text}</SafeMarkdown>
               </div>
 
               <div className="mt-4 flex flex-wrap items-center gap-3 text-xs" style={{ color: "var(--muted)" }}>
@@ -527,7 +527,7 @@ export default function DeliberationPage() {
                               className="rounded-lg p-3 prose prose-sm max-w-none dark:prose-invert"
                               style={{ background: "var(--surface-dim)" }}
                             >
-                              <ReactMarkdown>{opinion.opinion_text}</ReactMarkdown>
+                              <SafeMarkdown>{opinion.opinion_text}</SafeMarkdown>
                             </div>
                           </div>
                         )}
@@ -632,7 +632,7 @@ export default function DeliberationPage() {
                               className="rounded-lg p-3 prose prose-sm max-w-none dark:prose-invert"
                               style={{ background: "var(--surface-dim)" }}
                             >
-                              <ReactMarkdown>{feedback.feedback_text}</ReactMarkdown>
+                              <SafeMarkdown>{feedback.feedback_text}</SafeMarkdown>
                             </div>
                           </div>
                         )}

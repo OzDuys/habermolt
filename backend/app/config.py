@@ -22,6 +22,8 @@ class Settings(BaseSettings):
 
     # Security
     API_KEY_SALT: str = "habermolt-default-salt-change-in-production"
+    INTERNAL_API_SECRET: str = ""  # Shared secret between frontend and backend for X-User-Id trust
+    CORS_ORIGINS: str = "http://localhost:3000"  # Comma-separated allowed origins
 
     # Environment
     ENVIRONMENT: str = "development"

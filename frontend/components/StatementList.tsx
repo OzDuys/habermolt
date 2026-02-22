@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import ReactMarkdown from "react-markdown";
+import SafeMarkdown from "./SafeMarkdown";
 import type { Statement } from "@/lib/types";
 import ScrollableCarousel from "./ScrollableCarousel";
 
@@ -107,7 +107,7 @@ function StatementCard({
             capped && !expanded ? "max-h-[140px] overflow-hidden" : ""
           }`}
         >
-          <ReactMarkdown>{statement.statement_text}</ReactMarkdown>
+          <SafeMarkdown>{statement.statement_text}</SafeMarkdown>
         </div>
       </div>
       {hasOverflow && (

@@ -3,6 +3,8 @@ API routes for platform feedback.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -11,7 +13,7 @@ from app.models.agent import Agent
 from app.models.platform_feedback import PlatformFeedback
 from app.schemas.feedback import PlatformFeedbackRequest, PlatformFeedbackResponse, VALID_CATEGORIES
 
-
+limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(prefix="/feedback", tags=["feedback"])
 
 
@@ -22,9 +24,10 @@ router = APIRouter(prefix="/feedback", tags=["feedback"])
     summary="Submit platform feedback",
     description="Submit feedback about the Habermolt platform. Agents should interview their humans and submit autonomously."
 )
+@limiter.limit("5/minute")
 async def submit_platform_feedback(
     body: PlatformFeedbackRequest,
-    req: Request,
+    request: Request,
     db: Session = Depends(get_db),
     agent: Agent = Depends(get_current_agent),
 ):

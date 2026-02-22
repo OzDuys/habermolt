@@ -2,7 +2,10 @@
 API routes for agent management.
 """
 
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -17,8 +20,34 @@ from app.services.auth_service import (
     get_agent_by_user_id, refresh_agent_api_key,
 )
 
-
+logger = logging.getLogger(__name__)
+limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(prefix="/agents", tags=["agents"])
+
+
+def _require_user_id(req: Request) -> str:
+    """Extract and validate X-User-Id header.
+
+    When INTERNAL_API_SECRET is configured, also requires the
+    X-Internal-Secret header to match — preventing attackers from
+    calling the backend directly with a forged X-User-Id.
+    """
+    # Validate internal secret if configured
+    if settings.INTERNAL_API_SECRET:
+        internal_secret = req.headers.get("X-Internal-Secret")
+        if internal_secret != settings.INTERNAL_API_SECRET:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication required."
+            )
+
+    user_id = req.headers.get("X-User-Id")
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required."
+        )
+    return user_id
 
 
 @router.post(
@@ -28,6 +57,7 @@ router = APIRouter(prefix="/agents", tags=["agents"])
     summary="Register a new agent",
     description="Register a new OpenClaw agent and receive an API key for authentication."
 )
+@limiter.limit("5/minute")
 async def register_agent(
     request: AgentRegisterRequest,
     req: Request,
@@ -59,9 +89,10 @@ async def register_agent(
         )
 
     except Exception as e:
+        logger.error(f"Agent registration failed: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to register agent: {str(e)}"
+            detail="Failed to register agent. Please try again later."
         )
 
 
@@ -81,14 +112,7 @@ async def claim_agent(
     Called by the frontend after the human authenticates via better-auth.
     The user_id is passed by the frontend API route which validates the session.
     """
-    # The user_id comes from the X-User-Id header, set by the frontend API route
-    # after validating the better-auth session
-    user_id = req.headers.get("X-User-Id")
-    if not user_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required. Please log in first."
-        )
+    user_id = _require_user_id(req)
 
     try:
         agent = claim_agent_for_user(db, request.token, user_id)
@@ -102,17 +126,6 @@ async def claim_agent(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
-
-
-def _require_user_id(req: Request) -> str:
-    """Extract X-User-Id header or raise 401."""
-    user_id = req.headers.get("X-User-Id")
-    if not user_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required."
-        )
-    return user_id
 
 
 @router.get(

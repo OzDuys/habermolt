@@ -14,7 +14,7 @@ from app.config import settings
 engine = create_engine(
     settings.DATABASE_URL,
     pool_pre_ping=True,  # Verify connections before using them
-    echo=settings.ENVIRONMENT == "development",  # Log SQL in development
+    echo=False,  # Disabled — SQL logging can leak sensitive data
 )
 
 # Session factory

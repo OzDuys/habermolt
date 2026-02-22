@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 
 const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:8000";
+const INTERNAL_API_SECRET = process.env.INTERNAL_API_SECRET || "";
 
 export async function GET() {
   const session = await auth.api.getSession({
@@ -17,7 +18,10 @@ export async function GET() {
   }
 
   const backendResponse = await fetch(`${BACKEND_URL}/api/agents/me`, {
-    headers: { "X-User-Id": session.user.id },
+    headers: {
+      "X-User-Id": session.user.id,
+      "X-Internal-Secret": INTERNAL_API_SECRET,
+    },
   });
 
   const data = await backendResponse.json();

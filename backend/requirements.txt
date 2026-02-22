@@ -12,3 +12,4 @@ httpx==0.26.0
 numpy
 openai
 pgvector
+slowapi

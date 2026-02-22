@@ -117,7 +117,7 @@ class ContinuousDeliberationService:
         if creator_opinion:
             creator_context = (
                 f"\nOne participant has already expressed this view:\n"
-                f"\"{creator_opinion}\"\n\n"
+                f"<opinion>{creator_opinion}</opinion>\n\n"
             )
 
         prompt = (
