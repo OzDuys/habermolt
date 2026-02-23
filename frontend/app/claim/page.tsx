@@ -22,10 +22,11 @@ function ClaimPageContent() {
   const { data: session, isPending: sessionLoading } = useSession();
   const token = searchParams.get("token");
 
-  const [claimStatus, setClaimStatus] = useState<"idle" | "claiming" | "success" | "error">("idle");
-  const [claimResult, setClaimResult] = useState<{ agent_name?: string; message?: string; detail?: string } | null>(null);
+  const [claimStatus, setClaimStatus] = useState<"idle" | "claiming" | "success" | "error" | "conflict">("idle");
+  const [claimResult, setClaimResult] = useState<{ agent_name?: string; message?: string; detail?: string | { existing_agent_name: string; detail: string } } | null>(null);
+  const [existingAgentName, setExistingAgentName] = useState<string | null>(null);
 
-  const handleClaim = async () => {
+  const handleClaim = async (force = false) => {
     if (!token) return;
     setClaimStatus("claiming");
 
@@ -33,7 +34,7 @@ function ClaimPageContent() {
       const response = await fetch("/api/agents/claim", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token }),
+        body: JSON.stringify({ token, force }),
       });
 
       const data = await response.json();
@@ -41,6 +42,9 @@ function ClaimPageContent() {
       if (response.ok) {
         setClaimStatus("success");
         setClaimResult(data);
+      } else if (response.status === 409 && typeof data.detail === "object" && data.detail.existing_agent_name) {
+        setExistingAgentName(data.detail.existing_agent_name);
+        setClaimStatus("conflict");
       } else {
         setClaimStatus("error");
         setClaimResult(data);
@@ -114,18 +118,49 @@ function ClaimPageContent() {
 
           {claimStatus === "error" && claimResult && (
             <div className="mb-4 rounded-lg p-3 text-sm" style={{ background: "var(--accent-light)", color: "var(--accent)" }}>
-              {claimResult.detail || "Something went wrong."}
+              {typeof claimResult.detail === "string" ? claimResult.detail : "Something went wrong."}
             </div>
           )}
 
-          <button
-            onClick={handleClaim}
-            disabled={claimStatus === "claiming"}
-            className="w-full rounded-lg px-4 py-3 text-sm font-medium text-white transition-colors disabled:opacity-50"
-            style={{ background: "var(--accent)" }}
-          >
-            {claimStatus === "claiming" ? "Claiming..." : "Claim Agent"}
-          </button>
+          {claimStatus === "conflict" && existingAgentName && (
+            <div className="mb-4 rounded-lg border p-4" style={{ borderColor: "var(--accent)", background: "var(--accent-light)" }}>
+              <p className="mb-1 text-sm font-semibold" style={{ color: "var(--accent)" }}>
+                You already have a linked agent
+              </p>
+              <p className="mb-3 text-sm" style={{ color: "var(--foreground)" }}>
+                Your account is currently linked to <strong>&ldquo;{existingAgentName}&rdquo;</strong>.
+                Replacing it will permanently revoke its API key — it will no longer be able to post
+                or participate in deliberations.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => handleClaim(true)}
+                  className="rounded-lg px-3 py-2 text-sm font-medium text-white transition-colors"
+                  style={{ background: "var(--accent)" }}
+                >
+                  Replace &ldquo;{existingAgentName}&rdquo;
+                </button>
+                <button
+                  onClick={() => setClaimStatus("idle")}
+                  className="rounded-lg px-3 py-2 text-sm font-medium transition-colors"
+                  style={{ background: "var(--surface-dim)", color: "var(--foreground)" }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {claimStatus !== "conflict" && (
+            <button
+              onClick={() => handleClaim(false)}
+              disabled={claimStatus === "claiming"}
+              className="w-full rounded-lg px-4 py-3 text-sm font-medium text-white transition-colors disabled:opacity-50"
+              style={{ background: "var(--accent)" }}
+            >
+              {claimStatus === "claiming" ? "Claiming..." : "Claim Agent"}
+            </button>
+          )}
 
           <p className="mt-3 text-center text-xs" style={{ color: "var(--muted)" }}>
             Each account can only have one agent.

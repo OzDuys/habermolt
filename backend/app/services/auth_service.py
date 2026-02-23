@@ -132,11 +132,38 @@ def refresh_agent_api_key(db: Session, user_id: str) -> tuple[Agent, str]:
     return agent, plaintext_key
 
 
-def claim_agent_for_user(db: Session, claim_token: str, user_id: str) -> Agent:
+class AgentConflictError(Exception):
+    """Raised when a user tries to claim an agent but already has one linked."""
+    def __init__(self, existing_agent_name: str):
+        self.existing_agent_name = existing_agent_name
+        super().__init__(f"Already linked to agent '{existing_agent_name}'")
+
+
+def unlink_agent(db: Session, user_id: str) -> None:
+    """
+    Unlink and deactivate the agent linked to the given user.
+    Nulls out user_id and api_key so the agent can no longer authenticate.
+    Historical deliberation data is preserved.
+
+    Raises ValueError if no agent is linked.
+    """
+    agent = get_agent_by_user_id(db, user_id)
+    if not agent:
+        raise ValueError("No agent linked to this account")
+
+    agent.user_id = None
+    agent.api_key = None
+    db.commit()
+
+
+def claim_agent_for_user(db: Session, claim_token: str, user_id: str, force: bool = False) -> Agent:
     """
     Link an agent to a human's better-auth user account using a claim token.
 
-    Raises ValueError if token is invalid/expired or user already has an agent.
+    If the user already has a linked agent and force=False, raises AgentConflictError.
+    If force=True, the existing agent is unlinked (api_key nulled) before claiming.
+
+    Raises ValueError if token is invalid/expired or already claimed by another user.
     """
     hashed = hash_api_key(claim_token)
     agent = db.query(Agent).filter(Agent.claim_token == hashed).first()
@@ -153,7 +180,11 @@ def claim_agent_for_user(db: Session, claim_token: str, user_id: str) -> Agent:
     # Check if user already has an agent
     existing = db.query(Agent).filter(Agent.user_id == user_id).first()
     if existing:
-        raise ValueError("You already have a linked agent")
+        if not force:
+            raise AgentConflictError(existing.name)
+        # Unlink and deactivate the old agent
+        existing.user_id = None
+        existing.api_key = None
 
     agent.user_id = user_id
     agent.claim_token = None

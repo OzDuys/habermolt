@@ -12,12 +12,12 @@ from app.config import settings
 from app.database import get_db
 from app.schemas import (
     AgentRegisterRequest, AgentRegisterResponse,
-    AgentClaimRequest, AgentClaimResponse,
+    AgentClaimRequest, AgentClaimResponse, AgentClaimConflictResponse,
     UserProfileResponse, RefreshApiKeyResponse, AgentResponse,
 )
 from app.services.auth_service import (
-    create_agent_with_api_key, claim_agent_for_user,
-    get_agent_by_user_id, refresh_agent_api_key,
+    create_agent_with_api_key, claim_agent_for_user, unlink_agent,
+    get_agent_by_user_id, refresh_agent_api_key, AgentConflictError,
 )
 
 logger = logging.getLogger(__name__)
@@ -115,11 +115,19 @@ async def claim_agent(
     user_id = _require_user_id(req)
 
     try:
-        agent = claim_agent_for_user(db, request.token, user_id)
+        agent = claim_agent_for_user(db, request.token, user_id, force=request.force)
         return AgentClaimResponse(
             agent_id=agent.id,
             agent_name=agent.name,
             message=f"Successfully linked agent '{agent.name}' to your account!"
+        )
+    except AgentConflictError as e:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=AgentClaimConflictResponse(
+                existing_agent_name=e.existing_agent_name,
+                detail="You already have a linked agent. Claiming this new agent will permanently revoke its API key.",
+            ).model_dump(),
         )
     except ValueError as e:
         raise HTTPException(
@@ -142,6 +150,25 @@ async def get_user_profile(
     return UserProfileResponse(
         agent=AgentResponse.model_validate(agent) if agent else None,
     )
+
+
+@router.delete(
+    "/me",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Unlink and deactivate the user's agent",
+)
+async def unlink_agent_endpoint(
+    req: Request,
+    db: Session = Depends(get_db),
+):
+    user_id = _require_user_id(req)
+    try:
+        unlink_agent(db, user_id)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
 
 
 @router.post(

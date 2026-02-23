@@ -5,6 +5,34 @@ import { headers } from "next/headers";
 const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:8000";
 const INTERNAL_API_SECRET = process.env.INTERNAL_API_SECRET || "";
 
+export async function DELETE() {
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  });
+
+  if (!session?.user?.id) {
+    return NextResponse.json(
+      { detail: "Authentication required." },
+      { status: 401 }
+    );
+  }
+
+  const backendResponse = await fetch(`${BACKEND_URL}/api/agents/me`, {
+    method: "DELETE",
+    headers: {
+      "X-User-Id": session.user.id,
+      "X-Internal-Secret": INTERNAL_API_SECRET,
+    },
+  });
+
+  if (backendResponse.status === 204) {
+    return new NextResponse(null, { status: 204 });
+  }
+
+  const data = await backendResponse.json();
+  return NextResponse.json(data, { status: backendResponse.status });
+}
+
 export async function GET() {
   const session = await auth.api.getSession({
     headers: await headers(),

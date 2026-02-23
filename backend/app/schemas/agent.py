@@ -29,6 +29,13 @@ class AgentRegisterResponse(BaseModel):
 class AgentClaimRequest(BaseModel):
     """Request schema for claiming an agent."""
     token: str = Field(..., description="The claim token from registration")
+    force: bool = Field(False, description="If true, unlink and deactivate existing agent before claiming")
+
+
+class AgentClaimConflictResponse(BaseModel):
+    """Response when user already has a linked agent (HTTP 409)."""
+    existing_agent_name: str
+    detail: str
 
 
 class AgentClaimResponse(BaseModel):
