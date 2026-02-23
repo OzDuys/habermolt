@@ -20,6 +20,16 @@ function LobsterNetwork() {
     let w = canvas.offsetWidth;
     let h = canvas.offsetHeight;
 
+    // ── Load PNG symbols ──
+    let humanImg: HTMLImageElement | null = null;
+    let lobsterImg: HTMLImageElement | null = null;
+    const humanImage = new window.Image();
+    humanImage.onload = () => { humanImg = humanImage; };
+    humanImage.src = "/man_symbol.png";
+    const lobsterImage = new window.Image();
+    lobsterImage.onload = () => { lobsterImg = lobsterImage; };
+    lobsterImage.src = "/lobster_symbol.png";
+
     const resize = () => {
       const dpr = window.devicePixelRatio || 1;
       w = canvas.offsetWidth;
@@ -41,102 +51,19 @@ function LobsterNetwork() {
     };
     canvas.addEventListener("mouseleave", handleMouseLeave);
 
-    // ── Draw helpers — hand-drawn grey style, white fill ──
-    const STROKE = "#9c9690";
-    const FILL = "#ffffff";
-    const LW = 2.5; // base line width
-
-    // Chibi human: big round head, boxy body, stubby legs, oval eyes
+    // ── Draw PNG symbols — preserve natural aspect ratio ──
     const drawHuman = (x: number, y: number, s: number) => {
-      ctx.save();
-      ctx.translate(x, y);
-      ctx.scale(s, s);
-      ctx.strokeStyle = STROKE; ctx.lineWidth = LW;
-      ctx.lineCap = "round"; ctx.lineJoin = "round";
-
-      // head (large circle, white fill)
-      ctx.beginPath(); ctx.arc(0, -13, 11, 0, Math.PI * 2);
-      ctx.fillStyle = FILL; ctx.fill(); ctx.stroke();
-
-      // eyes (filled oval)
-      ctx.fillStyle = STROKE;
-      ctx.beginPath(); ctx.ellipse(-4, -13, 2, 2.6, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.ellipse(4, -13, 2, 2.6, 0, 0, Math.PI * 2); ctx.fill();
-
-      // body (rounded rect, white fill)
-      const bx = -7, by = -1, bw = 14, bh = 15, br = 4;
-      ctx.beginPath();
-      ctx.moveTo(bx + br, by);
-      ctx.lineTo(bx + bw - br, by); ctx.quadraticCurveTo(bx + bw, by, bx + bw, by + br);
-      ctx.lineTo(bx + bw, by + bh - br); ctx.quadraticCurveTo(bx + bw, by + bh, bx + bw - br, by + bh);
-      ctx.lineTo(bx + br, by + bh); ctx.quadraticCurveTo(bx, by + bh, bx, by + bh - br);
-      ctx.lineTo(bx, by + br); ctx.quadraticCurveTo(bx, by, bx + br, by);
-      ctx.closePath();
-      ctx.fillStyle = FILL; ctx.fill(); ctx.stroke();
-
-      // left leg
-      ctx.beginPath();
-      ctx.moveTo(-4, 14); ctx.lineTo(-4, 22); ctx.lineTo(-8, 22);
-      ctx.fillStyle = FILL; ctx.fill(); ctx.stroke();
-      // right leg
-      ctx.beginPath();
-      ctx.moveTo(4, 14); ctx.lineTo(4, 22); ctx.lineTo(8, 22);
-      ctx.fillStyle = FILL; ctx.fill(); ctx.stroke();
-
-      ctx.restore();
+      if (!humanImg) return;
+      const ih = 38 * s;
+      const iw = ih * (humanImg.naturalWidth / humanImg.naturalHeight);
+      ctx.drawImage(humanImg, x - iw * 0.5, y - ih * 0.5, iw, ih);
     };
 
-    // Lobster: oval body, big U-claws, antennae, legs, fan tail — same grey style
     const drawLobster = (x: number, y: number, s: number) => {
-      ctx.save();
-      ctx.translate(x, y);
-      ctx.scale(s, s);
-      ctx.strokeStyle = STROKE; ctx.lineWidth = LW;
-      ctx.lineCap = "round"; ctx.lineJoin = "round";
-
-      // carapace (oval body, white fill)
-      ctx.beginPath(); ctx.ellipse(0, -2, 9, 13, 0, 0, Math.PI * 2);
-      ctx.fillStyle = FILL; ctx.fill(); ctx.stroke();
-
-      // eyes
-      ctx.fillStyle = STROKE;
-      ctx.beginPath(); ctx.ellipse(-3, -11, 1.8, 2, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.ellipse(3, -11, 1.8, 2, 0, 0, Math.PI * 2); ctx.fill();
-
-      // antennae
-      ctx.lineWidth = LW * 0.7;
-      ctx.beginPath(); ctx.moveTo(-4, -14); ctx.lineTo(-10, -24); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(4, -14); ctx.lineTo(10, -24); ctx.stroke();
-
-      // left claw arm + U-pincer
-      ctx.lineWidth = LW;
-      ctx.beginPath(); ctx.moveTo(-8, -6); ctx.lineTo(-17, -12); ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(-20, -10, 5, Math.PI * 0.1, Math.PI * 1.1);
-      ctx.fillStyle = FILL; ctx.fill(); ctx.stroke();
-
-      // right claw arm + U-pincer
-      ctx.beginPath(); ctx.moveTo(8, -6); ctx.lineTo(17, -12); ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(20, -10, 5, Math.PI * 0, Math.PI * 0.9);
-      ctx.fillStyle = FILL; ctx.fill(); ctx.stroke();
-
-      // walking legs (3 pairs, thin)
-      ctx.lineWidth = LW * 0.65;
-      [[-7,-2,-14,5],[-7,2,-14,9],[-7,6,-13,13],[7,-2,14,5],[7,2,14,9],[7,6,13,13]].forEach(([x1,y1,x2,y2]) => {
-        ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
-      });
-
-      // tail fan (3 rounded lobes)
-      ctx.lineWidth = LW;
-      ctx.beginPath(); ctx.ellipse(-5, 14, 4, 3, -0.4, 0, Math.PI * 2);
-      ctx.fillStyle = FILL; ctx.fill(); ctx.stroke();
-      ctx.beginPath(); ctx.ellipse(0, 16, 4, 3, 0, 0, Math.PI * 2);
-      ctx.fillStyle = FILL; ctx.fill(); ctx.stroke();
-      ctx.beginPath(); ctx.ellipse(5, 14, 4, 3, 0.4, 0, Math.PI * 2);
-      ctx.fillStyle = FILL; ctx.fill(); ctx.stroke();
-
-      ctx.restore();
+      if (!lobsterImg) return;
+      const ih = 44 * s;
+      const iw = ih * (lobsterImg.naturalWidth / lobsterImg.naturalHeight);
+      ctx.drawImage(lobsterImg, x - iw * 0.5, y - ih * 0.52, iw, ih);
     };
 
     // ── Node setup — scattered across canvas, avoiding centre ──
@@ -153,7 +80,7 @@ function LobsterNetwork() {
     const getExZone = () => ({
       cx: w / 2,
       cy: h / 2,
-      r: Math.min(w * 0.38, h * 0.38, 340),
+      r: Math.min(w * 0.44, h * 0.42),
     });
 
     const rebuildHomes = () => {
@@ -242,18 +169,17 @@ function LobsterNetwork() {
         n.y = Math.max(28, Math.min(h - 28, n.y));
       });
 
-      // Draw ALL edges — full network, distance-based opacity
-      const maxDist = Math.sqrt(w*w + h*h) * 0.5;
+      // Draw neighbour edges — connect only to nearby nodes
+      const avgSpacing = Math.sqrt((w * h) / Math.max(nodes.length, 1));
+      const maxEdgeDist = avgSpacing * 1.6;
       for (let i = 0; i < nodes.length; i++) {
         for (let j = i + 1; j < nodes.length; j++) {
           const na = nodes[i], nb = nodes[j];
           const ddx = na.x - nb.x, ddy = na.y - nb.y;
           const dist = Math.sqrt(ddx*ddx + ddy*ddy);
-          const falloff = Math.max(0, 1 - dist / maxDist);
+          if (dist > maxEdgeDist) continue;
           const isCross = na.t !== nb.t;
-          const alpha = falloff * falloff * (isCross ? 0.35 : 0.18);
-          if (alpha < 0.01) continue;
-          ctx.strokeStyle = isCross ? `rgba(160,130,90,${alpha})` : `rgba(140,130,120,${alpha})`;
+          ctx.strokeStyle = isCross ? `rgba(160,130,90,0.38)` : `rgba(140,130,120,0.22)`;
           ctx.lineWidth = 0.8;
           ctx.beginPath();
           ctx.moveTo(na.x, na.y);
@@ -551,14 +477,14 @@ export default function HomePage() {
           )}
 
           {/* Evolution image — flush to bottom */}
-          <div className="mx-auto mt-12 max-w-2xl" style={{ paddingBottom: "2px" }}>
+          <div className="mx-auto mt-12 max-w-lg" style={{ marginBottom: "1px" }}>
             <Image
               src="/evolution.png"
               alt="Evolution of Habermolt"
-              width={800}
-              height={250}
+              width={400}
+              height={125}
               className="mx-auto block"
-              style={{ maxWidth: "100%", display: "block", marginBottom: 0 }}
+              style={{ maxWidth: "100%", display: "block" }}
             />
           </div>
         </div>
