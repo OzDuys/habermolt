@@ -211,7 +211,7 @@ function AgentDrawer({
           <div>
             <h2 style={{ fontSize: 20, fontWeight: 800, color: "#1a1a1a", margin: 0 }}>{agent.agent_name}</h2>
             {agent.human_name && (
-              <span style={{ fontSize: 12, color: "#999" }}>representing {agent.human_name}</span>
+              <span style={{ fontSize: 12, color: "#666" }}>representing {agent.human_name}</span>
             )}
           </div>
         </div>
@@ -314,6 +314,7 @@ const ACTIVITY_ICONS: Record<string, { color: string; icon: string }> = {
 };
 
 function InlineActivityFeed({ data }: { data: DeliberationDetail }) {
+  const [expanded, setExpanded] = useState(false);
   const items = useMemo(() => {
     const activities: { id: string; type: string; agent?: string; desc: string; ts: Date }[] = [];
     const { deliberation, opinions, statements, rankings, human_feedback } = data;
@@ -355,42 +356,69 @@ function InlineActivityFeed({ data }: { data: DeliberationDetail }) {
 
   return (
     <div style={{ marginTop: 40 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, justifyContent: "center" }}>
+      <motion.button
+        onClick={() => setExpanded(!expanded)}
+        whileHover={{ scale: 1.01 }}
+        whileTap={{ scale: 0.99 }}
+        style={{
+          display: "flex", alignItems: "center", gap: 8, justifyContent: "center",
+          width: "100%", padding: "14px 20px", borderRadius: 14,
+          background: "rgba(255,255,255,0.5)", border: "1.5px solid rgba(0,0,0,0.05)",
+          cursor: "pointer", marginBottom: expanded ? 16 : 0,
+        }}
+      >
         {isActive && (
           <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#1a8a50", animation: "pulse 1.5s infinite" }} />
         )}
         <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 3, color: "#bbb", textTransform: "uppercase" }}>
           {isActive ? "Live Activity" : "Activity Log"}
         </span>
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {items.map((item, i) => {
-          const s = ACTIVITY_ICONS[item.type] || ACTIVITY_ICONS.system;
-          return (
-            <motion.div key={item.id}
-              initial={{ opacity: 0, y: 10 }} whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: "-20px" }} transition={{ delay: i * 0.02 }}
-              style={{
-                display: "flex", alignItems: "center", gap: 12, padding: "12px 14px",
-                borderRadius: 12, background: "rgba(255,255,255,0.5)", border: "1.5px solid rgba(0,0,0,0.04)",
-              }}
-            >
-              <div style={{
-                width: 28, height: 28, borderRadius: "50%", display: "flex",
-                alignItems: "center", justifyContent: "center", fontSize: 13,
-                background: `${s.color}10`, flexShrink: 0,
-              }}>{s.icon}</div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 12, color: "#444", lineHeight: 1.4 }}>
-                  {item.agent && <span style={{ fontWeight: 700 }}>{item.agent} </span>}
-                  {item.desc}
-                </div>
-                <div style={{ fontSize: 10, color: "#ccc", marginTop: 1 }}>{timeAgo(item.ts)}</div>
-              </div>
-            </motion.div>
-          );
-        })}
-      </div>
+        <span style={{ fontSize: 11, color: "#ccc" }}>({items.length})</span>
+        <motion.span
+          animate={{ rotate: expanded ? 180 : 0 }}
+          style={{ fontSize: 10, color: "#bbb", marginLeft: 4 }}
+        >▼</motion.span>
+      </motion.button>
+      <AnimatePresence>
+        {expanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            style={{ overflow: "hidden" }}
+          >
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {items.map((item, i) => {
+                const s = ACTIVITY_ICONS[item.type] || ACTIVITY_ICONS.system;
+                return (
+                  <motion.div key={item.id}
+                    initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.02 }}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 12, padding: "12px 14px",
+                      borderRadius: 12, background: "rgba(255,255,255,0.5)", border: "1.5px solid rgba(0,0,0,0.04)",
+                    }}
+                  >
+                    <div style={{
+                      width: 28, height: 28, borderRadius: "50%", display: "flex",
+                      alignItems: "center", justifyContent: "center", fontSize: 13,
+                      background: `${s.color}10`, flexShrink: 0,
+                    }}>{s.icon}</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12, color: "#444", lineHeight: 1.4 }}>
+                        {item.agent && <span style={{ fontWeight: 700 }}>{item.agent} </span>}
+                        {item.desc}
+                      </div>
+                      <div style={{ fontSize: 10, color: "#ccc", marginTop: 1 }}>{timeAgo(item.ts)}</div>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -442,6 +470,7 @@ export default function LiveDeliberationPage() {
     container.addEventListener("scroll", onScroll, { passive: true });
     return () => container.removeEventListener("scroll", onScroll);
   }, [loading]);
+
 
   const scrollToTab = (tabId: TabId) => {
     const container = scrollContainerRef.current;
@@ -503,6 +532,12 @@ export default function LiveDeliberationPage() {
     return m;
   }, [data]);
 
+  const agentNameMap = useMemo(() => {
+    const m: Record<string, string> = {};
+    agents.forEach((a) => { m[a.agent_id] = a.agent_name; });
+    return m;
+  }, [agents]);
+
   if (loading) {
     return (
       <div style={{ position: "fixed", inset: 0, zIndex: 150, background: "#faf7f0", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -554,7 +589,11 @@ export default function LiveDeliberationPage() {
 
           <StagePill stage={d.stage} />
 
-          <span style={{ fontSize: 11, color: "#aaa" }}>{d.num_citizens} agents</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 11, color: "#777" }}>
+            <span>{d.num_citizens} agents</span>
+            <span style={{ color: "#ccc" }}>·</span>
+            <span>{new Date(d.created_at).toLocaleDateString()}</span>
+          </div>
         </div>
 
         {/* ─── Snap scroll container ─── */}
@@ -651,9 +690,9 @@ export default function LiveDeliberationPage() {
           {/* ═══ AGENTS ═══ */}
           <div style={{
             width: "100%", minHeight: "100%", scrollSnapAlign: "start",
-            padding: "32px 16px 48px", position: "relative",
+            padding: "32px 24px 48px", position: "relative",
           }}>
-          <div style={{ maxWidth: 800, margin: "0 auto" }}>
+          <div style={{ maxWidth: 1200, margin: "0 auto" }}>
             <div style={{ textAlign: "center", marginBottom: 28 }}>
               <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 3, color: "#bbb", textTransform: "uppercase" }}>
                 {agents.length} Participants
@@ -686,14 +725,14 @@ export default function LiveDeliberationPage() {
                         {a.agent_name}
                       </div>
                       {a.human_name && (
-                        <div style={{ fontSize: 10, color: "#aaa" }}>for {a.human_name}</div>
+                        <div style={{ fontSize: 10, color: "#777" }}>for {a.human_name}</div>
                       )}
                     </div>
                   </div>
 
                   {a.opinion && (
                     <p style={{
-                      fontSize: 12, lineHeight: 1.6, color: "#777", margin: "0 0 12px",
+                      fontSize: 12, lineHeight: 1.6, color: "#555", margin: "0 0 12px",
                       overflow: "hidden", display: "-webkit-box",
                       WebkitLineClamp: 3, WebkitBoxOrient: "vertical" as const,
                     }}>&ldquo;{a.opinion}&rdquo;</p>
@@ -706,7 +745,7 @@ export default function LiveDeliberationPage() {
                           display: "flex", alignItems: "center", gap: 6, padding: "4px 8px",
                           borderRadius: 6, background: ri === 0 ? `${a.color}06` : "rgba(0,0,0,0.015)",
                           border: ri === 0 ? `1px solid ${a.color}14` : "1px solid transparent",
-                          fontSize: 10, color: ri === 0 ? a.color : "#999",
+                          fontSize: 10, color: ri === 0 ? a.color : "#555",
                         }}>
                           <span style={{ width: 16 }}>{ri === 0 ? "🥇" : ri === 1 ? "🥈" : "🥉"}</span>
                           <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -728,7 +767,7 @@ export default function LiveDeliberationPage() {
             display: "flex", flexDirection: "column", alignItems: "center",
             padding: "32px 20px 80px", position: "relative",
           }}>
-            <div style={{ width: "100%", maxWidth: 520 }}>
+            <div style={{ width: "100%", maxWidth: 960 }}>
               {/* Statements */}
               <div style={{ textAlign: "center", marginBottom: 28 }}>
                 <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 3, color: "#bbb", textTransform: "uppercase" }}>
@@ -736,16 +775,26 @@ export default function LiveDeliberationPage() {
                 </span>
               </div>
 
-              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div
+                className="horizontal-scroll-container"
+                style={{
+                  display: "flex", gap: 14,
+                  overflowX: "auto",
+                  paddingBottom: 16,
+                  scrollSnapType: "x mandatory",
+                }}
+              >
                 {data.statements
                   .sort((a, b) => (a.social_ranking || 99) - (b.social_ranking || 99))
                   .map((s, i) => {
                     const isWinner = s.social_ranking === 1;
                     return (
                       <motion.div key={s.id}
-                        initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }}
-                        viewport={{ once: true }} transition={{ delay: i * 0.04 }}
+                        initial={{ opacity: 0, x: 30 }} whileInView={{ opacity: 1, x: 0 }}
+                        viewport={{ once: true }} transition={{ delay: i * 0.03 }}
                         style={{
+                          minWidth: 300, maxWidth: 360, flexShrink: 0,
+                          scrollSnapAlign: "start",
                           padding: "18px 20px", borderRadius: 16,
                           background: isWinner ? "rgba(200,74,32,0.04)" : "rgba(255,255,255,0.6)",
                           border: `1.5px solid ${isWinner ? "rgba(200,74,32,0.15)" : "rgba(0,0,0,0.04)"}`,
@@ -756,8 +805,8 @@ export default function LiveDeliberationPage() {
                           {isWinner && <span style={{ fontSize: 14 }}>🏆</span>}
                           {s.social_ranking != null && (
                             <span style={{
-                              fontSize: 10, color: isWinner ? "#c84a20" : "#999", padding: "1px 6px",
-                              borderRadius: 4, background: isWinner ? "rgba(200,74,32,0.08)" : "rgba(0,0,0,0.03)",
+                              fontSize: 10, color: isWinner ? "#c84a20" : "#666", padding: "1px 6px",
+                              borderRadius: 4, background: isWinner ? "rgba(200,74,32,0.08)" : "rgba(0,0,0,0.04)",
                               fontWeight: 700,
                             }}>#{s.social_ranking}</span>
                           )}
@@ -768,17 +817,24 @@ export default function LiveDeliberationPage() {
                               letterSpacing: 0.5, textTransform: "uppercase",
                             }}>seed</span>
                           )}
-                          <span style={{ fontSize: 9, color: "#ccc", marginLeft: "auto" }}>Round {s.round_number}</span>
+                          {s.contributed_by_agent_id && agentNameMap[s.contributed_by_agent_id] && (
+                            <span style={{ fontSize: 10, color: "#888", marginLeft: "auto" }}>
+                              by {agentNameMap[s.contributed_by_agent_id]}
+                            </span>
+                          )}
                         </div>
                         {s.title && (
-                          <div style={{ fontSize: 14, fontWeight: 700, color: "#333", marginBottom: 6 }}>{s.title}</div>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a1a", marginBottom: 6 }}>{s.title}</div>
                         )}
-                        <p style={{ fontSize: 12, lineHeight: 1.7, color: "#666", margin: 0 }}>
+                        <p style={{ fontSize: 13, lineHeight: 1.7, color: "#333", margin: 0 }}>
                           {s.statement_text}
                         </p>
                       </motion.div>
                     );
                   })}
+              </div>
+              <div style={{ textAlign: "center", marginTop: 6 }}>
+                <span style={{ fontSize: 10, color: "#ccc" }}>← swipe to browse →</span>
               </div>
 
               {/* Embeddings Visualization */}
@@ -851,9 +907,13 @@ export default function LiveDeliberationPage() {
 
       <style>{`
         @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
-        /* Hide horizontal scrollbar */
+        /* Hide scrollbars globally */
         div::-webkit-scrollbar { display: none; }
         div { scrollbar-width: none; }
+        /* Horizontal scroll container: vertical wheel → horizontal scroll */
+        .horizontal-scroll-container {
+          scroll-behavior: smooth;
+        }
       `}</style>
     </>
   );
