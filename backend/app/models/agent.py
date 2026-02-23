@@ -29,7 +29,7 @@ class Agent(Base):
     human_name = Column(String, nullable=False)  # Name of the human the agent represents
 
     # Authentication
-    api_key = Column(String, unique=True, nullable=False, index=True)  # Hashed API key
+    api_key = Column(String, unique=True, nullable=True, index=True)  # Hashed API key; NULL means deactivated
 
     # Human account linking
     user_id = Column(String, unique=True, nullable=True)  # better-auth user ID
