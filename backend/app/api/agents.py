@@ -59,8 +59,8 @@ def _require_user_id(req: Request) -> str:
 )
 @limiter.limit("5/minute")
 async def register_agent(
-    request: AgentRegisterRequest,
-    req: Request,
+    request: Request,
+    body: AgentRegisterRequest,
     db: Session = Depends(get_db)
 ):
     """
@@ -73,8 +73,8 @@ async def register_agent(
     try:
         agent, api_key, claim_token = create_agent_with_api_key(
             db=db,
-            name=request.name,
-            human_name=request.human_name
+            name=body.name,
+            human_name=body.human_name
         )
 
         claim_url = f"{settings.FRONTEND_URL}/claim?token={claim_token}"
