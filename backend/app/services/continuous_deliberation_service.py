@@ -140,6 +140,7 @@ class ContinuousDeliberationService:
 
         max_attempts = 3
         for attempt in range(max_attempts):
+            client.set_trace_context(trace_type="seed_opinion")
             response = await asyncio.to_thread(
                 client.sample_text, prompt, temperature=0.9
             )
@@ -417,6 +418,8 @@ class ContinuousDeliberationService:
                 opinion.opinion_text,
                 current_ranking_with_text,
                 new_statement.statement_text,
+                deliberation_id=deliberation.id,
+                agent_id=ranking.agent_id,
             )
 
             # Insert into ranking at predicted position

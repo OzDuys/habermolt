@@ -159,6 +159,7 @@ class StatementService:
         opinions: list[str],
         previous_winner: Optional[str] = None,
         critiques: Optional[list[str]] = None,
+        deliberation_id=None,
     ) -> Tuple[str, str, str]:
         """Generate one candidate statement with retries. Returns (statement, title, reasoning)."""
         # Shuffle opinions (and critiques) to avoid ordering bias
@@ -175,6 +176,12 @@ class StatementService:
             user_prompt = _build_opinion_only_prompt(question, shuffled_opinions)
 
         seed = random.randint(0, 2**31 - 1)
+
+        # Set trace context for monitoring
+        client.set_trace_context(
+            trace_type="statement_generation",
+            deliberation_id=deliberation_id,
+        )
 
         statement, title, reasoning = "", "", ""
         for attempt in range(self.num_retries):
@@ -218,6 +225,7 @@ class StatementService:
             stmt, title, reasoning = await asyncio.to_thread(
                 self._generate_single_statement,
                 client, deliberation.question, opinions, previous_winner, critiques,
+                deliberation.id,
             )
             return (stmt, title, reasoning, model_name)
 
@@ -283,6 +291,10 @@ class StatementService:
         )
 
         try:
+            client.set_trace_context(
+                trace_type="title_differentiation",
+                deliberation_id=statements[0].deliberation_id if statements else None,
+            )
             response = await asyncio.to_thread(
                 client.sample_text, prompt, temperature=0.3
             )

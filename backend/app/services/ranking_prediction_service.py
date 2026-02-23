@@ -73,6 +73,8 @@ class RankingPredictionService:
         opinion: str,
         current_ranking: List[dict],
         new_statement: str,
+        deliberation_id=None,
+        agent_id=None,
     ) -> int:
         """
         Predict where an agent would place a new statement in their ranking.
@@ -81,6 +83,8 @@ class RankingPredictionService:
             opinion: The agent's opinion text
             current_ranking: List of {"rank": int, "statement_id": str, "statement_text": str}
             new_statement: The new statement text to place
+            deliberation_id: Optional deliberation ID for trace context
+            agent_id: Optional agent ID for trace context
 
         Returns:
             Predicted position (1-indexed) for the new statement
@@ -88,6 +92,12 @@ class RankingPredictionService:
         max_position = len(current_ranking) + 1
 
         prompt = _build_prediction_prompt(opinion, current_ranking, new_statement)
+
+        self.client.set_trace_context(
+            trace_type="ranking_prediction",
+            deliberation_id=deliberation_id,
+            agent_id=agent_id,
+        )
         response = self.client.sample_text(
             prompt,
             system_prompt=SYSTEM_PROMPT,

@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     INTERNAL_API_SECRET: str = ""  # Shared secret between frontend and backend for X-User-Id trust
     CORS_ORIGINS: str = "http://localhost:3000"  # Comma-separated allowed origins
 
+    # Monitoring
+    MONITORING_SECRET: str = ""  # Secret for accessing /api/monitoring/* endpoints
+
     # Environment
     ENVIRONMENT: str = "development"
 

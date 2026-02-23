@@ -1,0 +1,661 @@
+"""
+API routes for monitoring and debugging.
+
+Protected by MONITORING_SECRET environment variable.
+Provides LLM trace inspection, platform stats, config viewing,
+prompt inspection, skill file rendering, feedback viewing,
+and database management.
+"""
+
+import logging
+from datetime import datetime, timedelta
+from typing import Optional
+from uuid import UUID
+
+import httpx
+from fastapi import APIRouter, Depends, HTTPException, Header, Query
+from sqlalchemy import func, desc, text
+from sqlalchemy.orm import Session
+
+from app.config import settings
+from app.database import get_db
+from app.models import (
+    Agent, Deliberation, Opinion, Statement, Ranking,
+    Critique, HumanFeedback, PlatformFeedback, LLMTrace,
+)
+from app.schemas.monitoring import (
+    LLMTraceResponse, LLMTraceListResponse,
+    MonitoringStatsResponse, SystemConfigResponse,
+    SystemPromptsResponse, PromptEntry, SkillFilesResponse,
+    TableInfoResponse, TableListResponse, BulkActionResponse,
+)
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/monitoring", tags=["monitoring"])
+
+# Model-to-table mapping for database browser
+TABLE_MAP = {
+    "agents": Agent,
+    "deliberations": Deliberation,
+    "opinions": Opinion,
+    "statements": Statement,
+    "rankings": Ranking,
+    "critiques": Critique,
+    "human_feedback": HumanFeedback,
+    "platform_feedback": PlatformFeedback,
+    "llm_traces": LLMTrace,
+}
+
+
+def verify_monitoring_secret(x_monitoring_secret: str = Header(...)):
+    """Verify monitoring secret from header."""
+    expected = settings.MONITORING_SECRET
+    if not expected:
+        raise HTTPException(
+            status_code=503,
+            detail="Monitoring is not configured. Set MONITORING_SECRET env var.",
+        )
+    if x_monitoring_secret != expected:
+        raise HTTPException(status_code=403, detail="Invalid monitoring secret")
+    return True
+
+
+# ─── LLM Traces ──────────────────────────────────────────────────────────────
+
+
+@router.get("/traces", response_model=LLMTraceListResponse)
+async def get_traces(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    trace_type: Optional[str] = None,
+    status: Optional[str] = None,
+    model: Optional[str] = None,
+    deliberation_id: Optional[str] = None,
+    db: Session = Depends(get_db),
+    _auth: bool = Depends(verify_monitoring_secret),
+):
+    query = db.query(LLMTrace)
+    if trace_type:
+        query = query.filter(LLMTrace.trace_type == trace_type)
+    if status:
+        query = query.filter(LLMTrace.status == status)
+    if model:
+        query = query.filter(LLMTrace.model.ilike(f"%{model}%"))
+    if deliberation_id:
+        query = query.filter(LLMTrace.deliberation_id == deliberation_id)
+
+    total = query.count()
+    traces = (
+        query.order_by(desc(LLMTrace.created_at))
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+
+    return LLMTraceListResponse(
+        traces=[LLMTraceResponse.model_validate(t, from_attributes=True) for t in traces],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
+
+
+@router.get("/traces/{trace_id}", response_model=LLMTraceResponse)
+async def get_trace_detail(
+    trace_id: str,
+    db: Session = Depends(get_db),
+    _auth: bool = Depends(verify_monitoring_secret),
+):
+    trace = db.query(LLMTrace).filter(LLMTrace.id == trace_id).first()
+    if not trace:
+        raise HTTPException(status_code=404, detail="Trace not found")
+    return LLMTraceResponse.model_validate(trace, from_attributes=True)
+
+
+# ─── Dashboard Stats ─────────────────────────────────────────────────────────
+
+
+@router.get("/stats", response_model=MonitoringStatsResponse)
+async def get_monitoring_stats(
+    db: Session = Depends(get_db),
+    _auth: bool = Depends(verify_monitoring_secret),
+):
+    # Platform totals
+    total_agents = db.query(func.count(Agent.id)).scalar() or 0
+    total_deliberations = db.query(func.count(Deliberation.id)).scalar() or 0
+    total_opinions = db.query(func.count(Opinion.id)).scalar() or 0
+    total_statements = db.query(func.count(Statement.id)).scalar() or 0
+    total_rankings = db.query(func.count(Ranking.id)).scalar() or 0
+
+    # LLM trace stats
+    total_traces = db.query(func.count(LLMTrace.id)).scalar() or 0
+    total_errors = db.query(func.count(LLMTrace.id)).filter(LLMTrace.status == "error").scalar() or 0
+    error_rate = (total_errors / total_traces) if total_traces > 0 else 0.0
+
+    tokens_agg = db.query(
+        func.coalesce(func.sum(LLMTrace.tokens_in), 0),
+        func.coalesce(func.sum(LLMTrace.tokens_out), 0),
+    ).first()
+    total_tokens_in = tokens_agg[0]
+    total_tokens_out = tokens_agg[1]
+
+    avg_latency = db.query(func.avg(LLMTrace.latency_ms)).filter(
+        LLMTrace.latency_ms.isnot(None)
+    ).scalar() or 0.0
+
+    traces_by_type = dict(
+        db.query(LLMTrace.trace_type, func.count(LLMTrace.id))
+        .group_by(LLMTrace.trace_type).all()
+    )
+    traces_by_model = dict(
+        db.query(LLMTrace.model, func.count(LLMTrace.id))
+        .group_by(LLMTrace.model).all()
+    )
+
+    traces_24h = db.query(func.count(LLMTrace.id)).filter(
+        LLMTrace.created_at >= datetime.utcnow() - timedelta(hours=24)
+    ).scalar() or 0
+
+    # Deliberation breakdowns
+    stage_rows = db.query(Deliberation.stage, func.count(Deliberation.id)).group_by(Deliberation.stage).all()
+    deliberations_by_stage = {str(row[0]): row[1] for row in stage_rows}
+
+    mech_rows = db.query(Deliberation.mechanism_type, func.count(Deliberation.id)).group_by(Deliberation.mechanism_type).all()
+    deliberations_by_mechanism = {str(row[0]): row[1] for row in mech_rows}
+
+    return MonitoringStatsResponse(
+        total_agents=total_agents,
+        total_deliberations=total_deliberations,
+        total_opinions=total_opinions,
+        total_statements=total_statements,
+        total_rankings=total_rankings,
+        total_traces=total_traces,
+        total_errors=total_errors,
+        error_rate=round(error_rate, 4),
+        total_tokens_in=total_tokens_in,
+        total_tokens_out=total_tokens_out,
+        avg_latency_ms=round(float(avg_latency), 1),
+        traces_by_type=traces_by_type,
+        traces_by_model=traces_by_model,
+        traces_24h=traces_24h,
+        deliberations_by_stage=deliberations_by_stage,
+        deliberations_by_mechanism=deliberations_by_mechanism,
+    )
+
+
+# ─── System Configuration ────────────────────────────────────────────────────
+
+
+@router.get("/config", response_model=SystemConfigResponse)
+async def get_system_config(_auth: bool = Depends(verify_monitoring_secret)):
+    return SystemConfigResponse(
+        habermas_num_candidates=settings.HABERMAS_NUM_CANDIDATES,
+        habermas_num_critique_rounds=settings.HABERMAS_NUM_CRITIQUE_ROUNDS,
+        habermas_critique_enabled=settings.HABERMAS_CRITIQUE_ENABLED,
+        habermas_llm_model=settings.HABERMAS_LLM_MODEL,
+        habermas_llm_models=settings.habermas_model_list,
+        habermas_llm_temperature=settings.HABERMAS_LLM_TEMPERATURE,
+        habermas_num_retries=settings.HABERMAS_NUM_RETRIES,
+        continuous_num_seed_statements=settings.CONTINUOUS_NUM_SEED_STATEMENTS,
+        continuous_num_seed_opinions=settings.CONTINUOUS_NUM_SEED_OPINIONS,
+        continuous_max_statements=settings.CONTINUOUS_MAX_STATEMENTS,
+        continuous_max_statements_per_agent=settings.CONTINUOUS_MAX_STATEMENTS_PER_AGENT,
+        embedding_model=settings.EMBEDDING_MODEL,
+        similarity_threshold=settings.SIMILARITY_THRESHOLD,
+        llm_base_url=settings.LLM_BASE_URL,
+        environment=settings.ENVIRONMENT,
+    )
+
+
+# ─── System Prompts ──────────────────────────────────────────────────────────
+
+
+@router.get("/prompts", response_model=SystemPromptsResponse)
+async def get_system_prompts(_auth: bool = Depends(verify_monitoring_secret)):
+    from app.services.statement_service import (
+        SYSTEM_PROMPT as STMT_SYSTEM,
+        _build_opinion_only_prompt,
+        _build_opinion_critique_prompt,
+    )
+    from app.services.ranking_prediction_service import (
+        SYSTEM_PROMPT as RANK_SYSTEM,
+    )
+
+    # Reconstruct the seed opinion prompt template
+    seed_opinion_template = (
+        'A group is deliberating on the following question:\n'
+        '"{question}"\n\n'
+        'One participant has already expressed this view:\n'
+        '<opinion>{creator_opinion}</opinion>\n\n'
+        'Generate {num} diverse perspectives on this topic.\n\n'
+        'CRITICAL: The perspectives must span the FULL spectrum of views on this '
+        'topic, not cluster around a moderate center. Include:\n'
+        '- At least one strong YES/FOR position\n'
+        '- At least one strong NO/AGAINST position\n'
+        '- At least one nuanced or conditional position\n'
+        '- At least one perspective that reframes the question entirely\n\n'
+        'Each perspective should be fundamentally different in its conclusion, '
+        'not just different reasoning for the same moderate position.\n\n'
+        'Format as a numbered list. Return ONLY the numbered list, one perspective per line.'
+    )
+
+    # Title differentiation prompt template
+    title_diff_template = (
+        'Below are {n} candidate consensus statements on the same topic. '
+        'Each needs a SHORT, DISTINCTIVE title (5-10 words max) that highlights '
+        'what makes it DIFFERENT from the others.\n\n'
+        'Statements:\n{statements}\n\n'
+        'For each statement, write a title that captures its unique angle, emphasis, '
+        'or tradeoff. Two titles should NEVER be similar.\n\n'
+        'Respond with ONLY a numbered list of titles, one per line.'
+    )
+
+    # Example user prompts
+    opinion_only_example = _build_opinion_only_prompt(
+        "Should we implement universal basic income?",
+        ["I believe UBI would help...", "I'm skeptical about UBI because..."],
+    )
+    opinion_critique_example = _build_opinion_critique_prompt(
+        "Should we implement universal basic income?",
+        ["I believe UBI would help...", "I'm skeptical about UBI because..."],
+        "Previous winning statement text...",
+        ["The statement should emphasize...", "I think it misses..."],
+    )
+
+    return SystemPromptsResponse(
+        prompts=[
+            PromptEntry(
+                name="Statement Generation — System Prompt",
+                description="Used for all statement generation LLM calls",
+                content=STMT_SYSTEM,
+            ),
+            PromptEntry(
+                name="Statement Generation — User Prompt (Opinion Only)",
+                description="User prompt template for initial round (opinions only). Example with 2 opinions.",
+                content=opinion_only_example,
+            ),
+            PromptEntry(
+                name="Statement Generation — User Prompt (With Critiques)",
+                description="User prompt template for critique rounds. Example with 2 opinions + critiques.",
+                content=opinion_critique_example,
+            ),
+            PromptEntry(
+                name="Ranking Prediction — System Prompt",
+                description="Used when predicting where a past agent would rank a new statement",
+                content=RANK_SYSTEM,
+            ),
+            PromptEntry(
+                name="Seed Opinion Generation — User Prompt Template",
+                description="Used to generate diverse synthetic opinions for seeding continuous deliberations",
+                content=seed_opinion_template,
+            ),
+            PromptEntry(
+                name="Title Differentiation — User Prompt Template",
+                description="Used to regenerate statement titles so each one is distinctive",
+                content=title_diff_template,
+            ),
+        ]
+    )
+
+
+# ─── Skill Files ─────────────────────────────────────────────────────────────
+
+
+@router.get("/skill-files", response_model=SkillFilesResponse)
+async def get_skill_files(_auth: bool = Depends(verify_monitoring_secret)):
+    """Fetch rendered skill.md and heartbeat.md from the frontend."""
+    frontend_url = settings.FRONTEND_URL.rstrip("/")
+    skill_md = ""
+    heartbeat_md = ""
+
+    async with httpx.AsyncClient(timeout=10) as client:
+        try:
+            resp = await client.get(f"{frontend_url}/skill.md")
+            if resp.status_code == 200:
+                skill_md = resp.text
+        except Exception as e:
+            skill_md = f"Error fetching skill.md: {e}"
+
+        try:
+            resp = await client.get(f"{frontend_url}/heartbeat.md")
+            if resp.status_code == 200:
+                heartbeat_md = resp.text
+        except Exception as e:
+            heartbeat_md = f"Error fetching heartbeat.md: {e}"
+
+    return SkillFilesResponse(skill_md=skill_md, heartbeat_md=heartbeat_md)
+
+
+# ─── Platform Feedback ───────────────────────────────────────────────────────
+
+
+@router.get("/feedback")
+async def get_platform_feedback(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    _auth: bool = Depends(verify_monitoring_secret),
+):
+    query = db.query(PlatformFeedback).order_by(desc(PlatformFeedback.submitted_at))
+    total = query.count()
+    items = query.offset((page - 1) * page_size).limit(page_size).all()
+
+    return {
+        "feedback": [
+            {
+                "id": str(f.id),
+                "agent_id": str(f.agent_id),
+                "user_id": f.user_id,
+                "feedback_text": f.feedback_text,
+                "category": f.category,
+                "submitted_at": f.submitted_at.isoformat() if f.submitted_at else None,
+            }
+            for f in items
+        ],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }
+
+
+# ─── Deliberation Debug ──────────────────────────────────────────────────────
+
+
+@router.get("/deliberations/{deliberation_id}/debug")
+async def get_deliberation_debug(
+    deliberation_id: str,
+    db: Session = Depends(get_db),
+    _auth: bool = Depends(verify_monitoring_secret),
+):
+    delib = db.query(Deliberation).filter(Deliberation.id == deliberation_id).first()
+    if not delib:
+        raise HTTPException(status_code=404, detail="Deliberation not found")
+
+    opinions = db.query(Opinion).filter(Opinion.deliberation_id == deliberation_id).all()
+    statements = (
+        db.query(Statement)
+        .filter(Statement.deliberation_id == deliberation_id)
+        .order_by(Statement.round_number, Statement.social_ranking)
+        .all()
+    )
+    rankings = db.query(Ranking).filter(Ranking.deliberation_id == deliberation_id).all()
+    critiques = db.query(Critique).filter(Critique.deliberation_id == deliberation_id).all()
+    traces = (
+        db.query(LLMTrace)
+        .filter(LLMTrace.deliberation_id == deliberation_id)
+        .order_by(desc(LLMTrace.created_at))
+        .all()
+    )
+
+    # Build agent lookup
+    agent_ids = set()
+    for o in opinions:
+        agent_ids.add(o.agent_id)
+    agents = db.query(Agent).filter(Agent.id.in_(agent_ids)).all() if agent_ids else []
+    agent_map = {str(a.id): a.name for a in agents}
+
+    return {
+        "deliberation": {
+            "id": str(delib.id),
+            "question": delib.question,
+            "stage": str(delib.stage.value) if hasattr(delib.stage, 'value') else str(delib.stage),
+            "mechanism_type": str(delib.mechanism_type.value) if hasattr(delib.mechanism_type, 'value') else str(delib.mechanism_type),
+            "num_citizens": delib.num_citizens,
+            "created_at": delib.created_at.isoformat() if delib.created_at else None,
+            "updated_at": delib.updated_at.isoformat() if delib.updated_at else None,
+            "meta_data": delib.meta_data,
+        },
+        "opinions": [
+            {
+                "id": str(o.id),
+                "agent_id": str(o.agent_id),
+                "agent_name": agent_map.get(str(o.agent_id), "Unknown"),
+                "opinion_text": o.opinion_text,
+                "submitted_at": o.submitted_at.isoformat() if o.submitted_at else None,
+            }
+            for o in opinions
+        ],
+        "statements": [
+            {
+                "id": str(s.id),
+                "round_number": s.round_number,
+                "title": s.title,
+                "statement_text": s.statement_text,
+                "social_ranking": s.social_ranking,
+                "is_seed": s.is_seed,
+                "contributed_by_agent_id": str(s.contributed_by_agent_id) if s.contributed_by_agent_id else None,
+                "meta_data": s.meta_data,
+                "generated_at": s.generated_at.isoformat() if s.generated_at else None,
+            }
+            for s in statements
+        ],
+        "rankings": [
+            {
+                "id": str(r.id),
+                "agent_id": str(r.agent_id),
+                "agent_name": agent_map.get(str(r.agent_id), "Unknown"),
+                "round_number": r.round_number,
+                "statement_rankings": r.statement_rankings,
+                "submitted_at": r.submitted_at.isoformat() if r.submitted_at else None,
+            }
+            for r in rankings
+        ],
+        "critiques": [
+            {
+                "id": str(c.id),
+                "agent_id": str(c.agent_id),
+                "agent_name": agent_map.get(str(c.agent_id), "Unknown"),
+                "critique_text": c.critique_text,
+                "round_number": c.round_number,
+                "submitted_at": c.submitted_at.isoformat() if c.submitted_at else None,
+            }
+            for c in critiques
+        ],
+        "traces": [
+            LLMTraceResponse.model_validate(t, from_attributes=True).model_dump(mode="json")
+            for t in traces
+        ],
+    }
+
+
+# ─── Database Management ─────────────────────────────────────────────────────
+
+
+@router.get("/tables", response_model=TableListResponse)
+async def list_tables(
+    db: Session = Depends(get_db),
+    _auth: bool = Depends(verify_monitoring_secret),
+):
+    """List all tables with row counts."""
+    tables = []
+    for name, model in TABLE_MAP.items():
+        count = db.query(func.count(model.id)).scalar() or 0
+        tables.append(TableInfoResponse(name=name, row_count=count))
+    tables.sort(key=lambda t: t.name)
+    return TableListResponse(tables=tables)
+
+
+@router.get("/tables/{table_name}")
+async def get_table_rows(
+    table_name: str,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    _auth: bool = Depends(verify_monitoring_secret),
+):
+    """Get paginated rows for a table."""
+    model = TABLE_MAP.get(table_name)
+    if not model:
+        raise HTTPException(status_code=404, detail=f"Unknown table: {table_name}")
+
+    total = db.query(func.count(model.id)).scalar() or 0
+
+    # Get column names
+    columns = [c.name for c in model.__table__.columns]
+
+    # Query rows — order by created_at or submitted_at if available, else by id
+    query = db.query(model)
+    if hasattr(model, 'created_at'):
+        query = query.order_by(desc(model.created_at))
+    elif hasattr(model, 'submitted_at'):
+        query = query.order_by(desc(model.submitted_at))
+
+    rows = query.offset((page - 1) * page_size).limit(page_size).all()
+
+    # Serialize rows
+    serialized = []
+    for row in rows:
+        row_dict = {}
+        for col in columns:
+            val = getattr(row, col, None)
+            if val is None:
+                row_dict[col] = None
+            elif isinstance(val, (UUID,)):
+                row_dict[col] = str(val)
+            elif isinstance(val, datetime):
+                row_dict[col] = val.isoformat()
+            elif hasattr(val, 'value'):  # Enum
+                row_dict[col] = str(val.value)
+            elif isinstance(val, (dict, list)):
+                row_dict[col] = val
+            else:
+                row_dict[col] = str(val) if not isinstance(val, (int, float, bool)) else val
+        serialized.append(row_dict)
+
+    return {
+        "table_name": table_name,
+        "columns": columns,
+        "rows": serialized,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }
+
+
+@router.delete("/tables/{table_name}/{row_id}")
+async def delete_table_row(
+    table_name: str,
+    row_id: str,
+    x_confirm: str = Header(..., alias="X-Confirm"),
+    db: Session = Depends(get_db),
+    _auth: bool = Depends(verify_monitoring_secret),
+):
+    """Delete a single row by ID."""
+    if x_confirm != "true":
+        raise HTTPException(status_code=400, detail="Confirmation required (X-Confirm: true)")
+
+    model = TABLE_MAP.get(table_name)
+    if not model:
+        raise HTTPException(status_code=404, detail=f"Unknown table: {table_name}")
+
+    row = db.query(model).filter(model.id == row_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Row not found")
+
+    db.delete(row)
+    db.commit()
+    return {"message": f"Deleted row {row_id} from {table_name}"}
+
+
+@router.delete("/deliberations/{deliberation_id}")
+async def delete_deliberation_cascade(
+    deliberation_id: str,
+    x_confirm: str = Header(..., alias="X-Confirm"),
+    db: Session = Depends(get_db),
+    _auth: bool = Depends(verify_monitoring_secret),
+):
+    """Delete a deliberation and all related data (cascading)."""
+    if x_confirm != "true":
+        raise HTTPException(status_code=400, detail="Confirmation required (X-Confirm: true)")
+
+    delib = db.query(Deliberation).filter(Deliberation.id == deliberation_id).first()
+    if not delib:
+        raise HTTPException(status_code=404, detail="Deliberation not found")
+
+    # Delete in dependency order (same as scripts/sql/delete_delib.sql)
+    db.query(LLMTrace).filter(LLMTrace.deliberation_id == deliberation_id).delete()
+    db.query(HumanFeedback).filter(HumanFeedback.deliberation_id == deliberation_id).delete()
+    db.query(Critique).filter(Critique.deliberation_id == deliberation_id).delete()
+    db.query(Ranking).filter(Ranking.deliberation_id == deliberation_id).delete()
+    db.query(Statement).filter(Statement.deliberation_id == deliberation_id).delete()
+    db.query(Opinion).filter(Opinion.deliberation_id == deliberation_id).delete()
+    db.delete(delib)
+    db.commit()
+
+    return {"message": f"Deleted deliberation {deliberation_id} and all related data"}
+
+
+@router.post("/bulk-actions/delete-empty-deliberations", response_model=BulkActionResponse)
+async def delete_empty_deliberations(
+    x_confirm: str = Header(..., alias="X-Confirm"),
+    db: Session = Depends(get_db),
+    _auth: bool = Depends(verify_monitoring_secret),
+):
+    """Delete deliberations with no statements."""
+    if x_confirm != "true":
+        raise HTTPException(status_code=400, detail="Confirmation required (X-Confirm: true)")
+
+    # Find deliberations with zero statements
+    result = db.execute(text("""
+        SELECT d.id FROM deliberations d
+        LEFT JOIN statements s ON s.deliberation_id = d.id
+        GROUP BY d.id
+        HAVING COUNT(s.id) = 0
+    """))
+    target_ids = [row[0] for row in result]
+
+    if not target_ids:
+        return BulkActionResponse(deleted_count=0, message="No deliberations with zero statements found")
+
+    for did in target_ids:
+        db.query(LLMTrace).filter(LLMTrace.deliberation_id == did).delete()
+        db.query(HumanFeedback).filter(HumanFeedback.deliberation_id == did).delete()
+        db.query(Critique).filter(Critique.deliberation_id == did).delete()
+        db.query(Ranking).filter(Ranking.deliberation_id == did).delete()
+        db.query(Opinion).filter(Opinion.deliberation_id == did).delete()
+        db.query(Deliberation).filter(Deliberation.id == did).delete()
+
+    db.commit()
+    return BulkActionResponse(
+        deleted_count=len(target_ids),
+        message=f"Deleted {len(target_ids)} deliberation(s) with no statements",
+    )
+
+
+@router.post("/bulk-actions/delete-seed-only-deliberations", response_model=BulkActionResponse)
+async def delete_seed_only_deliberations(
+    x_confirm: str = Header(..., alias="X-Confirm"),
+    db: Session = Depends(get_db),
+    _auth: bool = Depends(verify_monitoring_secret),
+):
+    """Delete deliberations that only have seed statements (no user-contributed)."""
+    if x_confirm != "true":
+        raise HTTPException(status_code=400, detail="Confirmation required (X-Confirm: true)")
+
+    result = db.execute(text("""
+        SELECT d.id FROM deliberations d
+        LEFT JOIN statements s ON s.deliberation_id = d.id
+        GROUP BY d.id
+        HAVING COUNT(s.id) = COUNT(s.id) FILTER (WHERE s.is_seed = TRUE)
+           AND COUNT(s.id) > 0
+    """))
+    target_ids = [row[0] for row in result]
+
+    if not target_ids:
+        return BulkActionResponse(deleted_count=0, message="No deliberations with only seed statements found")
+
+    for did in target_ids:
+        db.query(LLMTrace).filter(LLMTrace.deliberation_id == did).delete()
+        db.query(HumanFeedback).filter(HumanFeedback.deliberation_id == did).delete()
+        db.query(Critique).filter(Critique.deliberation_id == did).delete()
+        db.query(Ranking).filter(Ranking.deliberation_id == did).delete()
+        db.query(Statement).filter(Statement.deliberation_id == did).delete()
+        db.query(Opinion).filter(Opinion.deliberation_id == did).delete()
+        db.query(Deliberation).filter(Deliberation.id == did).delete()
+
+    db.commit()
+    return BulkActionResponse(
+        deleted_count=len(target_ids),
+        message=f"Deleted {len(target_ids)} deliberation(s) with only seed statements",
+    )
