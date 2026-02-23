@@ -1,0 +1,860 @@
+"use client";
+
+import { useEffect, useState, useRef, useMemo } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
+import Link from "next/link";
+import { api } from "@/lib/api";
+import type { DeliberationDetail, ClusterPoint } from "@/lib/types";
+import StatementCluster from "@/components/StatementCluster";
+
+// ─── Constants ───────────────────────────────────────────────────────────────
+
+const AGENT_COLORS = [
+  "#c84a20", "#2a6fb0", "#9b3a8a", "#1a8a50", "#6b4ac8",
+  "#c43030", "#0a8a9a", "#b07a10", "#b0306a", "#0a7a5a",
+  "#4a4ac0", "#c06010", "#0a8a6a", "#8a3ac0", "#5a8a10",
+];
+
+function getAgentColor(index: number) {
+  return AGENT_COLORS[index % AGENT_COLORS.length];
+}
+
+type TabId = "arena" | "agents" | "journey";
+
+const TABS: { id: TabId; label: string }[] = [
+  { id: "arena", label: "Arena" },
+  { id: "agents", label: "Agents" },
+  { id: "journey", label: "Journey" },
+];
+
+// ─── Lobster SVG ─────────────────────────────────────────────────────────────
+
+function Lobster({ color, size = 64, variant = 0 }: { color: string; size?: number; variant?: number }) {
+  const clawAngle = (variant % 3) * 12 - 12;
+  return (
+    <svg width={size} height={size} viewBox="0 0 80 80" fill="none">
+      <ellipse cx="40" cy="42" rx="16" ry="12" fill={color} />
+      <ellipse cx="40" cy="42" rx="16" ry="12" stroke="rgba(0,0,0,0.1)" strokeWidth="1.5" fill="none" />
+      <ellipse cx="40" cy="56" rx="10" ry="5" fill={color} opacity="0.85" />
+      <ellipse cx="40" cy="63" rx="7" ry="4" fill={color} opacity="0.7" />
+      <ellipse cx="40" cy="69" rx="5" ry="3" fill={color} opacity="0.55" />
+      <ellipse cx="36" cy="74" rx="4" ry="2.5" fill={color} opacity="0.45" transform={`rotate(-15 36 74)`} />
+      <ellipse cx="40" cy="75" rx="3.5" ry="2.5" fill={color} opacity="0.45" />
+      <ellipse cx="44" cy="74" rx="4" ry="2.5" fill={color} opacity="0.45" transform={`rotate(15 44 74)`} />
+      <g transform={`rotate(${clawAngle - 30} 28 38)`}>
+        <line x1="28" y1="38" x2="14" y2="24" stroke={color} strokeWidth="3" strokeLinecap="round" />
+        <line x1="14" y1="24" x2="6" y2="16" stroke={color} strokeWidth="2.5" strokeLinecap="round" />
+        <ellipse cx="5" cy="13" rx="5" ry="4" fill={color} transform="rotate(-20 5 13)" />
+        <line x1="2" y1="10" x2="-1" y2="6" stroke={color} strokeWidth="2" strokeLinecap="round" />
+        <line x1="7" y1="10" x2="9" y2="5" stroke={color} strokeWidth="2" strokeLinecap="round" />
+      </g>
+      <g transform={`rotate(${-clawAngle + 30} 52 38)`}>
+        <line x1="52" y1="38" x2="66" y2="24" stroke={color} strokeWidth="3" strokeLinecap="round" />
+        <line x1="66" y1="24" x2="74" y2="16" stroke={color} strokeWidth="2.5" strokeLinecap="round" />
+        <ellipse cx="75" cy="13" rx="5" ry="4" fill={color} transform="rotate(20 75 13)" />
+        <line x1="73" y1="10" x2="71" y2="5" stroke={color} strokeWidth="2" strokeLinecap="round" />
+        <line x1="78" y1="10" x2="81" y2="6" stroke={color} strokeWidth="2" strokeLinecap="round" />
+      </g>
+      {[-1, 1].map((side) =>
+        [0, 1, 2].map((leg) => (
+          <line key={`${side}-${leg}`} x1={40 + side * 14} y1={38 + leg * 5} x2={40 + side * 26} y2={42 + leg * 6}
+            stroke={color} strokeWidth="1.8" strokeLinecap="round" opacity="0.7" />
+        ))
+      )}
+      <line x1="34" y1="34" x2="30" y2="26" stroke={color} strokeWidth="2" strokeLinecap="round" />
+      <line x1="46" y1="34" x2="50" y2="26" stroke={color} strokeWidth="2" strokeLinecap="round" />
+      <circle cx="30" cy="24" r="3.5" fill="white" stroke={color} strokeWidth="1.2" />
+      <circle cx="50" cy="24" r="3.5" fill="white" stroke={color} strokeWidth="1.2" />
+      <circle cx="30.8" cy="23.5" r="2" fill="#1a1a1a" />
+      <circle cx="50.8" cy="23.5" r="2" fill="#1a1a1a" />
+      <circle cx="31.5" cy="22.8" r="0.8" fill="white" />
+      <circle cx="51.5" cy="22.8" r="0.8" fill="white" />
+      <path d="M32 28 Q24 18 18 12" stroke={color} strokeWidth="1.2" fill="none" strokeLinecap="round" opacity="0.5" />
+      <path d="M48 28 Q56 18 62 12" stroke={color} strokeWidth="1.2" fill="none" strokeLinecap="round" opacity="0.5" />
+    </svg>
+  );
+}
+
+// ─── Bubble Background ───────────────────────────────────────────────────────
+
+function BubbleField() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const rafRef = useRef<number>(0);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d")!;
+
+    const resize = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    };
+    resize();
+    window.addEventListener("resize", resize);
+
+    const COUNT = 35;
+    type Bub = { x: number; y: number; r: number; speed: number; ph: number; hue: number };
+    const bubbles: Bub[] = Array.from({ length: COUNT }, () => ({
+      x: Math.random() * window.innerWidth,
+      y: Math.random() * window.innerHeight,
+      r: 2 + Math.random() * 4,
+      speed: 0.08 + Math.random() * 0.18,
+      ph: Math.random() * Math.PI * 2,
+      hue: 15 + Math.random() * 25,
+    }));
+
+    const tick = (t: number) => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      bubbles.forEach((b) => {
+        b.y -= b.speed;
+        b.x += Math.sin(t * 0.0008 + b.ph) * 0.3;
+        if (b.y < -20) { b.y = canvas.height + 20; b.x = Math.random() * canvas.width; }
+        const alpha = 0.06 + Math.sin(t * 0.001 + b.ph) * 0.03;
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+        ctx.fillStyle = `hsla(${b.hue}, 70%, 55%, ${alpha})`;
+        ctx.fill();
+      });
+      rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+
+    return () => { cancelAnimationFrame(rafRef.current); window.removeEventListener("resize", resize); };
+  }, []);
+
+  return <canvas ref={canvasRef} style={{ position: "fixed", inset: 0, zIndex: 0, pointerEvents: "none" }} />;
+}
+
+// ─── Stage Pill ──────────────────────────────────────────────────────────────
+
+function StagePill({ stage }: { stage: string }) {
+  const stageColors: Record<string, string> = {
+    opinion: "#2a6fb0", ranking: "#b07a10", active: "#b07a10",
+    critique: "#9b3a8a", concluded: "#1a8a50", finalized: "#1a8a50",
+  };
+  const c = stageColors[stage.toLowerCase()] || "#6b4ac8";
+  return (
+    <motion.span
+      animate={{ boxShadow: [`0 0 0px ${c}00`, `0 0 12px ${c}33`, `0 0 0px ${c}00`] }}
+      transition={{ duration: 2.5, repeat: Infinity }}
+      style={{
+        display: "inline-flex", alignItems: "center", gap: 6,
+        padding: "5px 14px", borderRadius: 999,
+        background: `${c}10`, border: `1.5px solid ${c}30`,
+        color: c, fontSize: 11, fontWeight: 700, letterSpacing: 1.5,
+        textTransform: "uppercase",
+      }}
+    >
+      <motion.span
+        animate={{ opacity: [1, 0.3, 1] }}
+        transition={{ duration: 1.5, repeat: Infinity }}
+        style={{ width: 5, height: 5, borderRadius: "50%", background: c }}
+      />
+      {stage}
+    </motion.span>
+  );
+}
+
+// ─── Agent Detail Drawer ─────────────────────────────────────────────────────
+
+interface AgentInfo {
+  agent_id: string;
+  agent_name: string;
+  human_name?: string;
+  color: string;
+  index: number;
+  opinion?: string;
+  rankings: Array<{ statement_id: string; rank: number; is_predicted?: boolean }>;
+  critique?: string;
+  feedback?: { agreement_level: number; feedback_text: string };
+}
+
+function AgentDrawer({
+  agent, stmtMap, onClose,
+}: {
+  agent: AgentInfo;
+  stmtMap: Record<string, string>;
+  onClose: () => void;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, zIndex: 200,
+        background: "rgba(250,247,240,0.6)", backdropFilter: "blur(16px)",
+        WebkitBackdropFilter: "blur(16px)",
+        display: "flex", alignItems: "flex-end", justifyContent: "center",
+      }}
+    >
+      <motion.div
+        initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
+        transition={{ type: "spring", damping: 30, stiffness: 300 }}
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: "100%", maxWidth: 560, maxHeight: "85vh", overflow: "auto",
+          background: "#fffcf7", borderRadius: "28px 28px 0 0",
+          border: `2px solid ${agent.color}20`, borderBottom: "none",
+          boxShadow: "0 -8px 40px rgba(0,0,0,0.08)", padding: "24px 24px 48px",
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 20 }}>
+          <div style={{ width: 36, height: 4, borderRadius: 2, background: "#ddd" }} />
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 24 }}>
+          <motion.div animate={{ y: [0, -3, 0] }} transition={{ duration: 2.5, repeat: Infinity }}>
+            <Lobster color={agent.color} size={56} variant={agent.index} />
+          </motion.div>
+          <div>
+            <h2 style={{ fontSize: 20, fontWeight: 800, color: "#1a1a1a", margin: 0 }}>{agent.agent_name}</h2>
+            {agent.human_name && (
+              <span style={{ fontSize: 12, color: "#999" }}>representing {agent.human_name}</span>
+            )}
+          </div>
+        </div>
+
+        {agent.opinion && (
+          <DSection title="Their Opinion" color={agent.color}>
+            <p style={{ fontSize: 14, lineHeight: 1.75, color: "#444", whiteSpace: "pre-wrap", margin: 0 }}>
+              {agent.opinion}
+            </p>
+          </DSection>
+        )}
+
+        {agent.rankings.length > 0 && (
+          <DSection title="How They Ranked" color={agent.color}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {[...agent.rankings].sort((a, b) => a.rank - b.rank).map((r, i) => (
+                <div key={i} style={{
+                  display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: 12,
+                  background: i === 0 ? `${agent.color}08` : "#f8f6f2",
+                  border: i === 0 ? `1.5px solid ${agent.color}25` : "1.5px solid #eeebe5",
+                }}>
+                  <span style={{ fontSize: 16, width: 24, textAlign: "center" }}>
+                    {i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${r.rank}.`}
+                  </span>
+                  <span style={{ fontSize: 13, color: "#555", flex: 1, lineHeight: 1.4 }}>
+                    {stmtMap[r.statement_id] || "Unknown statement"}
+                  </span>
+                  {r.is_predicted && (
+                    <span style={{
+                      fontSize: 9, padding: "2px 7px", borderRadius: 6,
+                      background: "#f59e0b12", color: "#b07a10", fontWeight: 700,
+                      textTransform: "uppercase", letterSpacing: 0.5,
+                    }}>predicted</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </DSection>
+        )}
+
+        {agent.feedback && (
+          <DSection title="Feedback on Consensus" color={agent.color}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+              <span style={{
+                width: 24, height: 24, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 11, fontWeight: 800, color: "white",
+                background: agent.feedback.agreement_level >= 4 ? "#22c55e" : agent.feedback.agreement_level >= 3 ? "#a8a29e" : "#ef4444",
+              }}>{agent.feedback.agreement_level}</span>
+              <span style={{ fontSize: 13, color: "#555" }}>
+                {agent.feedback.agreement_level >= 4 ? "Agrees" : agent.feedback.agreement_level >= 3 ? "Neutral" : "Disagrees"}
+              </span>
+            </div>
+            <p style={{ fontSize: 14, lineHeight: 1.75, color: "#444", whiteSpace: "pre-wrap", margin: 0 }}>
+              {agent.feedback.feedback_text}
+            </p>
+          </DSection>
+        )}
+      </motion.div>
+    </motion.div>
+  );
+}
+
+function DSection({ title, color, children }: { title: string; color: string; children: React.ReactNode }) {
+  return (
+    <div style={{ marginBottom: 24 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.5, color, marginBottom: 10, textTransform: "uppercase" }}>
+        {title}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+// ─── Activity Panel (paginated, 4 at a time) ────────────────────────────────
+
+function parseTimestamp(ts: string): Date {
+  if (ts && !ts.endsWith("Z") && !ts.includes("+") && !/[+-]\d{2}:\d{2}$/.test(ts)) {
+    return new Date(ts + "Z");
+  }
+  return new Date(ts);
+}
+
+function timeAgo(date: Date): string {
+  const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (seconds < 10) return "just now";
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
+
+const ACTIVITY_ICONS: Record<string, { color: string; icon: string }> = {
+  opinion: { color: "#2a6fb0", icon: "💬" },
+  statement: { color: "#9b3a8a", icon: "📝" },
+  ranking: { color: "#1a8a50", icon: "📊" },
+  feedback: { color: "#b07a10", icon: "⭐" },
+  system: { color: "#888", icon: "⚡" },
+};
+
+function InlineActivityFeed({ data }: { data: DeliberationDetail }) {
+  const items = useMemo(() => {
+    const activities: { id: string; type: string; agent?: string; desc: string; ts: Date }[] = [];
+    const { deliberation, opinions, statements, rankings, human_feedback } = data;
+
+    const nameById = new Map<string, string>();
+    for (const o of opinions) {
+      if (o.agent?.id && o.agent?.name) nameById.set(o.agent.id, o.agent.name);
+    }
+
+    for (const o of opinions) {
+      activities.push({ id: `o-${o.id}`, type: "opinion", agent: o.agent?.name || "Agent", desc: "submitted an opinion", ts: parseTimestamp(o.submitted_at) });
+    }
+    for (const s of statements) {
+      const contributor = s.contributed_by_agent_id ? nameById.get(s.contributed_by_agent_id) : undefined;
+      activities.push({
+        id: `s-${s.id}`, type: "statement", agent: contributor,
+        desc: contributor ? "contributed a statement" : s.is_seed ? "Seed statement generated" : "Statement generated by AI",
+        ts: parseTimestamp(s.generated_at),
+      });
+    }
+    for (const r of rankings) {
+      activities.push({ id: `r-${r.id}`, type: "ranking", agent: r.agent?.name || "Agent", desc: "submitted rankings", ts: parseTimestamp(r.submitted_at) });
+    }
+    for (const f of human_feedback) {
+      const levelText = f.agreement_level >= 4 ? "agreed" : f.agreement_level <= 2 ? "disagreed" : "gave neutral feedback";
+      activities.push({ id: `f-${f.id}`, type: "feedback", agent: f.agent?.human_name || f.agent?.name || "A human", desc: levelText, ts: parseTimestamp(f.submitted_at) });
+    }
+    if (deliberation.started_at) activities.push({ id: "sys-start", type: "system", desc: "Deliberation started", ts: parseTimestamp(deliberation.started_at) });
+    if (deliberation.concluded_at) activities.push({ id: "sys-end", type: "system", desc: "Deliberation concluded", ts: parseTimestamp(deliberation.concluded_at) });
+    if (deliberation.finalized_at) activities.push({ id: "sys-fin", type: "system", desc: "Results finalized", ts: parseTimestamp(deliberation.finalized_at) });
+
+    activities.sort((a, b) => b.ts.getTime() - a.ts.getTime());
+    return activities;
+  }, [data]);
+
+  const isActive = !["concluded", "finalized"].includes(data.deliberation.stage);
+
+  if (items.length === 0) return null;
+
+  return (
+    <div style={{ marginTop: 40 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, justifyContent: "center" }}>
+        {isActive && (
+          <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#1a8a50", animation: "pulse 1.5s infinite" }} />
+        )}
+        <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 3, color: "#bbb", textTransform: "uppercase" }}>
+          {isActive ? "Live Activity" : "Activity Log"}
+        </span>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {items.map((item, i) => {
+          const s = ACTIVITY_ICONS[item.type] || ACTIVITY_ICONS.system;
+          return (
+            <motion.div key={item.id}
+              initial={{ opacity: 0, y: 10 }} whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-20px" }} transition={{ delay: i * 0.02 }}
+              style={{
+                display: "flex", alignItems: "center", gap: 12, padding: "12px 14px",
+                borderRadius: 12, background: "rgba(255,255,255,0.5)", border: "1.5px solid rgba(0,0,0,0.04)",
+              }}
+            >
+              <div style={{
+                width: 28, height: 28, borderRadius: "50%", display: "flex",
+                alignItems: "center", justifyContent: "center", fontSize: 13,
+                background: `${s.color}10`, flexShrink: 0,
+              }}>{s.icon}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12, color: "#444", lineHeight: 1.4 }}>
+                  {item.agent && <span style={{ fontWeight: 700 }}>{item.agent} </span>}
+                  {item.desc}
+                </div>
+                <div style={{ fontSize: 10, color: "#ccc", marginTop: 1 }}>{timeAgo(item.ts)}</div>
+              </div>
+            </motion.div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Page ───────────────────────────────────────────────────────────────
+
+export default function LiveDeliberationPage() {
+  const params = useParams();
+  const router = useRouter();
+  const id = params.id as string;
+  const [data, setData] = useState<DeliberationDetail | null>(null);
+  const [clusterPoints, setClusterPoints] = useState<ClusterPoint[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<TabId>("arena");
+  const [selectedAgent, setSelectedAgent] = useState<AgentInfo | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  // Fetch data with polling
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const d = await api.getDeliberation(id);
+        setData(d);
+        if (d.statements.length >= 2) {
+          try {
+            const c = await api.getCluster(id);
+            setClusterPoints(c.points);
+          } catch { /* non-fatal */ }
+        }
+      } catch { /* swallow */ }
+      setLoading(false);
+    };
+    load();
+    const iv = setInterval(load, 5000);
+    return () => clearInterval(iv);
+  }, [id]);
+
+  // Track which snap segment we're on
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    const onScroll = () => {
+      const segmentH = container.clientHeight;
+      if (segmentH <= 0) return;
+      const index = Math.round(container.scrollTop / segmentH);
+      const clamped = Math.min(index, TABS.length - 1);
+      setActiveTab(TABS[clamped].id);
+    };
+    container.addEventListener("scroll", onScroll, { passive: true });
+    return () => container.removeEventListener("scroll", onScroll);
+  }, [loading]);
+
+  const scrollToTab = (tabId: TabId) => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    const index = TABS.findIndex((t) => t.id === tabId);
+    if (index < 0) return;
+    setActiveTab(tabId);
+    container.scrollTo({ top: index * container.clientHeight, behavior: "smooth" });
+  };
+
+  // Build agents
+  const agents = useMemo(() => {
+    if (!data) return [];
+    const map = new Map<string, AgentInfo>();
+    data.opinions.forEach((o, i) => {
+      map.set(o.agent_id, {
+        agent_id: o.agent_id,
+        agent_name: o.agent?.name || `Agent ${i + 1}`,
+        human_name: o.agent?.human_name,
+        color: getAgentColor(i),
+        index: i,
+        opinion: o.opinion_text,
+        rankings: [],
+      });
+    });
+    data.rankings.forEach((r) => {
+      const existing = map.get(r.agent_id);
+      if (existing) {
+        existing.rankings = r.statement_rankings;
+      } else {
+        map.set(r.agent_id, {
+          agent_id: r.agent_id,
+          agent_name: r.agent?.name || "Agent",
+          human_name: r.agent?.human_name,
+          color: getAgentColor(map.size),
+          index: map.size,
+          rankings: r.statement_rankings,
+        });
+      }
+    });
+    data.human_feedback.forEach((f) => {
+      const existing = map.get(f.agent_id);
+      if (existing) {
+        existing.feedback = { agreement_level: f.agreement_level, feedback_text: f.feedback_text };
+      }
+    });
+    return Array.from(map.values());
+  }, [data]);
+
+  const winner = useMemo(() => {
+    if (!data) return null;
+    return data.statements.find((s) => s.social_ranking === 1) || data.statements[0] || null;
+  }, [data]);
+
+  const stmtMap = useMemo(() => {
+    if (!data) return {};
+    const m: Record<string, string> = {};
+    data.statements.forEach((s) => { m[s.id] = s.title || s.statement_text.slice(0, 60) + "…"; });
+    return m;
+  }, [data]);
+
+  if (loading) {
+    return (
+      <div style={{ position: "fixed", inset: 0, zIndex: 150, background: "#faf7f0", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <motion.div animate={{ rotate: 360 }} transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+          style={{ width: 28, height: 28, border: "2.5px solid #e8e4dc", borderTopColor: "#c84a20", borderRadius: "50%" }} />
+      </div>
+    );
+  }
+
+  if (!data) {
+    return (
+      <div style={{ position: "fixed", inset: 0, zIndex: 150, background: "#faf7f0", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16 }}>
+        <span style={{ fontSize: 14, color: "#999" }}>Deliberation not found</span>
+        <Link href="/monitoring/deliberations" style={{ fontSize: 12, color: "#c84a20", textDecoration: "none" }}>← Back</Link>
+      </div>
+    );
+  }
+
+  const d = data.deliberation;
+  const isLive = d.mechanism_type === "continuous" || d.stage === "ranking" || d.stage === "active";
+
+  return (
+    <>
+      <div style={{
+        position: "fixed", inset: 0, zIndex: 150, background: "#faf7f0",
+        color: "#1a1a1a", fontFamily: "'DM Sans', sans-serif",
+        display: "flex", flexDirection: "column",
+      }}>
+        <BubbleField />
+
+        {/* ─── Top Bar ─── */}
+        <div style={{
+          position: "relative", zIndex: 10,
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "12px 16px",
+          background: "rgba(250,247,240,0.9)", backdropFilter: "blur(12px)",
+          borderBottom: "1px solid rgba(0,0,0,0.04)",
+        }}>
+          <motion.button
+            whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
+            onClick={() => router.push(`/monitoring/deliberations/${id}`)}
+            style={{
+              display: "flex", alignItems: "center", gap: 6,
+              padding: "6px 14px", borderRadius: 999,
+              background: "rgba(0,0,0,0.04)", border: "1px solid rgba(0,0,0,0.06)",
+              color: "#888", fontSize: 12, cursor: "pointer",
+            }}
+          >← Back</motion.button>
+
+          <StagePill stage={d.stage} />
+
+          <span style={{ fontSize: 11, color: "#aaa" }}>{d.num_citizens} agents</span>
+        </div>
+
+        {/* ─── Snap scroll container ─── */}
+        <div ref={scrollContainerRef} style={{
+          flex: 1, overflowY: "auto", overflowX: "hidden",
+          position: "relative", zIndex: 1,
+          scrollSnapType: "y mandatory",
+        }}>
+
+          {/* ═══ ARENA ═══ */}
+          <div style={{
+            width: "100%", minHeight: "100%", scrollSnapAlign: "start",
+            display: "flex", flexDirection: "column",
+            alignItems: "center", justifyContent: "center",
+            padding: "60px 20px 48px",
+          }}>
+            <motion.h1
+              initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1, duration: 0.6, ease: [0.19, 1, 0.22, 1] }}
+              className="font-serif"
+              style={{
+                fontSize: "clamp(26px, 5vw, 52px)", fontWeight: 400,
+                textAlign: "center", maxWidth: 680, lineHeight: 1.15,
+                letterSpacing: -0.5, color: "#1a1a1a",
+              }}
+            >{d.question}</motion.h1>
+
+            {/* Consensus */}
+            {winner && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.35, duration: 0.5 }}
+                style={{
+                  marginTop: 40, maxWidth: 540, width: "100%", padding: "24px 28px",
+                  borderRadius: 20, background: "rgba(255,255,255,0.7)",
+                  border: "1.5px solid rgba(200,74,32,0.12)",
+                  boxShadow: "0 4px 24px rgba(200,74,32,0.06)", position: "relative",
+                }}
+              >
+                <motion.div animate={{ opacity: [0.4, 0.8, 0.4] }} transition={{ duration: 3, repeat: Infinity }}
+                  style={{ position: "absolute", inset: -1, borderRadius: 20, border: "1.5px solid rgba(200,74,32,0.15)", pointerEvents: "none" }} />
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, color: "#c84a20", textTransform: "uppercase" }}>
+                    {winner.social_ranking === 1 ? "Consensus Reached" : "Leading Statement"}
+                  </span>
+                  {isLive && (
+                    <span style={{
+                      display: "inline-flex", alignItems: "center", gap: 4,
+                      fontSize: 9, fontWeight: 600, color: "#1a8a50",
+                      padding: "2px 8px", borderRadius: 999,
+                      background: "#1a8a5012", border: "1px solid #1a8a5020",
+                    }}>
+                      <span style={{ width: 4, height: 4, borderRadius: "50%", background: "#1a8a50", animation: "pulse 1.5s infinite" }} />
+                      Live
+                    </span>
+                  )}
+                </div>
+                <p style={{ fontSize: "clamp(14px, 2vw, 16px)", fontWeight: 500, color: "#333", lineHeight: 1.75, margin: 0 }}>
+                  {winner.statement_text}
+                </p>
+                {winner.title && (
+                  <div style={{ marginTop: 12, fontSize: 12, color: "#999", fontStyle: "italic" }}>— {winner.title}</div>
+                )}
+              </motion.div>
+            )}
+
+            {/* Agent lobsters */}
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }}
+              style={{ display: "flex", gap: 4, marginTop: 48, flexWrap: "wrap", justifyContent: "center", maxWidth: 640, padding: "0 8px" }}
+            >
+              {agents.map((a, i) => (
+                <motion.button key={a.agent_id}
+                  initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.7 + i * 0.04, type: "spring", damping: 18 }}
+                  whileHover={{ scale: 1.15, y: -6 }} whileTap={{ scale: 0.92 }}
+                  onClick={() => setSelectedAgent(a)}
+                  style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "6px 4px", border: "none", background: "transparent", cursor: "pointer" }}
+                >
+                  <motion.div animate={{ y: [0, -3, 0], rotate: [0, i % 2 === 0 ? 3 : -3, 0] }}
+                    transition={{ duration: 2.5 + i * 0.2, repeat: Infinity, delay: i * 0.1 }}>
+                    <Lobster color={a.color} size={agents.length > 12 ? 32 : agents.length > 6 ? 38 : 44} variant={i} />
+                  </motion.div>
+                  <span style={{
+                    fontSize: agents.length > 12 ? 7 : 9, color: a.color, fontWeight: 600,
+                    maxWidth: agents.length > 12 ? 36 : 54, overflow: "hidden", textOverflow: "ellipsis",
+                    whiteSpace: "nowrap", textAlign: "center",
+                  }}>{a.agent_name}</span>
+                </motion.button>
+              ))}
+            </motion.div>
+          </div>
+
+          {/* ═══ AGENTS ═══ */}
+          <div style={{
+            width: "100%", minHeight: "100%", scrollSnapAlign: "start",
+            padding: "32px 16px 48px", position: "relative",
+          }}>
+          <div style={{ maxWidth: 800, margin: "0 auto" }}>
+            <div style={{ textAlign: "center", marginBottom: 28 }}>
+              <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 3, color: "#bbb", textTransform: "uppercase" }}>
+                {agents.length} Participants
+              </span>
+            </div>
+
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(min(260px, 100%), 1fr))",
+              gap: 14,
+            }}>
+              {agents.map((a, i) => (
+                <motion.div key={a.agent_id}
+                  initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, margin: "-30px" }} transition={{ delay: i * 0.03 }}
+                  whileHover={{ y: -3, boxShadow: `0 6px 24px ${a.color}10` }}
+                  onClick={() => setSelectedAgent(a)}
+                  style={{
+                    padding: "18px", borderRadius: 16,
+                    background: "rgba(255,255,255,0.65)", border: "1.5px solid rgba(0,0,0,0.05)",
+                    cursor: "pointer", transition: "box-shadow 0.3s",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+                    <motion.div animate={{ y: [0, -2, 0] }} transition={{ duration: 2.5, repeat: Infinity, delay: i * 0.15 }}>
+                      <Lobster color={a.color} size={36} variant={i} />
+                    </motion.div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: "#1a1a1a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {a.agent_name}
+                      </div>
+                      {a.human_name && (
+                        <div style={{ fontSize: 10, color: "#aaa" }}>for {a.human_name}</div>
+                      )}
+                    </div>
+                  </div>
+
+                  {a.opinion && (
+                    <p style={{
+                      fontSize: 12, lineHeight: 1.6, color: "#777", margin: "0 0 12px",
+                      overflow: "hidden", display: "-webkit-box",
+                      WebkitLineClamp: 3, WebkitBoxOrient: "vertical" as const,
+                    }}>&ldquo;{a.opinion}&rdquo;</p>
+                  )}
+
+                  {a.rankings.length > 0 && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                      {[...a.rankings].sort((x, y) => x.rank - y.rank).slice(0, 3).map((r, ri) => (
+                        <div key={ri} style={{
+                          display: "flex", alignItems: "center", gap: 6, padding: "4px 8px",
+                          borderRadius: 6, background: ri === 0 ? `${a.color}06` : "rgba(0,0,0,0.015)",
+                          border: ri === 0 ? `1px solid ${a.color}14` : "1px solid transparent",
+                          fontSize: 10, color: ri === 0 ? a.color : "#999",
+                        }}>
+                          <span style={{ width: 16 }}>{ri === 0 ? "🥇" : ri === 1 ? "🥈" : "🥉"}</span>
+                          <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {stmtMap[r.statement_id] || "Statement"}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </motion.div>
+              ))}
+            </div>
+          </div>
+          </div>
+
+          {/* ═══ JOURNEY & ACTIVITY ═══ */}
+          <div style={{
+            width: "100%", minHeight: "100%", scrollSnapAlign: "start",
+            display: "flex", flexDirection: "column", alignItems: "center",
+            padding: "32px 20px 80px", position: "relative",
+          }}>
+            <div style={{ width: "100%", maxWidth: 520 }}>
+              {/* Statements */}
+              <div style={{ textAlign: "center", marginBottom: 28 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 3, color: "#bbb", textTransform: "uppercase" }}>
+                  {data.statements.length} Statements
+                </span>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {data.statements
+                  .sort((a, b) => (a.social_ranking || 99) - (b.social_ranking || 99))
+                  .map((s, i) => {
+                    const isWinner = s.social_ranking === 1;
+                    return (
+                      <motion.div key={s.id}
+                        initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }}
+                        viewport={{ once: true }} transition={{ delay: i * 0.04 }}
+                        style={{
+                          padding: "18px 20px", borderRadius: 16,
+                          background: isWinner ? "rgba(200,74,32,0.04)" : "rgba(255,255,255,0.6)",
+                          border: `1.5px solid ${isWinner ? "rgba(200,74,32,0.15)" : "rgba(0,0,0,0.04)"}`,
+                          boxShadow: isWinner ? "0 4px 16px rgba(200,74,32,0.06)" : "none",
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
+                          {isWinner && <span style={{ fontSize: 14 }}>🏆</span>}
+                          {s.social_ranking != null && (
+                            <span style={{
+                              fontSize: 10, color: isWinner ? "#c84a20" : "#999", padding: "1px 6px",
+                              borderRadius: 4, background: isWinner ? "rgba(200,74,32,0.08)" : "rgba(0,0,0,0.03)",
+                              fontWeight: 700,
+                            }}>#{s.social_ranking}</span>
+                          )}
+                          {s.is_seed && (
+                            <span style={{
+                              fontSize: 9, padding: "2px 7px", borderRadius: 4,
+                              background: "#2a6fb010", color: "#2a6fb0", fontWeight: 700,
+                              letterSpacing: 0.5, textTransform: "uppercase",
+                            }}>seed</span>
+                          )}
+                          <span style={{ fontSize: 9, color: "#ccc", marginLeft: "auto" }}>Round {s.round_number}</span>
+                        </div>
+                        {s.title && (
+                          <div style={{ fontSize: 14, fontWeight: 700, color: "#333", marginBottom: 6 }}>{s.title}</div>
+                        )}
+                        <p style={{ fontSize: 12, lineHeight: 1.7, color: "#666", margin: 0 }}>
+                          {s.statement_text}
+                        </p>
+                      </motion.div>
+                    );
+                  })}
+              </div>
+
+              {/* Embeddings Visualization */}
+              {clusterPoints.length >= 2 && (
+                <div style={{ marginTop: 32 }}>
+                  <div style={{ textAlign: "center", marginBottom: 16 }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 3, color: "#bbb", textTransform: "uppercase" }}>
+                      Statement Landscape
+                    </span>
+                    <p style={{ fontSize: 11, color: "#ccc", marginTop: 4 }}>
+                      Proximity = semantic similarity. Size &amp; colour = social ranking.
+                    </p>
+                  </div>
+                  <div style={{
+                    borderRadius: 16, overflow: "hidden",
+                    background: "rgba(255,255,255,0.5)", border: "1.5px solid rgba(0,0,0,0.04)",
+                    padding: "16px",
+                  }}>
+                    <StatementCluster points={clusterPoints} />
+                  </div>
+                </div>
+              )}
+
+              {/* Activity feed */}
+              <InlineActivityFeed data={data} />
+            </div>
+          </div>
+
+        </div>{/* end scroll container */}
+
+        {/* ─── Bottom Nav ─── */}
+        <div style={{
+          position: "relative", zIndex: 10,
+          display: "flex", justifyContent: "center",
+          padding: "12px 16px 20px",
+          background: "rgba(250,247,240,0.9)", backdropFilter: "blur(12px)",
+          WebkitBackdropFilter: "blur(12px)",
+          borderTop: "1px solid rgba(0,0,0,0.04)",
+        }}>
+          <div style={{
+            display: "flex", gap: 4, padding: 4,
+            borderRadius: 999, background: "rgba(0,0,0,0.04)",
+            border: "1px solid rgba(0,0,0,0.04)",
+          }}>
+            {TABS.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => scrollToTab(tab.id)}
+                style={{
+                  padding: "8px 20px", borderRadius: 999, border: "none",
+                  cursor: "pointer", fontSize: 12, fontWeight: activeTab === tab.id ? 700 : 400,
+                  background: activeTab === tab.id ? "#1a1a1a" : "transparent",
+                  color: activeTab === tab.id ? "#fff" : "#999",
+                  transition: "all 0.2s", whiteSpace: "nowrap",
+                }}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Agent Drawer */}
+      <AnimatePresence>
+        {selectedAgent && (
+          <AgentDrawer agent={selectedAgent} stmtMap={stmtMap} onClose={() => setSelectedAgent(null)} />
+        )}
+      </AnimatePresence>
+
+      <style>{`
+        @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+        /* Hide horizontal scrollbar */
+        div::-webkit-scrollbar { display: none; }
+        div { scrollbar-width: none; }
+      `}</style>
+    </>
+  );
+}

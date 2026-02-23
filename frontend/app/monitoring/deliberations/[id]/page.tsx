@@ -95,7 +95,16 @@ export default function DeliberationDebugDetailPage() {
         ← Back to deliberations
       </Link>
 
-      <h1 className="text-2xl font-bold mb-2">{d.question}</h1>
+      <div className="flex items-center gap-3 mb-2">
+        <h1 className="text-2xl font-bold">{d.question}</h1>
+        <Link
+          href={`/monitoring/deliberations/${d.id}/live`}
+          className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition-opacity hover:opacity-80"
+          style={{ background: "var(--foreground)", color: "var(--background)" }}
+        >
+          Live View →
+        </Link>
+      </div>
 
       {/* Info Bar */}
       <div className="flex flex-wrap items-center gap-2 mb-6 text-xs" style={{ color: "var(--muted)" }}>
