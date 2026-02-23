@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
+import Image from "next/image";
 import { api } from "@/lib/api";
 import type { DeliberationDetail, ClusterPoint } from "@/lib/types";
 import StatementCluster from "@/components/StatementCluster";
@@ -28,51 +29,54 @@ const TABS: { id: TabId; label: string }[] = [
   { id: "agents", label: "Agents" },
 ];
 
-// ─── Lobster SVG ─────────────────────────────────────────────────────────────
+// ─── Lobster Symbol ──────────────────────────────────────────────────────────
+
+function hexToHsl(hex: string) {
+  const normalized = hex.replace("#", "");
+  if (!/^[0-9a-fA-F]{6}$/.test(normalized)) return { h: 0, s: 0, l: 50 };
+  const r = parseInt(normalized.slice(0, 2), 16) / 255;
+  const g = parseInt(normalized.slice(2, 4), 16) / 255;
+  const b = parseInt(normalized.slice(4, 6), 16) / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const delta = max - min;
+
+  let h = 0;
+  if (delta !== 0) {
+    if (max === r) h = ((g - b) / delta + (g < b ? 6 : 0)) * 60;
+    else if (max === g) h = ((b - r) / delta + 2) * 60;
+    else h = ((r - g) / delta + 4) * 60;
+  }
+  const l = (max + min) / 2;
+  const s = delta === 0 ? 0 : delta / (1 - Math.abs(2 * l - 1));
+  return { h, s: s * 100, l: l * 100 };
+}
+
+function lobsterColorFilter(color: string) {
+  const { h, s, l } = hexToHsl(color);
+  const saturation = Math.round(200 + s * 9);
+  const brightness = (0.82 + l / 260).toFixed(2);
+  return `grayscale(1) sepia(1) saturate(${saturation}%) hue-rotate(${Math.round(h)}deg) brightness(${brightness})`;
+}
 
 function Lobster({ color, size = 64, variant = 0 }: { color: string; size?: number; variant?: number }) {
-  const clawAngle = (variant % 3) * 12 - 12;
+  const rotation = (variant % 5) * 2 - 4;
   return (
-    <svg width={size} height={size} viewBox="0 0 80 80" fill="none">
-      <ellipse cx="40" cy="42" rx="16" ry="12" fill={color} />
-      <ellipse cx="40" cy="42" rx="16" ry="12" stroke="rgba(0,0,0,0.1)" strokeWidth="1.5" fill="none" />
-      <ellipse cx="40" cy="56" rx="10" ry="5" fill={color} opacity="0.85" />
-      <ellipse cx="40" cy="63" rx="7" ry="4" fill={color} opacity="0.7" />
-      <ellipse cx="40" cy="69" rx="5" ry="3" fill={color} opacity="0.55" />
-      <ellipse cx="36" cy="74" rx="4" ry="2.5" fill={color} opacity="0.45" transform={`rotate(-15 36 74)`} />
-      <ellipse cx="40" cy="75" rx="3.5" ry="2.5" fill={color} opacity="0.45" />
-      <ellipse cx="44" cy="74" rx="4" ry="2.5" fill={color} opacity="0.45" transform={`rotate(15 44 74)`} />
-      <g transform={`rotate(${clawAngle - 30} 28 38)`}>
-        <line x1="28" y1="38" x2="14" y2="24" stroke={color} strokeWidth="3" strokeLinecap="round" />
-        <line x1="14" y1="24" x2="6" y2="16" stroke={color} strokeWidth="2.5" strokeLinecap="round" />
-        <ellipse cx="5" cy="13" rx="5" ry="4" fill={color} transform="rotate(-20 5 13)" />
-        <line x1="2" y1="10" x2="-1" y2="6" stroke={color} strokeWidth="2" strokeLinecap="round" />
-        <line x1="7" y1="10" x2="9" y2="5" stroke={color} strokeWidth="2" strokeLinecap="round" />
-      </g>
-      <g transform={`rotate(${-clawAngle + 30} 52 38)`}>
-        <line x1="52" y1="38" x2="66" y2="24" stroke={color} strokeWidth="3" strokeLinecap="round" />
-        <line x1="66" y1="24" x2="74" y2="16" stroke={color} strokeWidth="2.5" strokeLinecap="round" />
-        <ellipse cx="75" cy="13" rx="5" ry="4" fill={color} transform="rotate(20 75 13)" />
-        <line x1="73" y1="10" x2="71" y2="5" stroke={color} strokeWidth="2" strokeLinecap="round" />
-        <line x1="78" y1="10" x2="81" y2="6" stroke={color} strokeWidth="2" strokeLinecap="round" />
-      </g>
-      {[-1, 1].map((side) =>
-        [0, 1, 2].map((leg) => (
-          <line key={`${side}-${leg}`} x1={40 + side * 14} y1={38 + leg * 5} x2={40 + side * 26} y2={42 + leg * 6}
-            stroke={color} strokeWidth="1.8" strokeLinecap="round" opacity="0.7" />
-        ))
-      )}
-      <line x1="34" y1="34" x2="30" y2="26" stroke={color} strokeWidth="2" strokeLinecap="round" />
-      <line x1="46" y1="34" x2="50" y2="26" stroke={color} strokeWidth="2" strokeLinecap="round" />
-      <circle cx="30" cy="24" r="3.5" fill="white" stroke={color} strokeWidth="1.2" />
-      <circle cx="50" cy="24" r="3.5" fill="white" stroke={color} strokeWidth="1.2" />
-      <circle cx="30.8" cy="23.5" r="2" fill="#1a1a1a" />
-      <circle cx="50.8" cy="23.5" r="2" fill="#1a1a1a" />
-      <circle cx="31.5" cy="22.8" r="0.8" fill="white" />
-      <circle cx="51.5" cy="22.8" r="0.8" fill="white" />
-      <path d="M32 28 Q24 18 18 12" stroke={color} strokeWidth="1.2" fill="none" strokeLinecap="round" opacity="0.5" />
-      <path d="M48 28 Q56 18 62 12" stroke={color} strokeWidth="1.2" fill="none" strokeLinecap="round" opacity="0.5" />
-    </svg>
+    <Image
+      src="/lobster_with_eyes_symbol.svg"
+      alt=""
+      aria-hidden
+      width={size}
+      height={size}
+      style={{
+        width: size,
+        height: size,
+        display: "block",
+        filter: lobsterColorFilter(color),
+        transform: `rotate(${rotation}deg)`,
+        transformOrigin: "center center",
+      }}
+    />
   );
 }
 
@@ -615,7 +619,7 @@ export default function LiveDeliberationPage() {
               transition={{ delay: 0.1, duration: 0.6, ease: [0.19, 1, 0.22, 1] }}
               className="font-serif"
               style={{
-                fontSize: "clamp(26px, 5vw, 52px)", fontWeight: 400,
+                fontSize: "clamp(22px, 4.2vw, 44px)", fontWeight: 400,
                 textAlign: "center", maxWidth: 680, lineHeight: 1.15,
                 letterSpacing: -0.5, color: "#1a1a1a",
               }}
@@ -627,12 +631,13 @@ export default function LiveDeliberationPage() {
                 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.35, duration: 0.5 }}
                 style={{
-                  marginTop: 40, maxWidth: 540, width: "100%", padding: "24px 28px",
+                  marginTop: 40, maxWidth: 540, width: "100%", padding: "24px 28px 24px 36px",
                   borderRadius: 20, background: "rgba(255,255,255,0.7)",
                   border: "1.5px solid rgba(200,74,32,0.12)",
                   boxShadow: "0 4px 24px rgba(200,74,32,0.06)", position: "relative",
                 }}
               >
+                <div style={{ position: "absolute", left: 0, top: 10, bottom: 10, width: 5, borderRadius: 99, background: "#c84a20" }} />
                 <motion.div animate={{ opacity: [0.4, 0.8, 0.4] }} transition={{ duration: 3, repeat: Infinity }}
                   style={{ position: "absolute", inset: -1, borderRadius: 20, border: "1.5px solid rgba(200,74,32,0.15)", pointerEvents: "none" }} />
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
@@ -651,12 +656,12 @@ export default function LiveDeliberationPage() {
                     </span>
                   )}
                 </div>
+                {winner.title && (
+                  <div style={{ fontSize: 15, fontWeight: 700, color: "#1a1a1a", marginBottom: 10 }}>{winner.title}</div>
+                )}
                 <p style={{ fontSize: "clamp(14px, 2vw, 16px)", fontWeight: 500, color: "#333", lineHeight: 1.75, margin: 0 }}>
                   {winner.statement_text}
                 </p>
-                {winner.title && (
-                  <div style={{ marginTop: 12, fontSize: 12, color: "#999", fontStyle: "italic" }}>— {winner.title}</div>
-                )}
               </motion.div>
             )}
 
@@ -675,7 +680,7 @@ export default function LiveDeliberationPage() {
                 >
                   <motion.div animate={{ y: [0, -3, 0], rotate: [0, i % 2 === 0 ? 3 : -3, 0] }}
                     transition={{ duration: 2.5 + i * 0.2, repeat: Infinity, delay: i * 0.1 }}>
-                    <Lobster color={a.color} size={agents.length > 12 ? 32 : agents.length > 6 ? 38 : 44} variant={i} />
+                    <Lobster color={a.color} size={agents.length > 12 ? 42 : agents.length > 6 ? 50 : 58} variant={i} />
                   </motion.div>
                   <span style={{
                     fontSize: agents.length > 12 ? 7 : 9, color: a.color, fontWeight: 600,
@@ -695,7 +700,7 @@ export default function LiveDeliberationPage() {
           }}>
             <div style={{ width: "100%", maxWidth: 1200 }}>
               <div style={{ textAlign: "center", marginBottom: 28 }}>
-                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 3, color: "#bbb", textTransform: "uppercase" }}>
+                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 3, color: "#888", textTransform: "uppercase" }}>
                   {data.statements.length} Statements
                 </span>
                 <p style={{ fontSize: 12, color: "#aaa", marginTop: 6, maxWidth: 420, marginLeft: "auto", marginRight: "auto" }}>
@@ -766,7 +771,7 @@ export default function LiveDeliberationPage() {
                 {clusterPoints.length >= 2 && (
                   <div style={{ position: "sticky", top: 0 }}>
                     <div style={{ textAlign: "center", marginBottom: 16 }}>
-                      <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 3, color: "#bbb", textTransform: "uppercase" }}>
+                      <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 3, color: "#888", textTransform: "uppercase" }}>
                         Statement Landscape
                       </span>
                       <p style={{ fontSize: 11, color: "#ccc", marginTop: 4 }}>
@@ -775,7 +780,7 @@ export default function LiveDeliberationPage() {
                     </div>
                     <div style={{
                       borderRadius: 16, overflow: "hidden",
-                      background: "rgba(255,255,255,0.5)", border: "1.5px solid rgba(0,0,0,0.04)",
+                      background: "rgba(235,228,218,0.95)", border: "1.5px solid rgba(0,0,0,0.10)",
                       padding: "16px",
                     }}>
                       <StatementCluster points={clusterPoints} />
@@ -793,7 +798,7 @@ export default function LiveDeliberationPage() {
           }}>
           <div style={{ maxWidth: 1200, margin: "0 auto" }}>
             <div style={{ textAlign: "center", marginBottom: 28 }}>
-              <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 3, color: "#bbb", textTransform: "uppercase" }}>
+              <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 3, color: "#888", textTransform: "uppercase" }}>
                 {agents.length} Agents
               </span>
               <p style={{ fontSize: 12, color: "#aaa", marginTop: 6, maxWidth: 420, marginLeft: "auto", marginRight: "auto" }}>
