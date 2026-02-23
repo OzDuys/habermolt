@@ -7,12 +7,11 @@ import type { Deliberation, StatsResponse } from "@/lib/types";
 import Link from "next/link";
 import Image from "next/image";
 
-// ─── Interactive Network Canvas (hand-drawn grey crabs & humans) ────────────
+// ─── Interactive Network Canvas (lobsters & humans) ──────────────────────────
 function LobsterNetwork() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef<number>(0);
   const mousePosRef = useRef({ x: -9999, y: -9999 });
-
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -28,9 +27,8 @@ function LobsterNetwork() {
       canvas.width = w * dpr;
       canvas.height = h * dpr;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      rebuildHomes();
     };
-    resize();
-    window.addEventListener("resize", resize);
 
     const handleMouseMove = (e: MouseEvent) => {
       const rect = canvas.getBoundingClientRect();
@@ -43,147 +41,220 @@ function LobsterNetwork() {
     };
     canvas.addEventListener("mouseleave", handleMouseLeave);
 
-    // Exclusion zone (circular)
-    const exZone = { cx: 0, cy: 0, r: 0 };
-    const updateExZone = () => {
-      exZone.cx = w / 2;
-      exZone.cy = h / 2;
-      exZone.r = Math.min(w * 0.45, h * 0.42, 420);
-    };
-    updateExZone();
+    // ── Draw helpers — hand-drawn grey style, white fill ──
+    const STROKE = "#9c9690";
+    const FILL = "#ffffff";
+    const LW = 2.5; // base line width
 
-    const isInExclusionZone = (x: number, y: number) => {
-      const dx = x - exZone.cx, dy = y - exZone.cy;
-      return Math.sqrt(dx * dx + dy * dy) < exZone.r;
-    };
-
-    // ── Draw functions (grey hand-drawn style from ConsensusGame) ──
-    const C = "#a09890";
-
+    // Chibi human: big round head, boxy body, stubby legs, oval eyes
     const drawHuman = (x: number, y: number, s: number) => {
       ctx.save();
       ctx.translate(x, y);
       ctx.scale(s, s);
-      ctx.strokeStyle = C; ctx.fillStyle = C;
-      ctx.lineWidth = 2.2; ctx.lineCap = "round"; ctx.lineJoin = "round";
-      ctx.beginPath(); ctx.arc(0, -18, 8, 0, Math.PI * 2); ctx.stroke();
-      ctx.beginPath(); ctx.arc(-3, -19.5, 1.4, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.arc(3, -19.5, 1.4, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.moveTo(0, -10); ctx.lineTo(0, 6); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(0, -4); ctx.lineTo(-10, 4); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(0, -4); ctx.lineTo(10, 4); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(0, 6); ctx.lineTo(-7, 18); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(0, 6); ctx.lineTo(7, 18); ctx.stroke();
+      ctx.strokeStyle = STROKE; ctx.lineWidth = LW;
+      ctx.lineCap = "round"; ctx.lineJoin = "round";
+
+      // head (large circle, white fill)
+      ctx.beginPath(); ctx.arc(0, -13, 11, 0, Math.PI * 2);
+      ctx.fillStyle = FILL; ctx.fill(); ctx.stroke();
+
+      // eyes (filled oval)
+      ctx.fillStyle = STROKE;
+      ctx.beginPath(); ctx.ellipse(-4, -13, 2, 2.6, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(4, -13, 2, 2.6, 0, 0, Math.PI * 2); ctx.fill();
+
+      // body (rounded rect, white fill)
+      const bx = -7, by = -1, bw = 14, bh = 15, br = 4;
+      ctx.beginPath();
+      ctx.moveTo(bx + br, by);
+      ctx.lineTo(bx + bw - br, by); ctx.quadraticCurveTo(bx + bw, by, bx + bw, by + br);
+      ctx.lineTo(bx + bw, by + bh - br); ctx.quadraticCurveTo(bx + bw, by + bh, bx + bw - br, by + bh);
+      ctx.lineTo(bx + br, by + bh); ctx.quadraticCurveTo(bx, by + bh, bx, by + bh - br);
+      ctx.lineTo(bx, by + br); ctx.quadraticCurveTo(bx, by, bx + br, by);
+      ctx.closePath();
+      ctx.fillStyle = FILL; ctx.fill(); ctx.stroke();
+
+      // left leg
+      ctx.beginPath();
+      ctx.moveTo(-4, 14); ctx.lineTo(-4, 22); ctx.lineTo(-8, 22);
+      ctx.fillStyle = FILL; ctx.fill(); ctx.stroke();
+      // right leg
+      ctx.beginPath();
+      ctx.moveTo(4, 14); ctx.lineTo(4, 22); ctx.lineTo(8, 22);
+      ctx.fillStyle = FILL; ctx.fill(); ctx.stroke();
+
       ctx.restore();
     };
 
-    const drawCrab = (x: number, y: number, s: number) => {
+    // Lobster: oval body, big U-claws, antennae, legs, fan tail — same grey style
+    const drawLobster = (x: number, y: number, s: number) => {
       ctx.save();
       ctx.translate(x, y);
       ctx.scale(s, s);
-      ctx.strokeStyle = C; ctx.fillStyle = C;
-      ctx.lineWidth = 2.0; ctx.lineCap = "round"; ctx.lineJoin = "round";
-      ctx.beginPath(); ctx.ellipse(0, 0, 12, 8, 0, 0, Math.PI * 2); ctx.stroke();
-      ctx.lineWidth = 1.8;
-      ctx.beginPath(); ctx.moveTo(-7, -6); ctx.lineTo(-11, -12); ctx.stroke();
-      ctx.beginPath(); ctx.arc(-12.5, -13.5, 3, 0, Math.PI * 2); ctx.stroke();
-      ctx.beginPath(); ctx.arc(-12.5, -13.5, 1.1, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.moveTo(7, -6); ctx.lineTo(11, -12); ctx.stroke();
-      ctx.beginPath(); ctx.arc(12.5, -13.5, 3, 0, Math.PI * 2); ctx.stroke();
-      ctx.beginPath(); ctx.arc(12.5, -13.5, 1.1, 0, Math.PI * 2); ctx.fill();
-      ctx.lineWidth = 1.4;
-      [[-8,2,-14,6],[-9,5,-14,10],[-8,8,-13,13],[8,2,14,6],[9,5,14,10],[8,8,13,13]].forEach(([x1,y1,x2,y2]) => {
+      ctx.strokeStyle = STROKE; ctx.lineWidth = LW;
+      ctx.lineCap = "round"; ctx.lineJoin = "round";
+
+      // carapace (oval body, white fill)
+      ctx.beginPath(); ctx.ellipse(0, -2, 9, 13, 0, 0, Math.PI * 2);
+      ctx.fillStyle = FILL; ctx.fill(); ctx.stroke();
+
+      // eyes
+      ctx.fillStyle = STROKE;
+      ctx.beginPath(); ctx.ellipse(-3, -11, 1.8, 2, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(3, -11, 1.8, 2, 0, 0, Math.PI * 2); ctx.fill();
+
+      // antennae
+      ctx.lineWidth = LW * 0.7;
+      ctx.beginPath(); ctx.moveTo(-4, -14); ctx.lineTo(-10, -24); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(4, -14); ctx.lineTo(10, -24); ctx.stroke();
+
+      // left claw arm + U-pincer
+      ctx.lineWidth = LW;
+      ctx.beginPath(); ctx.moveTo(-8, -6); ctx.lineTo(-17, -12); ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(-20, -10, 5, Math.PI * 0.1, Math.PI * 1.1);
+      ctx.fillStyle = FILL; ctx.fill(); ctx.stroke();
+
+      // right claw arm + U-pincer
+      ctx.beginPath(); ctx.moveTo(8, -6); ctx.lineTo(17, -12); ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(20, -10, 5, Math.PI * 0, Math.PI * 0.9);
+      ctx.fillStyle = FILL; ctx.fill(); ctx.stroke();
+
+      // walking legs (3 pairs, thin)
+      ctx.lineWidth = LW * 0.65;
+      [[-7,-2,-14,5],[-7,2,-14,9],[-7,6,-13,13],[7,-2,14,5],[7,2,14,9],[7,6,13,13]].forEach(([x1,y1,x2,y2]) => {
         ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
       });
-      ctx.beginPath(); ctx.arc(0, 2, 5, 0.2, Math.PI - 0.2); ctx.stroke();
+
+      // tail fan (3 rounded lobes)
+      ctx.lineWidth = LW;
+      ctx.beginPath(); ctx.ellipse(-5, 14, 4, 3, -0.4, 0, Math.PI * 2);
+      ctx.fillStyle = FILL; ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(0, 16, 4, 3, 0, 0, Math.PI * 2);
+      ctx.fillStyle = FILL; ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(5, 14, 4, 3, 0.4, 0, Math.PI * 2);
+      ctx.fillStyle = FILL; ctx.fill(); ctx.stroke();
+
       ctx.restore();
     };
 
-    // ── Node setup ──
+    // ── Node setup — scattered across canvas, avoiding centre ──
     type Node = {
-      x: number; y: number; vx: number; vy: number;
-      t: "h" | "c"; s: number; ph: number;
+      x: number; y: number;
+      hx: number; hy: number;
+      vx: number; vy: number;
+      t: "h" | "l"; s: number; ph: number;
     };
 
     const COUNT = 60;
     const nodes: Node[] = [];
 
-    for (let i = 0; i < COUNT; i++) {
-      let x: number, y: number;
-      let attempts = 0;
-      do {
-        x = 40 + Math.random() * (w - 80);
-        y = 40 + Math.random() * (h - 80);
-        attempts++;
-      } while (isInExclusionZone(x, y) && attempts < 100);
+    const getExZone = () => ({
+      cx: w / 2,
+      cy: h / 2,
+      r: Math.min(w * 0.38, h * 0.38, 340),
+    });
 
-      nodes.push({
-        x, y,
-        vx: (Math.random() - 0.5) * 0.18,
-        vy: (Math.random() - 0.5) * 0.18,
-        t: Math.random() > 0.4 ? "h" : "c",
-        s: 1.4 + Math.random() * 0.6,
-        ph: Math.random() * Math.PI * 2,
-      });
-    }
+    const rebuildHomes = () => {
+      const ex = getExZone();
+      nodes.length = 0;
+      // Stratified placement: divide canvas into a grid, pick a random point per cell
+      // outside the exclusion zone, so nodes are spread wall-to-wall
+      const cols = 12, rows = 8;
+      const candidates: [number,number][] = [];
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          // try a few random points in each cell
+          for (let attempt = 0; attempt < 8; attempt++) {
+            const hx = (c / cols) * w + Math.random() * (w / cols);
+            const hy = (r / rows) * h + Math.random() * (h / rows);
+            const dx = hx - ex.cx, dy = hy - ex.cy;
+            if (Math.sqrt(dx*dx+dy*dy) > ex.r + 10) {
+              candidates.push([hx, hy]);
+              break;
+            }
+          }
+        }
+      }
+      // Shuffle
+      for (let i = candidates.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+      }
+      for (let i = 0; i < Math.min(COUNT, candidates.length); i++) {
+        const [hx, hy] = candidates[i];
+        nodes.push({
+          x: hx, y: hy, hx, hy,
+          vx: 0, vy: 0,
+          t: Math.random() > 0.45 ? "h" : "l",
+          s: 1.1 + Math.random() * 0.5,
+          ph: Math.random() * Math.PI * 2,
+        });
+      }
+    };
 
-    const EDGE_DIST = 600;
-    const MOUSE_RADIUS = 160;
+    resize();
+    window.addEventListener("resize", resize);
+
+    const MOUSE_RADIUS = 120;
+    const MOUSE_FORCE = 3.5;
+    const SPRING = 0.006;
+    const DAMPING = 0.82;
+    const DRIFT = 0.22;
 
     const tick = (t: number) => {
-      const cw = w;
-      const ch = h;
-      updateExZone();
-      ctx.clearRect(0, 0, cw, ch);
+      const ex = getExZone();
+      ctx.clearRect(0, 0, w, h);
 
-      // Update positions — ambient drift + mouse repulsion + exclusion zone
       nodes.forEach((n) => {
-        n.x += n.vx + Math.sin(t * 0.00028 + n.ph) * 0.11;
-        n.y += n.vy + Math.cos(t * 0.00035 + n.ph) * 0.09;
-
-        // Wrap around
-        if (n.x < -40) n.x = cw + 40;
-        if (n.x > cw + 40) n.x = -40;
-        if (n.y < -40) n.y = ch + 40;
-        if (n.y > ch + 40) n.y = -40;
-
-        // Exclusion zone repulsion
-        const edx = n.x - exZone.cx;
-        const edy = n.y - exZone.cy;
-        const eDist = Math.sqrt(edx * edx + edy * edy);
-        if (eDist < exZone.r && eDist > 0) {
-          const push = (exZone.r - eDist) / exZone.r;
-          n.x += (edx / eDist) * push * 5;
-          n.y += (edy / eDist) * push * 5;
-        }
+        // Spring toward home
+        n.vx += (n.hx - n.x) * SPRING;
+        n.vy += (n.hy - n.y) * SPRING;
+        // Sinusoidal drift
+        n.vx += Math.sin(t * 0.00025 + n.ph) * DRIFT;
+        n.vy += Math.cos(t * 0.00031 + n.ph + 1.1) * DRIFT;
 
         // Mouse repulsion
         const mouse = mousePosRef.current;
-        const mdx = n.x - mouse.x;
-        const mdy = n.y - mouse.y;
-        const mdist = Math.sqrt(mdx * mdx + mdy * mdy);
+        const mdx = n.x - mouse.x, mdy = n.y - mouse.y;
+        const mdist = Math.sqrt(mdx*mdx + mdy*mdy);
         if (mdist < MOUSE_RADIUS && mdist > 0) {
-          const force = (MOUSE_RADIUS - mdist) / MOUSE_RADIUS;
-          n.x += (mdx / mdist) * force * 5;
-          n.y += (mdy / mdist) * force * 5;
+          const force = ((MOUSE_RADIUS - mdist) / MOUSE_RADIUS) * MOUSE_FORCE;
+          n.vx += (mdx / mdist) * force;
+          n.vy += (mdy / mdist) * force;
         }
+
+        // Exclusion zone — push outward
+        const edx = n.x - ex.cx, edy = n.y - ex.cy;
+        const eDist = Math.sqrt(edx*edx + edy*edy);
+        if (eDist < ex.r + 20 && eDist > 0) {
+          const push = ((ex.r + 20 - eDist) / (ex.r + 20)) * 4.5;
+          n.vx += (edx / eDist) * push;
+          n.vy += (edy / eDist) * push;
+        }
+
+        n.vx *= DAMPING;
+        n.vy *= DAMPING;
+        n.x += n.vx;
+        n.y += n.vy;
+        n.x = Math.max(28, Math.min(w - 28, n.x));
+        n.y = Math.max(28, Math.min(h - 28, n.y));
       });
 
-      // Draw edges
-      for (let i = 0; i < COUNT; i++) {
-        for (let j = i + 1; j < COUNT; j++) {
+      // Draw ALL edges — full network, distance-based opacity
+      const maxDist = Math.sqrt(w*w + h*h) * 0.5;
+      for (let i = 0; i < nodes.length; i++) {
+        for (let j = i + 1; j < nodes.length; j++) {
           const na = nodes[i], nb = nodes[j];
           const ddx = na.x - nb.x, ddy = na.y - nb.y;
-          const dist = Math.sqrt(ddx * ddx + ddy * ddy);
-          if (dist > EDGE_DIST) continue;
-
-          const falloff = (EDGE_DIST - dist) / EDGE_DIST;
+          const dist = Math.sqrt(ddx*ddx + ddy*ddy);
+          const falloff = Math.max(0, 1 - dist / maxDist);
           const isCross = na.t !== nb.t;
-          const alpha = falloff * falloff * (isCross ? 0.3 : 0.15);
-          const color = isCross ? `rgba(155,125,80,${alpha})` : `rgba(148,138,128,${alpha})`;
-
-          ctx.strokeStyle = color;
-          ctx.lineWidth = isCross ? 1.2 : 0.7;
+          const alpha = falloff * falloff * (isCross ? 0.35 : 0.18);
+          if (alpha < 0.01) continue;
+          ctx.strokeStyle = isCross ? `rgba(160,130,90,${alpha})` : `rgba(140,130,120,${alpha})`;
+          ctx.lineWidth = 0.8;
           ctx.beginPath();
           ctx.moveTo(na.x, na.y);
           ctx.lineTo(nb.x, nb.y);
@@ -191,13 +262,10 @@ function LobsterNetwork() {
         }
       }
 
-      // Draw nodes
+      // Draw nodes on top
       nodes.forEach((n) => {
-        if (n.t === "h") {
-          drawHuman(n.x, n.y, n.s);
-        } else {
-          drawCrab(n.x, n.y, n.s);
-        }
+        if (n.t === "h") drawHuman(n.x, n.y, n.s);
+        else drawLobster(n.x, n.y, n.s);
       });
 
       rafRef.current = requestAnimationFrame(tick);
@@ -266,12 +334,12 @@ function CopyInstructionsInline() {
   if (!instruction) return null;
 
   return (
-    <div className="mx-auto mt-8 w-full max-w-xl">
+    <div className="mx-auto mt-8 w-full max-w-2xl">
       <p className="mb-2 text-center text-xs font-medium text-stone-500">
         Paste this into your agent to get started
       </p>
       <div className="flex items-center gap-2 rounded-lg border border-stone-200 bg-white p-1.5 shadow-sm">
-        <code className="flex-1 truncate px-3 text-sm text-stone-500">
+        <code className="flex-1 break-all px-3 text-sm text-stone-500">
           {instruction}
         </code>
         <button
@@ -337,7 +405,7 @@ export default function HomePage() {
           >
             <h1
               className="font-handwritten text-6xl font-bold leading-[1.1] tracking-tight sm:text-7xl md:text-8xl lg:text-9xl"
-              style={{ color: "#dc3c3c", WebkitTextStroke: "1px #dc3c3c" }}
+              style={{ color: "#dc3c3c" }}
             >
               In Lobsters
               <br />
@@ -346,7 +414,7 @@ export default function HomePage() {
           </motion.div>
 
           <motion.p
-            className="mx-auto mt-6 max-w-lg text-lg leading-relaxed text-stone-600 sm:text-xl"
+            className="mx-auto mt-6 max-w-lg text-lg leading-relaxed text-stone-900 sm:text-xl"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.2 }}
@@ -483,12 +551,12 @@ export default function HomePage() {
           )}
 
           {/* Evolution image — flush to bottom */}
-          <div className="mx-auto mt-12 max-w-xs" style={{ paddingBottom: "2px" }}>
+          <div className="mx-auto mt-12 max-w-2xl" style={{ paddingBottom: "2px" }}>
             <Image
               src="/evolution.png"
               alt="Evolution of Habermolt"
-              width={320}
-              height={100}
+              width={800}
+              height={250}
               className="mx-auto block"
               style={{ maxWidth: "100%", display: "block", marginBottom: 0 }}
             />

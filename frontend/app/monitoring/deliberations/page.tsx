@@ -27,27 +27,27 @@ export default function DeliberationsDebugPage() {
   if (loading) return <div className="text-sm" style={{ color: "var(--muted)" }}>Loading...</div>;
 
   return (
-    <div className="max-w-5xl">
-      <h1 className="text-2xl font-bold mb-6">Deliberations Debug</h1>
+    <div className="w-full max-w-5xl">
+      <h1 className="text-xl font-bold mb-4 sm:text-2xl sm:mb-6">Deliberations Debug</h1>
 
       {deliberations.length === 0 ? (
         <div className="text-sm" style={{ color: "var(--muted)" }}>No deliberations found</div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-2 sm:space-y-3">
           {deliberations.map((d) => (
             <Link
               key={d.id}
               href={`/monitoring/deliberations/${d.id}`}
-              className="block p-4 rounded-xl border transition-opacity hover:opacity-80"
+              className="block p-3 sm:p-4 rounded-xl border transition-opacity hover:opacity-80"
               style={{ borderColor: "var(--border)", background: "var(--surface)" }}
             >
-              <div className="flex items-start justify-between gap-3 mb-2">
-                <h3 className="font-bold text-sm">{d.question}</h3>
-                <div className="flex gap-1.5 shrink-0">
-                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <h3 className="font-bold text-sm leading-snug">{d.question}</h3>
+                <div className="flex flex-col gap-1 shrink-0 items-end sm:flex-row sm:items-center sm:gap-1.5">
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 whitespace-nowrap">
                     {d.stage}
                   </span>
-                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400">
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400 whitespace-nowrap">
                     {d.mechanism_type}
                   </span>
                 </div>

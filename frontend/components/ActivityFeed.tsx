@@ -44,6 +44,14 @@ export default function ActivityFeed({ data }: { data: DeliberationDetail }) {
     const activities: ActivityItem[] = [];
     const { deliberation, opinions, statements, rankings, human_feedback } = data;
 
+    // Build agent name lookup from opinions
+    const agentNameById = new Map<string, string>();
+    for (const o of opinions) {
+      if (o.agent?.id && o.agent?.name) {
+        agentNameById.set(o.agent.id, o.agent.name);
+      }
+    }
+
     // Opinions
     for (const o of opinions) {
       activities.push({
@@ -57,9 +65,13 @@ export default function ActivityFeed({ data }: { data: DeliberationDetail }) {
 
     // Statements
     for (const s of statements) {
+      const contributorName = s.contributed_by_agent_id
+        ? agentNameById.get(s.contributed_by_agent_id)
+        : undefined;
       activities.push({
         id: `statement-${s.id}`,
         type: "statement",
+        agent: contributorName,
         description: s.contributed_by_agent_id
           ? "contributed a statement"
           : s.is_seed
