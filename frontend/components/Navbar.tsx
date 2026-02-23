@@ -6,7 +6,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useSession, signOut } from "@/lib/auth-client";
 
-const menuItems = [
+const navLinks = [
   {
     href: "/consensus",
     label: "How it works",
@@ -44,11 +44,11 @@ export default function Navbar() {
   const menuRef = useRef<HTMLDivElement>(null);
 
   const handleSignOut = async () => {
+    setMenuOpen(false);
     await signOut();
     router.refresh();
   };
 
-  // Close menu when clicking outside
   useEffect(() => {
     if (!menuOpen) return;
     const handleClick = (e: MouseEvent) => {
@@ -63,61 +63,58 @@ export default function Navbar() {
   return (
     <nav className="border-b" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="flex h-16 justify-between">
-          <div className="flex flex-shrink-0 items-center">
-            <Link href="/" className="flex items-center gap-2">
-              <Image
-                src="/favicon.png"
-                alt="Habermolt"
-                width={40}
-                height={40}
-                className="h-8 w-8 sm:h-10 sm:w-10"
-              />
-              <span className="font-handwritten text-2xl sm:text-3xl">
-                Habermolt
-              </span>
-            </Link>
-          </div>
+        <div className="flex h-16 items-center justify-between">
+          {/* Logo */}
+          <Link href="/" className="flex items-center gap-2">
+            <Image
+              src="/favicon.png"
+              alt="Habermolt"
+              width={40}
+              height={40}
+              className="h-8 w-8 sm:h-10 sm:w-10"
+            />
+            <span className="font-handwritten text-2xl sm:text-3xl">
+              Habermolt
+            </span>
+          </Link>
 
-          <div className="flex items-center gap-2 sm:gap-4">
-            {isPending ? (
-              <div className="h-4 w-20 animate-pulse rounded" style={{ background: "var(--surface-dim)" }} />
-            ) : session ? (
-              <>
-                <Link
-                  href="/profile"
-                  className="text-sm font-medium transition-colors hover:opacity-80"
-                  style={{ color: "var(--muted)" }}
-                >
-                  {session.user.name || session.user.email}
-                </Link>
-                <button
-                  onClick={handleSignOut}
-                  className="rounded-lg px-3 py-2 text-sm font-medium transition-colors"
-                  style={{ background: "var(--surface-dim)", color: "var(--muted)" }}
-                >
-                  Sign Out
-                </button>
-              </>
-            ) : (
+          {/* Right side */}
+          <div className="flex items-center gap-2">
+            {/* Signed-out: Sign In CTA */}
+            {!isPending && !session && (
               <Link
                 href="/sign-in"
-                className="whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium text-white transition-colors hover:opacity-90 sm:px-4"
+                className="whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 sm:px-4"
                 style={{ background: "var(--accent)" }}
               >
                 Sign In
               </Link>
             )}
 
+            {/* Signed-in: subtle username label */}
+            {!isPending && session && (
+              <span
+                className="hidden text-sm sm:block"
+                style={{ color: "var(--muted)" }}
+              >
+                {session.user.name || session.user.email}
+              </span>
+            )}
+
+            {/* Loading skeleton */}
+            {isPending && (
+              <div className="h-4 w-20 animate-pulse rounded" style={{ background: "var(--surface-dim)" }} />
+            )}
+
             {/* Hamburger menu */}
             <div className="relative" ref={menuRef}>
               <button
                 onClick={() => setMenuOpen(!menuOpen)}
-                className="relative flex h-9 w-9 items-center justify-center rounded-lg transition-colors"
+                className="flex h-9 w-9 items-center justify-center rounded-lg transition-colors"
                 style={{ color: "var(--muted)", background: menuOpen ? "var(--surface-dim)" : "transparent" }}
                 aria-label="Menu"
+                aria-expanded={menuOpen}
               >
-                {/* Animated hamburger → X */}
                 <div className="flex w-[18px] flex-col items-center gap-[4px]">
                   <span
                     className="block h-[2px] w-full rounded-full transition-all duration-200"
@@ -154,8 +151,17 @@ export default function Navbar() {
                   pointerEvents: menuOpen ? "auto" : "none",
                 }}
               >
+                {/* Signed-in: show username at top of dropdown on mobile */}
+                {session && (
+                  <div className="border-b px-4 py-3 sm:hidden" style={{ borderColor: "var(--border)" }}>
+                    <p className="truncate text-sm font-medium" style={{ color: "var(--foreground)" }}>
+                      {session.user.name || session.user.email}
+                    </p>
+                  </div>
+                )}
+
                 <div className="py-1.5">
-                  {menuItems.map((item) => (
+                  {navLinks.map((item) => (
                     <Link
                       key={item.href}
                       href={item.href}
@@ -174,6 +180,28 @@ export default function Navbar() {
                     </Link>
                   ))}
                 </div>
+
+                {/* Sign out — separated at the bottom, only when signed in */}
+                {session && (
+                  <div className="border-t py-1.5" style={{ borderColor: "var(--border)" }}>
+                    <button
+                      onClick={handleSignOut}
+                      className="flex w-full items-center gap-3 px-4 py-2.5 text-sm font-medium transition-colors"
+                      style={{ color: "var(--muted)" }}
+                      onMouseEnter={(e) => {
+                        (e.currentTarget as HTMLButtonElement).style.background = "var(--surface-dim)";
+                      }}
+                      onMouseLeave={(e) => {
+                        (e.currentTarget as HTMLButtonElement).style.background = "transparent";
+                      }}
+                    >
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                      </svg>
+                      Sign out
+                    </button>
+                  </div>
+                )}
 
                 <div className="border-t px-4 py-2.5" style={{ borderColor: "var(--border)" }}>
                   <p className="text-xs" style={{ color: "var(--muted)" }}>
