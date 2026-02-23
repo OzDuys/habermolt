@@ -20,12 +20,12 @@ function getAgentColor(index: number) {
   return AGENT_COLORS[index % AGENT_COLORS.length];
 }
 
-type TabId = "arena" | "agents" | "journey";
+type TabId = "consensus" | "statements" | "agents";
 
 const TABS: { id: TabId; label: string }[] = [
-  { id: "arena", label: "Arena" },
+  { id: "consensus", label: "Consensus" },
+  { id: "statements", label: "Statements" },
   { id: "agents", label: "Agents" },
-  { id: "journey", label: "Journey" },
 ];
 
 // ─── Lobster SVG ─────────────────────────────────────────────────────────────
@@ -432,7 +432,7 @@ export default function LiveDeliberationPage() {
   const [data, setData] = useState<DeliberationDetail | null>(null);
   const [clusterPoints, setClusterPoints] = useState<ClusterPoint[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<TabId>("arena");
+  const [activeTab, setActiveTab] = useState<TabId>("consensus");
   const [selectedAgent, setSelectedAgent] = useState<AgentInfo | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
@@ -603,7 +603,7 @@ export default function LiveDeliberationPage() {
           scrollSnapType: "y mandatory",
         }}>
 
-          {/* ═══ ARENA ═══ */}
+          {/* ═══ CONSENSUS ═══ */}
           <div style={{
             width: "100%", minHeight: "100%", scrollSnapAlign: "start",
             display: "flex", flexDirection: "column",
@@ -687,16 +687,118 @@ export default function LiveDeliberationPage() {
             </motion.div>
           </div>
 
+          {/* ═══ STATEMENTS ═══ */}
+          <div style={{
+            width: "100%", minHeight: "100%", scrollSnapAlign: "start",
+            display: "flex", flexDirection: "column", alignItems: "center",
+            padding: "32px 20px 48px", position: "relative",
+          }}>
+            <div style={{ width: "100%", maxWidth: 1200 }}>
+              <div style={{ textAlign: "center", marginBottom: 28 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 3, color: "#bbb", textTransform: "uppercase" }}>
+                  {data.statements.length} Statements
+                </span>
+                <p style={{ fontSize: 12, color: "#aaa", marginTop: 6, maxWidth: 420, marginLeft: "auto", marginRight: "auto" }}>
+                  Group statements generated from agent opinions, ranked by collective preference
+                </p>
+              </div>
+
+              <div style={{
+                display: "grid",
+                gridTemplateColumns: clusterPoints.length >= 2 ? "1fr 1fr" : "1fr",
+                gap: 24,
+                alignItems: "start",
+              }}>
+                {/* Left: Statement list */}
+                <div style={{
+                  display: "flex", flexDirection: "column", gap: 12,
+                  maxHeight: "calc(100vh - 220px)", overflowY: "auto",
+                }}>
+                  {data.statements
+                    .sort((a, b) => (a.social_ranking || 99) - (b.social_ranking || 99))
+                    .map((s, i) => {
+                      const isWinner = s.social_ranking === 1;
+                      return (
+                        <motion.div key={s.id}
+                          initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }}
+                          viewport={{ once: true }} transition={{ delay: i * 0.03 }}
+                          style={{
+                            padding: "18px 20px", borderRadius: 16,
+                            background: isWinner ? "rgba(200,74,32,0.04)" : "rgba(255,255,255,0.6)",
+                            border: `1.5px solid ${isWinner ? "rgba(200,74,32,0.15)" : "rgba(0,0,0,0.04)"}`,
+                            boxShadow: isWinner ? "0 4px 16px rgba(200,74,32,0.06)" : "none",
+                          }}
+                        >
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
+                            {isWinner && <span style={{ fontSize: 14 }}>🏆</span>}
+                            {s.social_ranking != null && (
+                              <span style={{
+                                fontSize: 10, color: isWinner ? "#c84a20" : "#666", padding: "1px 6px",
+                                borderRadius: 4, background: isWinner ? "rgba(200,74,32,0.08)" : "rgba(0,0,0,0.04)",
+                                fontWeight: 700,
+                              }}>#{s.social_ranking}</span>
+                            )}
+                            {s.is_seed && (
+                              <span style={{
+                                fontSize: 9, padding: "2px 7px", borderRadius: 4,
+                                background: "#2a6fb010", color: "#2a6fb0", fontWeight: 700,
+                                letterSpacing: 0.5, textTransform: "uppercase",
+                              }}>seed</span>
+                            )}
+                            {s.contributed_by_agent_id && agentNameMap[s.contributed_by_agent_id] && (
+                              <span style={{ fontSize: 10, color: "#888", marginLeft: "auto" }}>
+                                by {agentNameMap[s.contributed_by_agent_id]}
+                              </span>
+                            )}
+                          </div>
+                          {s.title && (
+                            <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a1a", marginBottom: 6 }}>{s.title}</div>
+                          )}
+                          <p style={{ fontSize: 13, lineHeight: 1.7, color: "#333", margin: 0 }}>
+                            {s.statement_text}
+                          </p>
+                        </motion.div>
+                      );
+                    })}
+                </div>
+
+                {/* Right: Statement Landscape */}
+                {clusterPoints.length >= 2 && (
+                  <div style={{ position: "sticky", top: 0 }}>
+                    <div style={{ textAlign: "center", marginBottom: 16 }}>
+                      <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 3, color: "#bbb", textTransform: "uppercase" }}>
+                        Statement Landscape
+                      </span>
+                      <p style={{ fontSize: 11, color: "#ccc", marginTop: 4 }}>
+                        Proximity = semantic similarity. Size &amp; colour = social ranking.
+                      </p>
+                    </div>
+                    <div style={{
+                      borderRadius: 16, overflow: "hidden",
+                      background: "rgba(255,255,255,0.5)", border: "1.5px solid rgba(0,0,0,0.04)",
+                      padding: "16px",
+                    }}>
+                      <StatementCluster points={clusterPoints} />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
           {/* ═══ AGENTS ═══ */}
           <div style={{
             width: "100%", minHeight: "100%", scrollSnapAlign: "start",
-            padding: "32px 24px 48px", position: "relative",
+            padding: "32px 24px 80px", position: "relative",
           }}>
           <div style={{ maxWidth: 1200, margin: "0 auto" }}>
             <div style={{ textAlign: "center", marginBottom: 28 }}>
               <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 3, color: "#bbb", textTransform: "uppercase" }}>
-                {agents.length} Participants
+                {agents.length} Agents
               </span>
+              <p style={{ fontSize: 12, color: "#aaa", marginTop: 6, maxWidth: 420, marginLeft: "auto", marginRight: "auto" }}>
+                AI agents representing human participants — their opinions, rankings, and feedback
+              </p>
             </div>
 
             <div style={{
@@ -758,109 +860,10 @@ export default function LiveDeliberationPage() {
                 </motion.div>
               ))}
             </div>
+
+            {/* Activity feed */}
+            <InlineActivityFeed data={data} />
           </div>
-          </div>
-
-          {/* ═══ JOURNEY & ACTIVITY ═══ */}
-          <div style={{
-            width: "100%", minHeight: "100%", scrollSnapAlign: "start",
-            display: "flex", flexDirection: "column", alignItems: "center",
-            padding: "32px 20px 80px", position: "relative",
-          }}>
-            <div style={{ width: "100%", maxWidth: 960 }}>
-              {/* Statements */}
-              <div style={{ textAlign: "center", marginBottom: 28 }}>
-                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 3, color: "#bbb", textTransform: "uppercase" }}>
-                  {data.statements.length} Statements
-                </span>
-              </div>
-
-              <div
-                className="horizontal-scroll-container"
-                style={{
-                  display: "flex", gap: 14,
-                  overflowX: "auto",
-                  paddingBottom: 16,
-                  scrollSnapType: "x mandatory",
-                }}
-              >
-                {data.statements
-                  .sort((a, b) => (a.social_ranking || 99) - (b.social_ranking || 99))
-                  .map((s, i) => {
-                    const isWinner = s.social_ranking === 1;
-                    return (
-                      <motion.div key={s.id}
-                        initial={{ opacity: 0, x: 30 }} whileInView={{ opacity: 1, x: 0 }}
-                        viewport={{ once: true }} transition={{ delay: i * 0.03 }}
-                        style={{
-                          minWidth: 300, maxWidth: 360, flexShrink: 0,
-                          scrollSnapAlign: "start",
-                          padding: "18px 20px", borderRadius: 16,
-                          background: isWinner ? "rgba(200,74,32,0.04)" : "rgba(255,255,255,0.6)",
-                          border: `1.5px solid ${isWinner ? "rgba(200,74,32,0.15)" : "rgba(0,0,0,0.04)"}`,
-                          boxShadow: isWinner ? "0 4px 16px rgba(200,74,32,0.06)" : "none",
-                        }}
-                      >
-                        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
-                          {isWinner && <span style={{ fontSize: 14 }}>🏆</span>}
-                          {s.social_ranking != null && (
-                            <span style={{
-                              fontSize: 10, color: isWinner ? "#c84a20" : "#666", padding: "1px 6px",
-                              borderRadius: 4, background: isWinner ? "rgba(200,74,32,0.08)" : "rgba(0,0,0,0.04)",
-                              fontWeight: 700,
-                            }}>#{s.social_ranking}</span>
-                          )}
-                          {s.is_seed && (
-                            <span style={{
-                              fontSize: 9, padding: "2px 7px", borderRadius: 4,
-                              background: "#2a6fb010", color: "#2a6fb0", fontWeight: 700,
-                              letterSpacing: 0.5, textTransform: "uppercase",
-                            }}>seed</span>
-                          )}
-                          {s.contributed_by_agent_id && agentNameMap[s.contributed_by_agent_id] && (
-                            <span style={{ fontSize: 10, color: "#888", marginLeft: "auto" }}>
-                              by {agentNameMap[s.contributed_by_agent_id]}
-                            </span>
-                          )}
-                        </div>
-                        {s.title && (
-                          <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a1a", marginBottom: 6 }}>{s.title}</div>
-                        )}
-                        <p style={{ fontSize: 13, lineHeight: 1.7, color: "#333", margin: 0 }}>
-                          {s.statement_text}
-                        </p>
-                      </motion.div>
-                    );
-                  })}
-              </div>
-              <div style={{ textAlign: "center", marginTop: 6 }}>
-                <span style={{ fontSize: 10, color: "#ccc" }}>← swipe to browse →</span>
-              </div>
-
-              {/* Embeddings Visualization */}
-              {clusterPoints.length >= 2 && (
-                <div style={{ marginTop: 32 }}>
-                  <div style={{ textAlign: "center", marginBottom: 16 }}>
-                    <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 3, color: "#bbb", textTransform: "uppercase" }}>
-                      Statement Landscape
-                    </span>
-                    <p style={{ fontSize: 11, color: "#ccc", marginTop: 4 }}>
-                      Proximity = semantic similarity. Size &amp; colour = social ranking.
-                    </p>
-                  </div>
-                  <div style={{
-                    borderRadius: 16, overflow: "hidden",
-                    background: "rgba(255,255,255,0.5)", border: "1.5px solid rgba(0,0,0,0.04)",
-                    padding: "16px",
-                  }}>
-                    <StatementCluster points={clusterPoints} />
-                  </div>
-                </div>
-              )}
-
-              {/* Activity feed */}
-              <InlineActivityFeed data={data} />
-            </div>
           </div>
 
         </div>{/* end scroll container */}
