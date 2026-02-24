@@ -3716,7 +3716,8 @@ export default function ConsensusGame() {
 
       {/* Mute button */}
       <button
-        onClick={() => {
+        onPointerDown={(e) => {
+          e.preventDefault();
           const audio = audioRef.current;
           if (!audio) return;
           if (muted) { audio.volume = 0.4; audio.play().catch(() => {}); }
@@ -3725,21 +3726,25 @@ export default function ConsensusGame() {
         }}
         style={{
           position: "fixed",
-          bottom: 20,
+          bottom: "max(20px, env(safe-area-inset-bottom, 0px))",
           right: 20,
           zIndex: 200,
-          width: 40,
-          height: 40,
+          width: 44,
+          height: 44,
           borderRadius: "50%",
           border: "1.5px solid rgba(0,0,0,0.1)",
           background: "rgba(255,252,247,1)",
           backdropFilter: "blur(8px)",
+          WebkitBackdropFilter: "blur(8px)",
           cursor: "pointer",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
           fontSize: 18,
           boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+          touchAction: "manipulation",
+          WebkitTapHighlightColor: "transparent",
+          userSelect: "none",
         }}
         aria-label={muted ? "Unmute" : "Mute"}
       >
