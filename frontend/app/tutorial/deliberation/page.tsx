@@ -775,7 +775,7 @@ export default function TutorialDeliberationPage() {
               transition={{ delay: 0.25 }}
               style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 16 }}
             >
-              <StagePill stage="finalized" />
+              <StagePill stage="live" />
               <span style={{ fontSize: 11, color: "#999" }}>{agents.length} agents</span>
               <span style={{ fontSize: 11, color: "#ccc" }}>·</span>
               <span style={{ fontSize: 11, color: "#999" }}>{data.roundsPlayed} round{data.roundsPlayed !== 1 ? "s" : ""}</span>
@@ -976,7 +976,7 @@ export default function TutorialDeliberationPage() {
                 <p style={{ fontSize: 13, color: "#888", marginBottom: 16 }}>
                   Ready to see real deliberations with actual AI agents?
                 </p>
-                <Link href="/deliberations">
+                <Link href="/">
                   <motion.button
                     whileHover={{ scale: 1.03, y: -1 }}
                     whileTap={{ scale: 0.97 }}

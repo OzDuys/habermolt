@@ -406,7 +406,9 @@ const BACK_TARGETS: Partial<Record<Phase, Phase>> = {
 
 function ProgressBar({ phase, loadingFrom, onBack }: { phase: Phase; loadingFrom?: Phase; onBack: (target: Phase) => void }) {
   if (phase === "intro") return null;
-  const idx = ALL_PHASES.indexOf(phase);
+  const rawIdx = ALL_PHASES.indexOf(phase);
+  // When loading, use the source phase's position so the bar doesn't regress
+  const idx = phase === "loading" && loadingFrom ? ALL_PHASES.indexOf(loadingFrom) : rawIdx;
   const pct = (idx / (ALL_PHASES.length - 1)) * 100;
   const info = phase === "loading" && loadingFrom ? PART_LABELS[loadingFrom] : PART_LABELS[phase];
   const backTarget = BACK_TARGETS[phase];
@@ -682,10 +684,12 @@ function IntroScene({ onStart }: { onStart: () => void }) {
 
 function QuestionScene({
   onSubmit,
+  initialValue = "",
 }: {
   onSubmit: (question: string) => void;
+  initialValue?: string;
 }) {
-  const [text, setText] = useState("");
+  const [text, setText] = useState(initialValue);
 
   return (
     <Scene padTop>
@@ -798,11 +802,13 @@ function QuestionScene({
 function OpinionScene({
   question,
   onSubmit,
+  initialValue = "",
 }: {
   question: string;
   onSubmit: (opinion: string) => void;
+  initialValue?: string;
 }) {
-  const [text, setText] = useState("");
+  const [text, setText] = useState(initialValue);
 
   return (
     <Scene padTop>
@@ -1245,6 +1251,7 @@ function WriteStatementScene({
   agent2,
   agent3,
   onSubmit,
+  initialStatement,
 }: {
   question: string;
   userOpinion: string;
@@ -1252,9 +1259,10 @@ function WriteStatementScene({
   agent2: LobsterAgent;
   agent3: LobsterAgent;
   onSubmit: (statement: Statement) => void;
+  initialStatement?: { label: string; text: string };
 }) {
-  const [text, setText] = useState("");
-  const [label, setLabel] = useState("");
+  const [text, setText] = useState(initialStatement?.text || "");
+  const [label, setLabel] = useState(initialStatement?.label || "");
 
   const handleSubmit = () => {
     if (text.trim().length <= 10) return;
@@ -1313,9 +1321,9 @@ function WriteStatementScene({
         <div
           style={{
             display: "flex",
+            flexDirection: "column",
             gap: 8,
             marginBottom: 14,
-            overflowX: "auto",
           }}
         >
           {[
@@ -1339,8 +1347,6 @@ function WriteStatementScene({
             <div
               key={l.name}
               style={{
-                flex: "1 1 0",
-                minWidth: 120,
                 background: `${l.color}08`,
                 border: `1px solid ${l.color}15`,
                 borderRadius: 10,
@@ -1352,8 +1358,7 @@ function WriteStatementScene({
               }}
             >
               <span style={{ fontWeight: 700, color: l.color }}>{l.name}: </span>
-              {l.opinion.slice(0, 80)}
-              {l.opinion.length > 80 ? "…" : ""}
+              {l.opinion}
             </div>
           ))}
         </div>
@@ -2490,6 +2495,7 @@ function ContinueScene({
   question,
   statements,
   agents,
+  userOpinion,
   onAddStatement,
   onRerank,
   onSimulateLobster,
@@ -2498,6 +2504,7 @@ function ContinueScene({
   question: string;
   statements: Statement[];
   agents: LobsterAgent[];
+  userOpinion: string;
   onAddStatement: (stmt: Statement, newHumanRank: number, predictedRanks: number[]) => void;
   onRerank: (newHumanRanking: number[]) => void;
   onSimulateLobster: () => Promise<void>;
@@ -2507,7 +2514,6 @@ function ContinueScene({
   const [mode, setMode] = useState<"options" | "add" | "rerank">("options");
   const [text, setText] = useState("");
   const [label, setLabel] = useState("");
-  const [userRank, setUserRank] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [simulating, setSimulating] = useState(false);
 
@@ -2546,7 +2552,8 @@ function ContinueScene({
   };
 
   const handleSubmitAdd = async () => {
-    if (text.trim().length <= 5 || userRank === null) return;
+    if (text.trim().length <= 5) return;
+    const userRank = 0; // User's own statement defaults to 1st place
     setSubmitting(true);
     try {
       const res = await fetch("/api/consensus", {
@@ -2629,7 +2636,7 @@ function ContinueScene({
             <motion.button
               whileHover={{ scale: 1.01, x: 3 }}
               whileTap={{ scale: 0.99 }}
-              onClick={() => { setMode("add"); setText(""); setLabel(""); setUserRank(null); }}
+              onClick={() => { setMode("add"); setText(""); setLabel(""); }}
               style={{
                 background: "rgba(255,255,255,0.9)",
                 border: `1.5px solid ${USER_COLOR}20`,
@@ -2709,6 +2716,37 @@ function ContinueScene({
         {/* ── Add Statement Form ── */}
         {mode === "add" && (
           <Card style={{ padding: "20px 24px" }}>
+            {/* Opinion recap */}
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 6,
+                marginBottom: 14,
+              }}
+            >
+              {[
+                { name: "You", opinion: userOpinion, color: USER_COLOR },
+                ...agents.map((a) => ({ name: a.name, opinion: a.opinion, color: a.color })),
+              ].map((l) => (
+                <div
+                  key={l.name}
+                  style={{
+                    background: `${l.color}08`,
+                    border: `1px solid ${l.color}15`,
+                    borderRadius: 10,
+                    padding: "8px 10px",
+                    fontSize: 11,
+                    color: "#555",
+                    fontFamily: "'DM Sans', sans-serif",
+                    lineHeight: 1.4,
+                  }}
+                >
+                  <span style={{ fontWeight: 700, color: l.color }}>{l.name}: </span>
+                  {l.opinion}
+                </div>
+              ))}
+            </div>
             <input
               value={label}
               onChange={(e) => setLabel(e.target.value)}
@@ -2724,25 +2762,10 @@ function ContinueScene({
               disabled={submitting}
               style={{ width: "100%", border: `1.5px solid ${USER_COLOR}20`, borderRadius: 10, padding: "10px 14px", fontFamily: "'DM Sans', sans-serif", fontSize: 14, resize: "none", outline: "none", background: submitting ? "#f8f6f2" : "white", color: "#1a1a1a", boxSizing: "border-box" }}
             />
-            {!submitting && text.trim().length > 5 && (
-              <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} style={{ marginTop: 12 }}>
-                <p style={{ fontSize: 12, color: "#888", margin: "0 0 8px", fontFamily: "'DM Sans', sans-serif" }}>
-                  Where would you rank this among the existing {n} statements?
-                </p>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  {Array.from({ length: n + 1 }, (_, i) => (
-                    <motion.button key={i} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => setUserRank(i)}
-                      style={{ width: 36, height: 36, borderRadius: 8, border: `1.5px solid ${userRank === i ? USER_COLOR : "rgba(0,0,0,0.08)"}`, background: userRank === i ? `${USER_COLOR}15` : "white", color: userRank === i ? USER_COLOR : "#888", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
-                      {i === 0 ? "🥇" : i + 1}
-                    </motion.button>
-                  ))}
-                </div>
-              </motion.div>
-            )}
             <div style={{ marginTop: 14, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <button onClick={() => setMode("options")} style={{ background: "none", border: "none", fontSize: 12, color: "#999", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", textDecoration: "underline" }}>← Back</button>
               {!submitting ? (
-                <Btn onClick={handleSubmitAdd} disabled={text.trim().length <= 5 || userRank === null}>Submit →</Btn>
+                <Btn onClick={handleSubmitAdd} disabled={text.trim().length <= 5}>Submit →</Btn>
               ) : (
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: "linear" }} style={{ width: 14, height: 14, border: "2px solid #c84a20", borderTopColor: "transparent", borderRadius: "50%" }} />
@@ -2978,6 +3001,13 @@ export default function ConsensusGame() {
   // Part 1: User submits opinion
   const submitOpinion = async (opinion: string) => {
     setUserOpinion(opinion);
+
+    // Skip LLM call if agents already have opinions (going back and forward)
+    if (agent1.opinion && agent2.opinion && agent3.opinion && opinion === userOpinion) {
+      goTo("opinions-reveal");
+      return;
+    }
+
     goTo("loading");
 
     const minDelay = new Promise((r) => setTimeout(r, 3500));
@@ -3033,6 +3063,12 @@ export default function ConsensusGame() {
   // Part 2: User writes consensus statement
   const submitUserStatement = async (stmt: Statement) => {
     const userStmt = { ...stmt, id: 0 };
+
+    // Skip LLM call if statements already exist (going back and forward without editing)
+    if (statements.length > 0 && statements[0].text === stmt.text) {
+      goTo("lobster-statements");
+      return;
+    }
 
     goTo("loading");
 
@@ -3406,10 +3442,10 @@ export default function ConsensusGame() {
               <IntroScene onStart={() => goTo("question")} />
             )}
             {phase === "question" && (
-              <QuestionScene onSubmit={submitQuestion} />
+              <QuestionScene onSubmit={submitQuestion} initialValue={question} />
             )}
             {phase === "opinion" && (
-              <OpinionScene question={question} onSubmit={submitOpinion} />
+              <OpinionScene question={question} onSubmit={submitOpinion} initialValue={userOpinion} />
             )}
             {phase === "loading" && <LoadingScene />}
             {phase === "opinions-reveal" && (
@@ -3435,6 +3471,7 @@ export default function ConsensusGame() {
                 agent2={agent2}
                 agent3={agent3}
                 onSubmit={submitUserStatement}
+                initialStatement={statements.length > 0 ? { label: statements[0].label, text: statements[0].text } : undefined}
               />
             )}
             {phase === "lobster-statements" && statements.length > 0 && (
@@ -3493,6 +3530,7 @@ export default function ConsensusGame() {
                 question={question}
                 statements={statements}
                 agents={allAgents}
+                userOpinion={userOpinion}
                 onAddStatement={handleAddStatement}
                 onRerank={handleRerank}
                 onSimulateLobster={handleSimulateLobster}
