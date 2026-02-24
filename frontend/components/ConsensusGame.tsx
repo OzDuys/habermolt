@@ -2746,6 +2746,55 @@ function ContinueScene({
     setSimulating(false);
   };
 
+  const [generatingStmt, setGeneratingStmt] = useState(false);
+  const [generatingRerank, setGeneratingRerank] = useState(false);
+
+  const autoGenerateStatement = async () => {
+    setGeneratingStmt(true);
+    try {
+      const res = await fetch("/api/consensus", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "auto-generate",
+          type: "statement",
+          question,
+          playerOpinion: userOpinion,
+          agents: agents.map((a) => ({ name: a.name, opinion: a.opinion })),
+        }),
+      });
+      const data = await res.json();
+      if (data.label) setLabel(data.label);
+      if (data.text) setText(data.text);
+    } catch { /* ignore */ }
+    setGeneratingStmt(false);
+  };
+
+  const autoGenerateRerank = async () => {
+    setGeneratingRerank(true);
+    try {
+      const res = await fetch("/api/consensus", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "auto-generate",
+          type: "ranking",
+          question,
+          playerOpinion: userOpinion,
+          statements: statements.map((s) => ({ label: s.label, text: s.text })),
+        }),
+      });
+      const data = await res.json();
+      if (Array.isArray(data.ranking) && data.ranking.length === n) {
+        setRerankRanking(data.ranking);
+        const newOrder = Array.from({ length: n }, (_, i) => i);
+        newOrder.sort((a, b) => data.ranking[a] - data.ranking[b]);
+        setRerankOrder(newOrder);
+      }
+    } catch { /* ignore */ }
+    setGeneratingRerank(false);
+  };
+
   return (
     <Scene padTop>
       <div
@@ -2909,7 +2958,10 @@ function ContinueScene({
             <div style={{ marginTop: 14, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <button onClick={() => setMode("options")} style={{ background: "none", border: "none", fontSize: 12, color: "#999", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", textDecoration: "underline" }}>← Back</button>
               {!submitting ? (
-                <Btn onClick={handleSubmitAdd} disabled={text.trim().length <= 5}>Submit →</Btn>
+                <div style={{ display: "flex", gap: 10 }}>
+                  <SparkleBtn onClick={autoGenerateStatement} loading={generatingStmt} />
+                  <Btn onClick={handleSubmitAdd} disabled={text.trim().length <= 5}>Submit →</Btn>
+                </div>
               ) : (
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: "linear" }} style={{ width: 14, height: 14, border: "2px solid #c84a20", borderTopColor: "transparent", borderRadius: "50%" }} />
@@ -2996,7 +3048,10 @@ function ContinueScene({
                   {rerankDone ? "All ranked ✓" : `${rerankOrder.length}/${n}`}
                 </span>
                 {!submitting ? (
-                  <Btn onClick={handleSubmitRerank} disabled={!rerankDone}>Submit ranking →</Btn>
+                  <div style={{ display: "flex", gap: 10 }}>
+                    <SparkleBtn onClick={autoGenerateRerank} loading={generatingRerank} label="Auto-rank" />
+                    <Btn onClick={handleSubmitRerank} disabled={!rerankDone}>Submit ranking →</Btn>
+                  </div>
                 ) : (
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: "linear" }} style={{ width: 14, height: 14, border: "2px solid #c84a20", borderTopColor: "transparent", borderRadius: "50%" }} />

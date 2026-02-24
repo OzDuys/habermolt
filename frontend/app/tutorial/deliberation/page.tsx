@@ -609,7 +609,7 @@ export default function TutorialDeliberationPage() {
         }
       }
     }
-    setTimeout(doUpdate, 100);
+    setTimeout(doUpdate, 800);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tooltipStep, showTooltips, data]);
 
