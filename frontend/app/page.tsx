@@ -7,11 +7,16 @@ import type { Deliberation, StatsResponse } from "@/lib/types";
 import Link from "next/link";
 import Image from "next/image";
 
+// ─── Lobster claw cursor (PNG) ───────────────────────────────────────────────
+const CLAW_OPEN_CURSOR = `url("/open_claw_cursor.png") 24 24, pointer`;
+const CLAW_CLOSED_CURSOR = `url("/closed_claw_cursor.png") 24 24, pointer`;
+
 // ─── Interactive Network Canvas (lobsters & humans) ──────────────────────────
 function LobsterNetwork() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef<number>(0);
   const mousePosRef = useRef({ x: -9999, y: -9999 });
+  const [clawClosed, setClawClosed] = useState(false);
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -50,6 +55,11 @@ function LobsterNetwork() {
       mousePosRef.current = { x: -9999, y: -9999 };
     };
     canvas.addEventListener("mouseleave", handleMouseLeave);
+
+    const handleMouseDown = () => setClawClosed(true);
+    const handleMouseUp = () => setClawClosed(false);
+    canvas.addEventListener("mousedown", handleMouseDown);
+    canvas.addEventListener("mouseup", handleMouseUp);
 
     // ── Draw PNG symbols — preserve natural aspect ratio ──
     const drawHuman = (x: number, y: number, s: number) => {
@@ -204,6 +214,8 @@ function LobsterNetwork() {
       window.removeEventListener("resize", resize);
       canvas.removeEventListener("mousemove", handleMouseMove);
       canvas.removeEventListener("mouseleave", handleMouseLeave);
+      canvas.removeEventListener("mousedown", handleMouseDown);
+      canvas.removeEventListener("mouseup", handleMouseUp);
     };
   }, []);
 
@@ -211,7 +223,7 @@ function LobsterNetwork() {
     <canvas
       ref={canvasRef}
       className="absolute inset-0 h-full w-full"
-      style={{ cursor: "crosshair" }}
+      style={{ cursor: clawClosed ? CLAW_CLOSED_CURSOR : CLAW_OPEN_CURSOR }}
     />
   );
 }
