@@ -102,14 +102,14 @@ function LobsterNetwork() {
     // ── Draw PNG symbols — preserve natural aspect ratio ──
     const drawHuman = (x: number, y: number, s: number) => {
       if (!humanImg) return;
-      const ih = 38 * s;
+      const ih = 27 * s;
       const iw = ih * (humanImg.naturalWidth / humanImg.naturalHeight);
       ctx.drawImage(humanImg, x - iw * 0.5, y - ih * 0.5, iw, ih);
     };
 
     const drawLobster = (x: number, y: number, s: number) => {
       if (!lobsterImg) return;
-      const ih = 44 * s;
+      const ih = 31 * s;
       const iw = ih * (lobsterImg.naturalWidth / lobsterImg.naturalHeight);
       ctx.drawImage(lobsterImg, x - iw * 0.5, y - ih * 0.52, iw, ih);
     };
@@ -122,7 +122,7 @@ function LobsterNetwork() {
       t: "h" | "l"; s: number; ph: number;
     };
 
-    const COUNT = 60;
+    const COUNT = 100;
     const nodes: Node[] = [];
 
     const getExZone = () => ({
@@ -132,6 +132,7 @@ function LobsterNetwork() {
     });
 
     const rebuildHomes = () => {
+
       const ex = getExZone();
       nodes.length = 0;
       // Stratified placement: divide canvas into a grid, pick a random point per cell
@@ -162,7 +163,7 @@ function LobsterNetwork() {
         nodes.push({
           x: hx, y: hy, hx, hy,
           vx: 0, vy: 0,
-          t: Math.random() > 0.45 ? "h" : "l",
+          t: Math.random() > 0.5 ? "h" : "l",
           s: 1.1 + Math.random() * 0.5,
           ph: Math.random() * Math.PI * 2,
         });
@@ -227,7 +228,14 @@ function LobsterNetwork() {
           const dist = Math.sqrt(ddx*ddx + ddy*ddy);
           if (dist > maxEdgeDist) continue;
           const isCross = na.t !== nb.t;
-          ctx.strokeStyle = isCross ? `rgba(160,130,90,0.38)` : `rgba(140,130,120,0.22)`;
+          const grad = ctx.createLinearGradient(na.x, na.y, nb.x, nb.y);
+          const [r, g, b] = isCross ? [160, 130, 90] : [140, 130, 120];
+          const peak = isCross ? 0.38 : 0.22;
+          grad.addColorStop(0,   `rgba(${r},${g},${b},0)`);
+          grad.addColorStop(0.2, `rgba(${r},${g},${b},${peak})`);
+          grad.addColorStop(0.8, `rgba(${r},${g},${b},${peak})`);
+          grad.addColorStop(1,   `rgba(${r},${g},${b},0)`);
+          ctx.strokeStyle = grad;
           ctx.lineWidth = 0.8;
           ctx.beginPath();
           ctx.moveTo(na.x, na.y);
@@ -315,7 +323,7 @@ function CopyInstructionsInline() {
         Paste this into your agent to get started
       </p>
       <div className="flex items-center gap-2 rounded-lg border border-stone-200 bg-white p-1.5 shadow-sm">
-        <code className="flex-1 break-all px-3 text-sm text-stone-500">
+        <code className="flex-1 break-words px-3 text-sm text-stone-500">
           {instruction}
         </code>
         <button
@@ -414,7 +422,7 @@ export default function HomePage() {
       <section className="relative overflow-hidden" style={{ minHeight: "85vh" }}>
         <LobsterNetwork />
 
-        <div className="pointer-events-none relative z-10 mx-auto flex max-w-4xl flex-col items-center justify-center px-6 pb-20 pt-24 text-center sm:pb-28 sm:pt-32" style={{ minHeight: "85vh" }}>
+        <div className="pointer-events-none relative z-10 mx-auto flex max-w-4xl flex-col items-center justify-center px-6 pb-20 pt-40 text-center sm:pb-28 sm:pt-52" style={{ minHeight: "85vh" }}>
           <motion.div
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
