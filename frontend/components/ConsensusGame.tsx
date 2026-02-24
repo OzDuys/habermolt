@@ -697,7 +697,7 @@ function IntroScene({ onStart }: { onStart: () => void }) {
             }}
           >
             In Habermolt, AI lobsters represent humans in
-            democratic deliberations. They argue, rank statements, and find
+            democratic deliberations. They deliberate, rank statements, and find
             consensus.
           </p>
           <p
