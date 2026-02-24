@@ -57,9 +57,8 @@ type Phase =
   | "ranking"
   | "lobster-rankings"
   | "schulze"
-  | "continuous-intro"
-  | "add-statement"
-  | "end";
+  | "end"
+  | "continue";
 
 const RANK_MEDALS = ["🥇", "🥈", "🥉", "4th", "5th", "6th"];
 const RANK_COLORS = ["#c8a830", "#8a8a8a", "#a06030", "#666", "#666", "#666"];
@@ -340,7 +339,7 @@ function Typewriter({
 
 // ─── Shared Components ───────────────────────────────────────────────────────
 
-function Scene({ children }: { children: React.ReactNode }) {
+function Scene({ children, padTop = false }: { children: React.ReactNode; padTop?: boolean }) {
   return (
     <div
       style={{
@@ -350,7 +349,7 @@ function Scene({ children }: { children: React.ReactNode }) {
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
-        padding: "24px 20px",
+        padding: padTop ? "110px 20px 24px" : "24px 20px",
         overflowY: "auto",
       }}
     >
@@ -371,9 +370,8 @@ const ALL_PHASES: Phase[] = [
   "ranking",
   "lobster-rankings",
   "schulze",
-  "continuous-intro",
-  "add-statement",
   "end",
+  "continue",
 ];
 
 const PART_LABELS: Record<string, { part: number; label: string }> = {
@@ -388,21 +386,35 @@ const PART_LABELS: Record<string, { part: number; label: string }> = {
   ranking: { part: 3, label: "Ranking Statements" },
   "lobster-rankings": { part: 3, label: "Ranking Statements" },
   schulze: { part: 3, label: "Ranking Statements" },
-  "continuous-intro": { part: 4, label: "Continuous Deliberation" },
-  "add-statement": { part: 4, label: "Continuous Deliberation" },
-  end: { part: 5, label: "Game Over" },
+  end: { part: 4, label: "Deliberation Complete" },
+  continue: { part: 4, label: "Continue Deliberating" },
 };
 
-function ProgressBar({ phase }: { phase: Phase }) {
+// Phases the user can meaningfully go "back" to
+const BACK_TARGETS: Partial<Record<Phase, Phase>> = {
+  opinion: "question",
+  "opinions-reveal": "opinion",
+  "explain-consensus": "opinions-reveal",
+  "write-statement": "explain-consensus",
+  "lobster-statements": "write-statement",
+  ranking: "lobster-statements",
+  "lobster-rankings": "ranking",
+  schulze: "lobster-rankings",
+  end: "schulze",
+  continue: "end",
+};
+
+function ProgressBar({ phase, loadingFrom, onBack }: { phase: Phase; loadingFrom?: Phase; onBack: (target: Phase) => void }) {
   if (phase === "intro") return null;
   const idx = ALL_PHASES.indexOf(phase);
   const pct = (idx / (ALL_PHASES.length - 1)) * 100;
-  const info = PART_LABELS[phase];
+  const info = phase === "loading" && loadingFrom ? PART_LABELS[loadingFrom] : PART_LABELS[phase];
+  const backTarget = BACK_TARGETS[phase];
   return (
     <div
       style={{
         position: "fixed",
-        top: 0,
+        top: 64,
         left: 0,
         right: 0,
         zIndex: 100,
@@ -422,17 +434,39 @@ function ProgressBar({ phase }: { phase: Phase }) {
           margin: "0 auto",
         }}
       >
-        <span
-          style={{
-            fontSize: 10,
-            fontWeight: 700,
-            letterSpacing: 2,
-            color: "#c84a20",
-            textTransform: "uppercase",
-          }}
-        >
-          {info?.part ? `Part ${info.part}` : ""}
-        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {backTarget && phase !== "loading" && (
+            <motion.button
+              onClick={() => onBack(backTarget)}
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.9 }}
+              style={{
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                fontSize: 14,
+                color: "#c84a20",
+                padding: "2px 4px",
+                lineHeight: 1,
+                fontFamily: "'DM Sans', sans-serif",
+              }}
+              aria-label="Go back"
+            >
+              ←
+            </motion.button>
+          )}
+          <span
+            style={{
+              fontSize: 10,
+              fontWeight: 700,
+              letterSpacing: 2,
+              color: "#c84a20",
+              textTransform: "uppercase",
+            }}
+          >
+            {info?.part ? `Part ${info.part}` : ""}
+          </span>
+        </div>
         <span
           style={{
             fontSize: 11,
@@ -654,7 +688,7 @@ function QuestionScene({
   const [text, setText] = useState("");
 
   return (
-    <Scene>
+    <Scene padTop>
       <Card>
         <div style={{ textAlign: "center", marginBottom: 20 }}>
           <motion.div
@@ -771,7 +805,7 @@ function OpinionScene({
   const [text, setText] = useState("");
 
   return (
-    <Scene>
+    <Scene padTop>
       <Card>
         <div
           style={{
@@ -875,7 +909,7 @@ function LoadingScene() {
     "> preparing for deliberation...",
   ];
   return (
-    <Scene>
+    <Scene padTop>
       <Card style={{ maxWidth: 440 }}>
         <div style={{ textAlign: "center", marginBottom: 20 }}>
           <div
@@ -1023,7 +1057,7 @@ function OpinionsRevealScene({
   ];
 
   return (
-    <Scene>
+    <Scene padTop>
       <div
         style={{
           maxWidth: 640,
@@ -1145,7 +1179,7 @@ function OpinionsRevealScene({
 
 function ExplainConsensusScene({ onNext }: { onNext: () => void }) {
   return (
-    <Scene>
+    <Scene padTop>
       <Card style={{ maxWidth: 520 }}>
         <div style={{ textAlign: "center", marginBottom: 20 }}>
           <span style={{ fontSize: 36 }}>🤝</span>
@@ -1234,7 +1268,7 @@ function WriteStatementScene({
   };
 
   return (
-    <Scene>
+    <Scene padTop>
       <Card>
         <div
           style={{
@@ -1402,7 +1436,7 @@ function LobsterStatementsScene({
   }, []);
 
   return (
-    <Scene>
+    <Scene padTop>
       <div
         style={{
           maxWidth: 600,
@@ -1586,7 +1620,7 @@ function RankingScene({
   const done = ranking.every((r) => r !== -1);
 
   return (
-    <Scene>
+    <Scene padTop>
       <div
         style={{
           display: "flex",
@@ -1847,7 +1881,7 @@ function LobsterRankingsScene({
   };
 
   return (
-    <Scene>
+    <Scene padTop>
       <div
         style={{
           maxWidth: 520,
@@ -1966,7 +2000,7 @@ function SchulzeScene({
   }
 
   return (
-    <Scene>
+    <Scene padTop>
       <div
         style={{
           maxWidth: 560,
@@ -2201,115 +2235,291 @@ function SchulzeScene({
   );
 }
 
-// ─── Scene: Continuous Intro ─────────────────────────────────────────────────
+// ─── Extra colors for dynamically added lobsters ────────────────────────────
 
-function ContinuousIntroScene({ onNext }: { onNext: () => void }) {
-  return (
-    <Scene>
-      <Card style={{ maxWidth: 520 }}>
-        <div style={{ textAlign: "center", marginBottom: 16 }}>
-          <span style={{ fontSize: 32 }}>🔄</span>
-          <h2
-            className="font-handwritten"
-            style={{
-              fontSize: 26,
-              color: "#1a1a1a",
-              margin: "8px 0 0",
-            }}
-          >
-            Deliberation Never Ends
-          </h2>
-        </div>
+const EXTRA_AGENT_COLORS = ["#b5651d", "#6a5acd", "#20b2aa", "#dc143c", "#ff8c00", "#4682b4"];
 
-        <div
-          style={{
-            fontSize: 14,
-            lineHeight: 1.8,
-            color: "#444",
-            fontFamily: "'DM Sans', sans-serif",
-            marginBottom: 20,
-          }}
-        >
-          <p style={{ margin: "0 0 12px" }}>
-            In Habermolt, deliberation is <strong>continuous</strong>. New
-            consensus statements can be added at any time, and the rankings
-            update dynamically.
-          </p>
-          <div
-            style={{
-              background: "#2a6fb008",
-              border: "1.5px solid #2a6fb015",
-              borderRadius: 12,
-              padding: "12px 14px",
-              fontSize: 13,
-              color: "#555",
-              marginBottom: 12,
-            }}
-          >
-            🔮 The system can <strong>predict</strong> how lobsters will rank new
-            statements based on their previous opinions. But lobsters can always
-            come back and update their actual ranking.
-          </div>
-          <p style={{ margin: 0, fontSize: 13, color: "#888" }}>
-            Try adding more statements and see how the consensus shifts.
-          </p>
-        </div>
+// ─── Scene: End (combined results + continue) ───────────────────────────────
 
-        <div style={{ display: "flex", justifyContent: "center" }}>
-          <Btn onClick={onNext}>Continue deliberating →</Btn>
-        </div>
-      </Card>
-    </Scene>
-  );
-}
-
-// ─── Scene: Add Statement (loop) ─────────────────────────────────────────────
-
-function AddStatementScene({
+function EndScene({
   question,
   statements,
   currentWinner,
-  agent1,
-  agent2,
-  agent3,
-  humanRanking,
-  onAdd,
-  onRerank,
-  onFinish,
+  roundsPlayed,
+  userOpinion,
+  agents,
+  allRankings,
+  onContinue,
+  onReset,
 }: {
   question: string;
   statements: Statement[];
   currentWinner: number | null;
-  agent1: LobsterAgent;
-  agent2: LobsterAgent;
-  agent3: LobsterAgent;
-  humanRanking: number[];
-  onAdd: (
-    statement: Statement,
-    newHumanRank: number,
-    predictedA1Rank: number,
-    predictedA2Rank: number,
-    predictedA3Rank: number
-  ) => void;
-  onRerank: (newHumanRanking: number[]) => void;
-  onFinish: () => void;
+  roundsPlayed: number;
+  userOpinion: string;
+  agents: LobsterAgent[];
+  allRankings: number[][];
+  onContinue: () => void;
+  onReset: () => void;
 }) {
-  const [mode, setMode] = useState<"choose" | "add" | "rerank">("choose");
+  const [expandedAgent, setExpandedAgent] = useState<number | null>(null);
+  const n = statements.length;
+
+  const allParticipants = [
+    { name: "You", opinion: userOpinion, color: USER_COLOR },
+    ...agents.map((a) => ({ name: a.name, opinion: a.opinion, color: a.color })),
+  ];
+
+  const getStatementsBy = (name: string) =>
+    statements.filter((s) => s.author === name);
+
+  const getRankingOrdered = (rankingIdx: number) => {
+    if (!allRankings[rankingIdx] || allRankings[rankingIdx].length !== n) return [];
+    return Array.from({ length: n }, (_, i) => ({
+      id: i,
+      rank: allRankings[rankingIdx][i],
+    })).sort((a, b) => a.rank - b.rank);
+  };
+
+  return (
+    <Scene padTop>
+      <div
+        style={{
+          maxWidth: 580,
+          width: "100%",
+          zIndex: 1,
+          display: "flex",
+          flexDirection: "column",
+          gap: 16,
+        }}
+      >
+        {/* ── Header ── */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          style={{ textAlign: "center" }}
+        >
+          <div style={{ display: "flex", justifyContent: "center", gap: 6, marginBottom: 12 }}>
+            {allParticipants.map((p, i) => (
+              <motion.div
+                key={i}
+                animate={{ y: [0, -5, 0], rotate: [0, i % 2 === 0 ? 4 : -4, 0] }}
+                transition={{ duration: 2 + i * 0.3, repeat: Infinity, delay: i * 0.15 }}
+              >
+                <GameLobster color={p.color} size={36} variant={i} />
+              </motion.div>
+            ))}
+          </div>
+          <h2
+            className="font-handwritten"
+            style={{ fontSize: 28, color: "#c84a20", margin: "0 0 4px" }}
+          >
+            Deliberation Complete!
+          </h2>
+          <p style={{ fontSize: 12, color: "#888", margin: 0, fontFamily: "'DM Sans', sans-serif" }}>
+            {roundsPlayed} round{roundsPlayed > 1 ? "s" : ""} · {statements.length} statements · {allParticipants.length} lobsters
+          </p>
+        </motion.div>
+
+        {/* ── Winner ── */}
+        {currentWinner !== null && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            style={{
+              background: "rgba(26,138,80,0.05)",
+              border: "1.5px solid rgba(26,138,80,0.15)",
+              borderRadius: 16,
+              padding: "16px 20px",
+              textAlign: "center",
+            }}
+          >
+            <span style={{ fontSize: 24 }}>🏆</span>
+            <div style={{ fontWeight: 700, color: "#1a5a2a", fontSize: 15, marginTop: 4, fontFamily: "'DM Sans', sans-serif" }}>
+              {statements[currentWinner].label}
+            </div>
+            <div style={{ fontSize: 12, color: "#3a6a3a", marginTop: 4, lineHeight: 1.5, fontFamily: "'DM Sans', sans-serif" }}>
+              {statements[currentWinner].text}
+            </div>
+          </motion.div>
+        )}
+
+        {/* ── Agent Cards ── */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {allParticipants.map((p, pIdx) => {
+              const isExpanded = expandedAgent === pIdx;
+              const authored = getStatementsBy(p.name);
+              const ranked = getRankingOrdered(pIdx);
+              return (
+                <motion.div
+                  key={p.name}
+                  layout
+                  style={{
+                    background: "rgba(255,255,255,0.9)",
+                    border: `1.5px solid ${p.color}20`,
+                    borderRadius: 14,
+                    overflow: "hidden",
+                    cursor: "pointer",
+                  }}
+                >
+                  <div
+                    onClick={() => setExpandedAgent(isExpanded ? null : pIdx)}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 10,
+                      padding: "12px 16px",
+                    }}
+                  >
+                    <GameLobster color={p.color} size={28} variant={pIdx} />
+                    <div style={{ flex: 1 }}>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: p.color, fontFamily: "'DM Sans', sans-serif" }}>
+                        {p.name}
+                      </span>
+                      <span style={{ fontSize: 11, color: "#999", marginLeft: 8, fontFamily: "'DM Sans', sans-serif" }}>
+                        {authored.length} statement{authored.length !== 1 ? "s" : ""}
+                      </span>
+                    </div>
+                    <span style={{ fontSize: 12, color: "#ccc", transition: "transform 0.2s", transform: isExpanded ? "rotate(180deg)" : "rotate(0)" }}>
+                      ▼
+                    </span>
+                  </div>
+                  <AnimatePresence>
+                    {isExpanded && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                        style={{ overflow: "hidden" }}
+                      >
+                        <div style={{ padding: "0 16px 14px", fontSize: 12, fontFamily: "'DM Sans', sans-serif", color: "#555" }}>
+                          {/* Opinion */}
+                          <div style={{ marginBottom: 10 }}>
+                            <div style={{ fontWeight: 700, color: "#888", fontSize: 10, textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>Opinion</div>
+                            <div style={{ lineHeight: 1.6 }}>{p.opinion}</div>
+                          </div>
+                          {/* Authored statements */}
+                          {authored.length > 0 && (
+                            <div style={{ marginBottom: 10 }}>
+                              <div style={{ fontWeight: 700, color: "#888", fontSize: 10, textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>Contributed Statements</div>
+                              {authored.map((s) => (
+                                <div key={s.id} style={{ padding: "4px 0", borderBottom: "1px solid rgba(0,0,0,0.04)" }}>
+                                  {s.emoji} <strong>{s.label}</strong> — {s.text}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {/* Ranking */}
+                          {ranked.length > 0 && (
+                            <div>
+                              <div style={{ fontWeight: 700, color: "#888", fontSize: 10, textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>Ranking</div>
+                              {ranked.map(({ id, rank }) => (
+                                <div key={id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "3px 0" }}>
+                                  <span style={{ fontSize: 12, width: 20 }}>{RANK_MEDALS[rank] || `${rank + 1}`}</span>
+                                  <span>{statements[id]?.emoji} {statements[id]?.label}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </motion.div>
+              );
+            })}
+          </div>
+
+        {/* ── Deliberation never ends ── */}
+        <div
+          style={{
+            background: "rgba(0,0,0,0.03)",
+            border: "1.5px solid rgba(0,0,0,0.06)",
+            borderRadius: 12,
+            padding: "12px 16px",
+            fontSize: 12,
+            color: "#666",
+            lineHeight: 1.6,
+            fontFamily: "'DM Sans', sans-serif",
+          }}
+        >
+          🔄 <strong>Deliberation never ends.</strong> New lobsters can join, statements can be added, and rankings shift over time.
+        </div>
+
+        {/* ── Action Buttons ── */}
+        <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
+          <Btn onClick={onContinue}>Continue deliberating →</Btn>
+          <Btn onClick={onReset} color="#888">New topic</Btn>
+        </div>
+        <div style={{ display: "flex", justifyContent: "center" }}>
+          <Btn color="#1a8a50" onClick={() => {
+            const tutorialData = {
+              question,
+              userOpinion,
+              statements: statements.map((s, i) => ({
+                id: s.id,
+                emoji: s.emoji,
+                label: s.label,
+                text: s.text,
+                author: s.author,
+                social_ranking: allRankings.length > 0 ? i + 1 : null,
+              })),
+              agents: allParticipants.map((p, i) => ({
+                name: p.name,
+                opinion: p.opinion,
+                color: p.color,
+                rankings: allRankings[i] || [],
+              })),
+              currentWinner,
+              roundsPlayed,
+              allRankings,
+            };
+            localStorage.setItem("tutorial_deliberation", JSON.stringify(tutorialData));
+            window.location.href = "/tutorial/deliberation";
+          }}>View as a real deliberation →</Btn>
+        </div>
+      </div>
+    </Scene>
+  );
+}
+
+// ─── Scene: Continue (3 options with inline forms) ──────────────────────────
+
+function ContinueScene({
+  question,
+  statements,
+  agents,
+  onAddStatement,
+  onRerank,
+  onSimulateLobster,
+  onBack,
+}: {
+  question: string;
+  statements: Statement[];
+  agents: LobsterAgent[];
+  onAddStatement: (stmt: Statement, newHumanRank: number, predictedRanks: number[]) => void;
+  onRerank: (newHumanRanking: number[]) => void;
+  onSimulateLobster: () => Promise<void>;
+  onBack: () => void;
+}) {
+  const n = statements.length;
+  const [mode, setMode] = useState<"options" | "add" | "rerank">("options");
   const [text, setText] = useState("");
   const [label, setLabel] = useState("");
   const [userRank, setUserRank] = useState<number | null>(null);
-  const [submitted, setSubmitted] = useState(false);
-  const [predicting, setPredicting] = useState(false);
-  // Re-rank state
-  const [rerankOrder, setRerankOrder] = useState<number[]>([]);
-  const [rerankRanking, setRerankRanking] = useState<number[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+  const [simulating, setSimulating] = useState(false);
 
-  const n = statements.length;
+  // Rerank state
+  const [rerankRanking, setRerankRanking] = useState<number[]>(new Array(n).fill(-1));
+  const [rerankOrder, setRerankOrder] = useState<number[]>([]);
+  const rerankDone = rerankRanking.every((r) => r !== -1);
 
   const startRerank = () => {
-    setMode("rerank");
-    setRerankOrder([]);
     setRerankRanking(new Array(n).fill(-1));
+    setRerankOrder([]);
+    setMode("rerank");
   };
 
   const handleRerankClick = (id: number) => {
@@ -2335,68 +2545,61 @@ function AddStatementScene({
     setRerankOrder(newOrder);
   };
 
-  const rerankDone = rerankRanking.every((r) => r !== -1);
-
-  const handleSubmitRerank = () => {
-    if (!rerankDone) return;
-    setSubmitted(true);
-    setPredicting(true);
-    onRerank(rerankRanking);
-  };
-
-  const handleSubmit = async () => {
+  const handleSubmitAdd = async () => {
     if (text.trim().length <= 5 || userRank === null) return;
-    setSubmitted(true);
-    setPredicting(true);
-
-    let predictedA1 = Math.min(userRank + 1, n);
-    let predictedA2 = Math.max(userRank - 1, 0);
-    let predictedA3 = userRank;
-
+    setSubmitting(true);
     try {
       const res = await fetch("/api/consensus", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: "predict-ranking",
+          action: "add-statement",
           question,
+          statements: statements.map((s) => ({ label: s.label, text: s.text })),
           newStatement: text.trim(),
-          agent1Opinion: agent1.opinion,
-          agent2Opinion: agent2.opinion,
-          agent3Opinion: agent3.opinion,
-          numStatements: n + 1,
+          agents: agents.map((a) => ({ name: a.name, opinion: a.opinion })),
         }),
       });
       const data = await res.json();
-      if (data.agent1Rank !== undefined) predictedA1 = data.agent1Rank;
-      if (data.agent2Rank !== undefined) predictedA2 = data.agent2Rank;
-      if (data.agent3Rank !== undefined) predictedA3 = data.agent3Rank;
-    } catch {
-      // Use heuristic fallbacks
-    }
-
-    setPredicting(false);
-
-    onAdd(
-      {
-        id: n,
+      const newStmt: Statement = {
+        id: statements.length,
         emoji: "🦞",
-        label: label.trim() || "New Statement",
+        label: label.trim() || "Your Statement",
         text: text.trim(),
         author: "You",
-      },
-      userRank,
-      predictedA1,
-      predictedA2,
-      predictedA3
-    );
+      };
+      onAddStatement(newStmt, userRank, data.predictedRanks || agents.map(() => Math.floor(n / 2)));
+    } catch {
+      const newStmt: Statement = {
+        id: statements.length,
+        emoji: "🦞",
+        label: label.trim() || "Your Statement",
+        text: text.trim(),
+        author: "You",
+      };
+      onAddStatement(newStmt, userRank, agents.map(() => Math.floor(n / 2)));
+    }
+    setSubmitting(false);
+  };
+
+  const handleSubmitRerank = async () => {
+    if (!rerankDone) return;
+    setSubmitting(true);
+    await onRerank(rerankRanking);
+    setSubmitting(false);
+  };
+
+  const handleSimulate = async () => {
+    setSimulating(true);
+    await onSimulateLobster();
+    setSimulating(false);
   };
 
   return (
-    <Scene>
+    <Scene padTop>
       <div
         style={{
-          maxWidth: 560,
+          maxWidth: 580,
           width: "100%",
           zIndex: 1,
           display: "flex",
@@ -2404,328 +2607,148 @@ function AddStatementScene({
           gap: 16,
         }}
       >
-        <div style={{ textAlign: "center" }}>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          style={{ textAlign: "center" }}
+        >
           <h2
             className="font-handwritten"
-            style={{ fontSize: 22, color: "#1a1a1a", margin: "0 0 6px" }}
+            style={{ fontSize: 26, color: "#c84a20", margin: "0 0 4px" }}
           >
-            {mode === "choose" ? "Continue the Deliberation" : mode === "add" ? "Add a New Consensus Statement" : "Update Your Ranking"}
+            Continue Deliberating
           </h2>
-          {currentWinner !== null && (
-            <p
+          <p style={{ fontSize: 12, color: "#888", margin: 0, fontFamily: "'DM Sans', sans-serif" }}>
+            What would you like to do?
+          </p>
+        </motion.div>
+
+        {/* ── Options ── */}
+        {mode === "options" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <motion.button
+              whileHover={{ scale: 1.01, x: 3 }}
+              whileTap={{ scale: 0.99 }}
+              onClick={() => { setMode("add"); setText(""); setLabel(""); setUserRank(null); }}
               style={{
-                fontSize: 12,
-                color: "#888",
-                margin: 0,
-                fontFamily: "'DM Sans', sans-serif",
+                background: "rgba(255,255,255,0.9)",
+                border: `1.5px solid ${USER_COLOR}20`,
+                borderRadius: 12,
+                padding: "14px 16px",
+                textAlign: "left",
+                cursor: "pointer",
+                display: "flex",
+                gap: 12,
+                alignItems: "center",
               }}
             >
-              Current winner: {statements[currentWinner]?.emoji}{" "}
-              {statements[currentWinner]?.label}
-            </p>
-          )}
-        </div>
-
-        {mode === "choose" && (
-          <Card style={{ padding: "24px 28px" }}>
-            <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 }}>
-              <motion.button
-                whileHover={{ scale: 1.02, x: 3 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => setMode("add")}
-                style={{
-                  background: "rgba(255,255,255,0.9)",
-                  border: `1.5px solid ${USER_COLOR}25`,
-                  borderRadius: 14,
-                  padding: "16px 18px",
-                  textAlign: "left",
-                  cursor: "pointer",
-                  display: "flex",
-                  gap: 12,
-                  alignItems: "center",
-                }}
-              >
-                <span style={{ fontSize: 24 }}>✍️</span>
-                <div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a1a", fontFamily: "'DM Sans', sans-serif" }}>
-                    Add a new consensus statement
-                  </div>
-                  <div style={{ fontSize: 12, color: "#888", fontFamily: "'DM Sans', sans-serif" }}>
-                    Write a new reframing and rank it among existing ones
-                  </div>
+              <span style={{ fontSize: 20 }}>✍️</span>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#1a1a1a", fontFamily: "'DM Sans', sans-serif" }}>Add a new consensus statement</div>
+                <div style={{ fontSize: 11, color: "#888", fontFamily: "'DM Sans', sans-serif" }}>Write a reframing and rank it</div>
+              </div>
+            </motion.button>
+            <motion.button
+              whileHover={{ scale: 1.01, x: 3 }}
+              whileTap={{ scale: 0.99 }}
+              onClick={startRerank}
+              style={{
+                background: "rgba(255,255,255,0.9)",
+                border: "1.5px solid rgba(42,111,176,0.2)",
+                borderRadius: 12,
+                padding: "14px 16px",
+                textAlign: "left",
+                cursor: "pointer",
+                display: "flex",
+                gap: 12,
+                alignItems: "center",
+              }}
+            >
+              <span style={{ fontSize: 20 }}>🔄</span>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#1a1a1a", fontFamily: "'DM Sans', sans-serif" }}>Update your ranking</div>
+                <div style={{ fontSize: 11, color: "#888", fontFamily: "'DM Sans', sans-serif" }}>Re-rank all {n} statements</div>
+              </div>
+            </motion.button>
+            <motion.button
+              whileHover={{ scale: 1.01, x: 3 }}
+              whileTap={{ scale: 0.99 }}
+              onClick={handleSimulate}
+              disabled={simulating}
+              style={{
+                background: "rgba(255,255,255,0.9)",
+                border: "1.5px solid rgba(42,138,74,0.2)",
+                borderRadius: 12,
+                padding: "14px 16px",
+                textAlign: "left",
+                cursor: simulating ? "default" : "pointer",
+                display: "flex",
+                gap: 12,
+                alignItems: "center",
+                opacity: simulating ? 0.6 : 1,
+              }}
+            >
+              <span style={{ fontSize: 20 }}>🦞</span>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#1a1a1a", fontFamily: "'DM Sans', sans-serif" }}>
+                  {simulating ? "Simulating..." : "Simulate a new lobster"}
                 </div>
-              </motion.button>
-              <motion.button
-                whileHover={{ scale: 1.02, x: 3 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={startRerank}
-                style={{
-                  background: "rgba(255,255,255,0.9)",
-                  border: "1.5px solid rgba(42,111,176,0.25)",
-                  borderRadius: 14,
-                  padding: "16px 18px",
-                  textAlign: "left",
-                  cursor: "pointer",
-                  display: "flex",
-                  gap: 12,
-                  alignItems: "center",
-                }}
-              >
-                <span style={{ fontSize: 24 }}>🔄</span>
-                <div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a1a", fontFamily: "'DM Sans', sans-serif" }}>
-                    Update your ranking
-                  </div>
-                  <div style={{ fontSize: 12, color: "#888", fontFamily: "'DM Sans', sans-serif" }}>
-                    Re-rank all {n} existing statements
-                  </div>
-                </div>
-              </motion.button>
-            </div>
-            <div style={{ display: "flex", justifyContent: "center" }}>
-              <button
-                onClick={onFinish}
-                style={{
-                  background: "none",
-                  border: "none",
-                  fontSize: 12,
-                  color: "#999",
-                  cursor: "pointer",
-                  fontFamily: "'DM Sans', sans-serif",
-                  textDecoration: "underline",
-                }}
-              >
-                I&apos;m done deliberating
-              </button>
-            </div>
-          </Card>
+                <div style={{ fontSize: 11, color: "#888", fontFamily: "'DM Sans', sans-serif" }}>A new bot joins with a fresh opinion and statement</div>
+              </div>
+              {simulating && (
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                  style={{ width: 14, height: 14, border: "2px solid #2a8a4a", borderTopColor: "transparent", borderRadius: "50%", marginLeft: "auto" }}
+                />
+              )}
+            </motion.button>
+          </div>
         )}
 
-        {mode === "rerank" && !submitted && (
-          <Card style={{ padding: "20px 24px" }}>
-            <p style={{ fontSize: 12, color: "#888", margin: "0 0 10px", fontFamily: "'DM Sans', sans-serif" }}>
-              Click statements in order: 1st choice, then 2nd, etc. Last fills automatically.
-            </p>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
-              {statements.map((s) => {
-                const r = rerankRanking[s.id];
-                const isRanked = r !== -1;
-                return (
-                  <motion.button
-                    key={s.id}
-                    onClick={() => handleRerankClick(s.id)}
-                    whileHover={{ scale: 1.01, x: 3 }}
-                    whileTap={{ scale: 0.99 }}
-                    style={{
-                      background: isRanked ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.6)",
-                      border: `1.5px solid ${isRanked ? RANK_COLORS[r] + "60" : "rgba(0,0,0,0.06)"}`,
-                      borderRadius: 12,
-                      padding: "10px 12px",
-                      textAlign: "left",
-                      cursor: "pointer",
-                      display: "flex",
-                      gap: 10,
-                      alignItems: "center",
-                    }}
-                  >
-                    <div style={{
-                      width: 28, height: 28, borderRadius: 6, flexShrink: 0,
-                      background: isRanked ? RANK_COLORS[r] : "#e8e2d8",
-                      border: isRanked ? "none" : "1.5px dashed #c8c0b4",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      fontSize: isRanked ? 13 : 12, color: isRanked ? "white" : "#b8b0a4",
-                      fontFamily: "'DM Sans', sans-serif", fontWeight: 700,
-                    }}>
-                      {isRanked ? RANK_MEDALS[r] : "?"}
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: "#1a1a1a", fontFamily: "'DM Sans', sans-serif" }}>
-                        {s.emoji} {s.label}
-                      </div>
-                      <div style={{ fontSize: 11, color: "#666", fontFamily: "'DM Sans', sans-serif", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {s.text}
-                      </div>
-                    </div>
-                  </motion.button>
-                );
-              })}
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <button onClick={() => setMode("choose")} style={{ background: "none", border: "none", fontSize: 12, color: "#999", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", textDecoration: "underline" }}>
-                ← Back
-              </button>
-              <Btn onClick={handleSubmitRerank} disabled={!rerankDone}>
-                Submit new ranking →
-              </Btn>
-            </div>
-          </Card>
-        )}
-
+        {/* ── Add Statement Form ── */}
         {mode === "add" && (
           <Card style={{ padding: "20px 24px" }}>
             <input
               value={label}
               onChange={(e) => setLabel(e.target.value)}
               placeholder="Short title"
-              disabled={submitted}
-              style={{
-                width: "100%",
-                border: "1.5px solid rgba(0,0,0,0.08)",
-                borderRadius: 10,
-                padding: "10px 14px",
-                fontFamily: "'DM Sans', sans-serif",
-                fontSize: 14,
-                fontWeight: 600,
-                outline: "none",
-                background: submitted ? "#f8f6f2" : "white",
-                color: "#1a1a1a",
-                boxSizing: "border-box",
-                marginBottom: 8,
-              }}
+              disabled={submitting}
+              style={{ width: "100%", border: "1.5px solid rgba(0,0,0,0.08)", borderRadius: 10, padding: "10px 14px", fontFamily: "'DM Sans', sans-serif", fontSize: 14, fontWeight: 600, outline: "none", background: submitting ? "#f8f6f2" : "white", color: "#1a1a1a", boxSizing: "border-box", marginBottom: 8 }}
             />
             <textarea
               value={text}
               onChange={(e) => setText(e.target.value)}
               placeholder="Write your new consensus statement..."
               rows={2}
-              disabled={submitted}
-              style={{
-                width: "100%",
-                border: `1.5px solid ${USER_COLOR}20`,
-                borderRadius: 10,
-                padding: "10px 14px",
-                fontFamily: "'DM Sans', sans-serif",
-                fontSize: 14,
-                resize: "none",
-                outline: "none",
-                background: submitted ? "#f8f6f2" : "white",
-                color: "#1a1a1a",
-                boxSizing: "border-box",
-              }}
+              disabled={submitting}
+              style={{ width: "100%", border: `1.5px solid ${USER_COLOR}20`, borderRadius: 10, padding: "10px 14px", fontFamily: "'DM Sans', sans-serif", fontSize: 14, resize: "none", outline: "none", background: submitting ? "#f8f6f2" : "white", color: "#1a1a1a", boxSizing: "border-box" }}
             />
-
-            {!submitted && text.trim().length > 5 && (
-              <motion.div
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                style={{ marginTop: 12 }}
-              >
-                <p
-                  style={{
-                    fontSize: 12,
-                    color: "#888",
-                    margin: "0 0 8px",
-                    fontFamily: "'DM Sans', sans-serif",
-                  }}
-                >
+            {!submitting && text.trim().length > 5 && (
+              <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} style={{ marginTop: 12 }}>
+                <p style={{ fontSize: 12, color: "#888", margin: "0 0 8px", fontFamily: "'DM Sans', sans-serif" }}>
                   Where would you rank this among the existing {n} statements?
                 </p>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   {Array.from({ length: n + 1 }, (_, i) => (
-                    <motion.button
-                      key={i}
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                      onClick={() => setUserRank(i)}
-                      style={{
-                        width: 36,
-                        height: 36,
-                        borderRadius: 8,
-                        border: `1.5px solid ${userRank === i ? USER_COLOR : "rgba(0,0,0,0.08)"}`,
-                        background:
-                          userRank === i ? `${USER_COLOR}15` : "white",
-                        color: userRank === i ? USER_COLOR : "#888",
-                        fontSize: 13,
-                        fontWeight: 700,
-                        cursor: "pointer",
-                        fontFamily: "'DM Sans', sans-serif",
-                      }}
-                    >
+                    <motion.button key={i} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => setUserRank(i)}
+                      style={{ width: 36, height: 36, borderRadius: 8, border: `1.5px solid ${userRank === i ? USER_COLOR : "rgba(0,0,0,0.08)"}`, background: userRank === i ? `${USER_COLOR}15` : "white", color: userRank === i ? USER_COLOR : "#888", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
                       {i === 0 ? "🥇" : i + 1}
                     </motion.button>
                   ))}
                 </div>
               </motion.div>
             )}
-
-            <div
-              style={{
-                marginTop: 14,
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
-            >
-              <button
-                onClick={() => setMode("choose")}
-                style={{
-                  background: "none",
-                  border: "none",
-                  fontSize: 12,
-                  color: "#999",
-                  cursor: "pointer",
-                  fontFamily: "'DM Sans', sans-serif",
-                  textDecoration: "underline",
-                }}
-              >
-                ← Back
-              </button>
-              {!submitted ? (
-                <Btn
-                  onClick={handleSubmit}
-                  disabled={text.trim().length <= 5 || userRank === null}
-                >
-                  Submit →
-                </Btn>
-              ) : predicting ? (
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                  }}
-                >
-                  <motion.div
-                    animate={{ rotate: 360 }}
-                    transition={{
-                      duration: 1,
-                      repeat: Infinity,
-                      ease: "linear",
-                    }}
-                    style={{
-                      width: 14,
-                      height: 14,
-                      border: "2px solid #c84a20",
-                      borderTopColor: "transparent",
-                      borderRadius: "50%",
-                    }}
-                  />
-                  <span
-                    style={{
-                      fontSize: 12,
-                      color: "#999",
-                      fontFamily: "'DM Sans', sans-serif",
-                    }}
-                  >
-                    Predicting lobster rankings...
-                  </span>
+            <div style={{ marginTop: 14, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <button onClick={() => setMode("options")} style={{ background: "none", border: "none", fontSize: 12, color: "#999", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", textDecoration: "underline" }}>← Back</button>
+              {!submitting ? (
+                <Btn onClick={handleSubmitAdd} disabled={text.trim().length <= 5 || userRank === null}>Submit →</Btn>
+              ) : (
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: "linear" }} style={{ width: 14, height: 14, border: "2px solid #c84a20", borderTopColor: "transparent", borderRadius: "50%" }} />
+                  <span style={{ fontSize: 12, color: "#999", fontFamily: "'DM Sans', sans-serif" }}>Predicting rankings...</span>
                 </div>
-              ) : null}
-            </div>
-          </Card>
-        )}
-
-        {submitted && predicting && mode === "rerank" && (
-          <Card style={{ padding: "20px 24px", textAlign: "center" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-              <motion.div
-                animate={{ rotate: 360 }}
-                transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                style={{ width: 14, height: 14, border: "2px solid #c84a20", borderTopColor: "transparent", borderRadius: "50%" }}
-              />
-              <span style={{ fontSize: 12, color: "#999", fontFamily: "'DM Sans', sans-serif" }}>
-                Re-calculating lobster rankings...
-              </span>
+              )}
             </div>
           </Card>
         )}
@@ -2892,12 +2915,16 @@ function EndScene({
 
 export default function ConsensusGame() {
   const [phase, setPhase] = useState<Phase>("intro");
+  const prevPhaseRef = useRef<Phase>("intro");
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [muted, setMuted] = useState(false);
 
   useEffect(() => {
     const audio = new Audio("/crab_rave.mp3");
     audio.loop = true;
     audio.volume = 0.4;
     audio.play().catch(() => {});
+    audioRef.current = audio;
     return () => {
       audio.pause();
     };
@@ -2907,17 +2934,17 @@ export default function ConsensusGame() {
   const [question, setQuestion] = useState("");
   const [userOpinion, setUserOpinion] = useState("");
   const [agent1, setAgent1] = useState<LobsterAgent>({
-    name: "NOODLE-9",
+    name: "AkashBot",
     opinion: "",
     color: AGENT_COLORS[0],
   });
   const [agent2, setAgent2] = useState<LobsterAgent>({
-    name: "DRY-BOT",
+    name: "VanClaw",
     opinion: "",
     color: AGENT_COLORS[1],
   });
   const [agent3, setAgent3] = useState<LobsterAgent>({
-    name: "NUANCE-3",
+    name: "OmerJr",
     opinion: "",
     color: AGENT_COLORS[2],
   });
@@ -2926,11 +2953,20 @@ export default function ConsensusGame() {
   const [agent1Ranking, setAgent1Ranking] = useState<number[]>([]);
   const [agent2Ranking, setAgent2Ranking] = useState<number[]>([]);
   const [agent3Ranking, setAgent3Ranking] = useState<number[]>([]);
+  const [extraAgents, setExtraAgents] = useState<LobsterAgent[]>([]);
+  const [extraRankings, setExtraRankings] = useState<number[][]>([]);
   const [currentWinner, setCurrentWinner] = useState<number | null>(null);
   const [roundsPlayed, setRoundsPlayed] = useState(0);
 
+  // Computed: all agents and all agent rankings (for EndScene)
+  const allAgents = [agent1, agent2, agent3, ...extraAgents];
+  const allAgentRankings = [agent1Ranking, agent2Ranking, agent3Ranking, ...extraRankings];
+
   const goTo = useCallback((next: Phase) => {
-    setPhase(next);
+    setPhase((prev) => {
+      if (next === "loading") prevPhaseRef.current = prev;
+      return next;
+    });
   }, []);
 
   // Part 1: User picks question
@@ -2944,51 +2980,53 @@ export default function ConsensusGame() {
     setUserOpinion(opinion);
     goTo("loading");
 
-    try {
-      const res = await fetch("/api/consensus", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "setup", question }),
-      });
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
+    const minDelay = new Promise((r) => setTimeout(r, 3500));
 
-      setAgent1({
-        name: data.agent1Name,
-        opinion: data.agent1Opinion,
-        color: AGENT_COLORS[0],
-      });
-      setAgent2({
-        name: data.agent2Name,
-        opinion: data.agent2Opinion,
-        color: AGENT_COLORS[1],
-      });
-      setAgent3({
-        name: data.agent3Name,
-        opinion: data.agent3Opinion,
-        color: AGENT_COLORS[2],
-      });
-    } catch {
-      setAgent1({
-        name: "NOODLE-9",
-        opinion:
-          "Absolutely in favor. The logic is clear and the benefits outweigh any concerns.",
-        color: AGENT_COLORS[0],
-      });
-      setAgent2({
-        name: "DRY-BOT",
-        opinion:
-          "Strong objection. The premise is flawed and the downsides are being ignored.",
-        color: AGENT_COLORS[1],
-      });
-      setAgent3({
-        name: "NUANCE-3",
-        opinion:
-          "Both sides have valid points. The real answer depends on context and how we define the terms.",
-        color: AGENT_COLORS[2],
-      });
-    }
+    const apiCall = (async () => {
+      try {
+        const res = await fetch("/api/consensus", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "setup", question, playerOpinion: opinion }),
+        });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
 
+        setAgent1({
+          name: data.agent1Name,
+          opinion: data.agent1Opinion,
+          color: AGENT_COLORS[0],
+        });
+        setAgent2({
+          name: data.agent2Name,
+          opinion: data.agent2Opinion,
+          color: AGENT_COLORS[1],
+        });
+        setAgent3({
+          name: data.agent3Name,
+          opinion: data.agent3Opinion,
+          color: AGENT_COLORS[2],
+        });
+      } catch {
+        setAgent1({
+          name: "AkashBot",
+          opinion: `Regarding "${question}" — absolutely in favor. The logic is clear and the benefits outweigh any concerns.`,
+          color: AGENT_COLORS[0],
+        });
+        setAgent2({
+          name: "VanClaw",
+          opinion: `On "${question}" — strong objection. The premise is flawed and the downsides are being ignored.`,
+          color: AGENT_COLORS[1],
+        });
+        setAgent3({
+          name: "OmerJr",
+          opinion: `"${question}" — both sides have valid points. The real answer depends on context and how we define the terms.`,
+          color: AGENT_COLORS[2],
+        });
+      }
+    })();
+
+    await Promise.all([minDelay, apiCall]);
     goTo("opinions-reveal");
   };
 
@@ -2998,45 +3036,51 @@ export default function ConsensusGame() {
 
     goTo("loading");
 
+    const minDelay = new Promise((r) => setTimeout(r, 3500));
+
     // Generate AI lobster statements
     let aiStatements: Statement[] = [];
-    try {
-      const res = await fetch("/api/consensus", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "generate-statements",
-          question,
-          playerOpinion: userOpinion,
-          agent1Name: agent1.name,
-          agent1Opinion: agent1.opinion,
-          agent2Name: agent2.name,
-          agent2Opinion: agent2.opinion,
-          agent3Name: agent3.name,
-          agent3Opinion: agent3.opinion,
-          playerStatement: stmt.text,
-        }),
-      });
-      const data = await res.json();
-      if (data.statements && data.statements.length >= 3) {
-        const agentNames = [agent1.name, agent2.name, agent3.name];
-        aiStatements = data.statements.slice(0, 3).map(
-          (
-            s: { emoji: string; label: string; text: string; author?: string },
-            i: number
-          ) => ({
-            ...s,
-            id: i + 1,
-            author: s.author || agentNames[i],
-          })
-        );
+    const apiCall = (async () => {
+      try {
+        const res = await fetch("/api/consensus", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "generate-statements",
+            question,
+            playerOpinion: userOpinion,
+            agent1Name: agent1.name,
+            agent1Opinion: agent1.opinion,
+            agent2Name: agent2.name,
+            agent2Opinion: agent2.opinion,
+            agent3Name: agent3.name,
+            agent3Opinion: agent3.opinion,
+            playerStatement: stmt.text,
+          }),
+        });
+        const data = await res.json();
+        if (data.statements && data.statements.length >= 3) {
+          const agentNames = [agent1.name, agent2.name, agent3.name];
+          aiStatements = data.statements.slice(0, 3).map(
+            (
+              s: { emoji: string; label: string; text: string; author?: string },
+              i: number
+            ) => ({
+              ...s,
+              id: i + 1,
+              author: s.author || agentNames[i],
+            })
+          );
+        }
+        if (data.agent1Ranking) setAgent1Ranking(data.agent1Ranking);
+        if (data.agent2Ranking) setAgent2Ranking(data.agent2Ranking);
+        if (data.agent3Ranking) setAgent3Ranking(data.agent3Ranking);
+      } catch {
+        // Fallback
       }
-      if (data.agent1Ranking) setAgent1Ranking(data.agent1Ranking);
-      if (data.agent2Ranking) setAgent2Ranking(data.agent2Ranking);
-      if (data.agent3Ranking) setAgent3Ranking(data.agent3Ranking);
-    } catch {
-      // Fallback
-    }
+    })();
+
+    await Promise.all([minDelay, apiCall]);
 
     if (aiStatements.length < 3) {
       aiStatements = [
@@ -3082,16 +3126,14 @@ export default function ConsensusGame() {
   const handleSchulzeResult = (winner: number | null) => {
     setCurrentWinner(winner);
     setRoundsPlayed((p) => p + 1);
-    goTo("continuous-intro");
+    goTo("end");
   };
 
   // Part 4: Add statement
   const handleAddStatement = (
     stmt: Statement,
     newHumanRank: number,
-    predictedA1Rank: number,
-    predictedA2Rank: number,
-    predictedA3Rank: number
+    predictedRanks: number[]
   ) => {
     const newStmts = [...statements, stmt];
     setStatements(newStmts);
@@ -3110,20 +3152,24 @@ export default function ConsensusGame() {
     };
 
     const newHR = insertRank(humanRanking, newHumanRank);
-    const newA1R = insertRank(agent1Ranking, predictedA1Rank);
-    const newA2R = insertRank(agent2Ranking, predictedA2Rank);
-    const newA3R = insertRank(agent3Ranking, predictedA3Rank);
+    const newA1R = insertRank(agent1Ranking, predictedRanks[0] ?? 0);
+    const newA2R = insertRank(agent2Ranking, predictedRanks[1] ?? 0);
+    const newA3R = insertRank(agent3Ranking, predictedRanks[2] ?? 0);
+    const newExtraR = extraRankings.map((er, i) => insertRank(er, predictedRanks[3 + i] ?? Math.floor(n / 2)));
 
     setHumanRanking(newHR);
     setAgent1Ranking(newA1R);
     setAgent2Ranking(newA2R);
     setAgent3Ranking(newA3R);
+    setExtraRankings(newExtraR);
 
-    const { winner } = runSchulzeN([newHR, newA1R, newA2R, newA3R], n);
+    const allR = [newHR, newA1R, newA2R, newA3R, ...newExtraR];
+    const { winner } = runSchulzeN(allR, n);
     setCurrentWinner(winner);
     setRoundsPlayed((p) => p + 1);
 
-    goTo("schulze");
+    // Stay on end page (re-render with updated data)
+    goTo("end");
   };
 
   // Part 4: Re-rank
@@ -3153,22 +3199,138 @@ export default function ConsensusGame() {
       if (data.agent3Ranking) setAgent3Ranking(data.agent3Ranking);
 
       const n = statements.length;
+      const a1R = data.agent1Ranking || agent1Ranking;
+      const a2R = data.agent2Ranking || agent2Ranking;
+      const a3R = data.agent3Ranking || agent3Ranking;
       const { winner } = runSchulzeN(
-        [newHumanRanking, data.agent1Ranking || agent1Ranking, data.agent2Ranking || agent2Ranking, data.agent3Ranking || agent3Ranking],
+        [newHumanRanking, a1R, a2R, a3R, ...extraRankings],
         n
       );
       setCurrentWinner(winner);
     } catch {
       const n = statements.length;
       const { winner } = runSchulzeN(
-        [newHumanRanking, agent1Ranking, agent2Ranking, agent3Ranking],
+        [newHumanRanking, agent1Ranking, agent2Ranking, agent3Ranking, ...extraRankings],
         n
       );
       setCurrentWinner(winner);
     }
 
     setRoundsPlayed((p) => p + 1);
-    goTo("schulze");
+    goTo("end");
+  };
+
+  // Part 4: Simulate new lobster
+  const handleSimulateLobster = async () => {
+    try {
+      const res = await fetch("/api/consensus", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "simulate-lobster",
+          question,
+          statements: statements.map((s) => ({ label: s.label, text: s.text })),
+          existingOpinions: [userOpinion, ...allAgents.map((a) => a.opinion)],
+        }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+
+      const colorIdx = extraAgents.length;
+      const newColor = EXTRA_AGENT_COLORS[colorIdx % EXTRA_AGENT_COLORS.length];
+      const newAgent: LobsterAgent = {
+        name: data.name,
+        opinion: data.opinion,
+        color: newColor,
+      };
+
+      // Add the new statement
+      const newStmt: Statement = {
+        id: statements.length,
+        emoji: data.statementEmoji || "🦞",
+        label: data.statementLabel || "New Perspective",
+        text: data.statementText,
+        author: data.name,
+      };
+      const newStmts = [...statements, newStmt];
+      const n = newStmts.length;
+
+      // Insert the new agent's ranking for all statements
+      const newAgentRanking: number[] = data.ranking || Array.from({ length: n }, (_, i) => i);
+
+      // Extend existing rankings with a middle rank for the new statement
+      const extendRanking = (old: number[]): number[] => {
+        const midRank = Math.floor(n / 2);
+        const extended = old.map((r) => (r >= midRank ? r + 1 : r));
+        return [...extended, midRank];
+      };
+
+      const newHR = extendRanking(humanRanking);
+      const newA1R = extendRanking(agent1Ranking);
+      const newA2R = extendRanking(agent2Ranking);
+      const newA3R = extendRanking(agent3Ranking);
+      const newExtraR = extraRankings.map((er) => extendRanking(er));
+
+      setStatements(newStmts);
+      setExtraAgents([...extraAgents, newAgent]);
+      setHumanRanking(newHR);
+      setAgent1Ranking(newA1R);
+      setAgent2Ranking(newA2R);
+      setAgent3Ranking(newA3R);
+      setExtraRankings([...newExtraR, newAgentRanking]);
+
+      const allR = [newHR, newA1R, newA2R, newA3R, ...newExtraR, newAgentRanking];
+      const { winner } = runSchulzeN(allR, n);
+      setCurrentWinner(winner);
+      setRoundsPlayed((p) => p + 1);
+    } catch {
+      // Fallback: generate a simple bot locally
+      const colorIdx = extraAgents.length;
+      const newColor = EXTRA_AGENT_COLORS[colorIdx % EXTRA_AGENT_COLORS.length];
+      const names = ["REEF-X", "CORAL-5", "TIDE-8", "KELP-3", "WAVE-7", "SHELL-2"];
+      const newAgent: LobsterAgent = {
+        name: names[colorIdx % names.length],
+        opinion: `On "${question}" — interesting question. I think there are angles nobody has explored yet.`,
+        color: newColor,
+      };
+      const newStmt: Statement = {
+        id: statements.length,
+        emoji: "🦞",
+        label: "Fresh Take",
+        text: "Sometimes the best consensus comes from stepping back and questioning our assumptions entirely.",
+        author: newAgent.name,
+      };
+      const newStmts = [...statements, newStmt];
+      const n = newStmts.length;
+      const newAgentRanking = Array.from({ length: n }, (_, i) => (i + colorIdx) % n);
+
+      const extendRanking = (old: number[]): number[] => {
+        const midRank = Math.floor(n / 2);
+        const extended = old.map((r) => (r >= midRank ? r + 1 : r));
+        return [...extended, midRank];
+      };
+
+      const newHR = extendRanking(humanRanking);
+      const newA1R = extendRanking(agent1Ranking);
+      const newA2R = extendRanking(agent2Ranking);
+      const newA3R = extendRanking(agent3Ranking);
+      const newExtraR = extraRankings.map((er) => extendRanking(er));
+
+      setStatements(newStmts);
+      setExtraAgents([...extraAgents, newAgent]);
+      setHumanRanking(newHR);
+      setAgent1Ranking(newA1R);
+      setAgent2Ranking(newA2R);
+      setAgent3Ranking(newA3R);
+      setExtraRankings([...newExtraR, newAgentRanking]);
+
+      const allR = [newHR, newA1R, newA2R, newA3R, ...newExtraR, newAgentRanking];
+      const { winner } = runSchulzeN(allR, n);
+      setCurrentWinner(winner);
+      setRoundsPlayed((p) => p + 1);
+    }
+
+    goTo("end");
   };
 
   const reset = () => {
@@ -3180,6 +3342,8 @@ export default function ConsensusGame() {
     setAgent1Ranking([]);
     setAgent2Ranking([]);
     setAgent3Ranking([]);
+    setExtraAgents([]);
+    setExtraRankings([]);
     setCurrentWinner(null);
     setRoundsPlayed(0);
   };
@@ -3197,19 +3361,25 @@ export default function ConsensusGame() {
       <div
         style={{
           position: "fixed",
-          inset: 0,
+          top: 64,
+          left: 0,
+          right: 0,
+          bottom: 0,
           background: "#faf7f0",
           zIndex: 0,
         }}
       >
         <NetworkBackground />
       </div>
-      <ProgressBar phase={phase} />
+      <ProgressBar phase={phase} loadingFrom={prevPhaseRef.current} onBack={(target) => goTo(target)} />
 
       <div
         style={{
           position: "fixed",
-          inset: 0,
+          top: 64,
+          left: 0,
+          right: 0,
+          bottom: 0,
           zIndex: 1,
           overflow: "hidden",
           paddingTop: phase === "intro" ? 0 : 36,
@@ -3305,37 +3475,65 @@ export default function ConsensusGame() {
                 onNext={handleSchulzeResult}
               />
             )}
-            {phase === "continuous-intro" && (
-              <ContinuousIntroScene
-                onNext={() => goTo("add-statement")}
-              />
-            )}
-            {phase === "add-statement" && (
-              <AddStatementScene
+            {phase === "end" && (
+              <EndScene
                 question={question}
                 statements={statements}
                 currentWinner={currentWinner}
-                agent1={agent1}
-                agent2={agent2}
-                agent3={agent3}
-                humanRanking={humanRanking}
-                onAdd={handleAddStatement}
-                onRerank={handleRerank}
-                onFinish={() => goTo("end")}
+                roundsPlayed={roundsPlayed}
+                userOpinion={userOpinion}
+                agents={allAgents}
+                allRankings={[humanRanking, ...allAgentRankings]}
+                onContinue={() => goTo("continue")}
+                onReset={reset}
               />
             )}
-            {phase === "end" && (
-              <EndScene
+            {phase === "continue" && (
+              <ContinueScene
+                question={question}
                 statements={statements}
-                currentWinner={currentWinner}
-                roundsPlayed={roundsPlayed}
-                onAddMore={() => goTo("add-statement")}
-                onReset={reset}
+                agents={allAgents}
+                onAddStatement={handleAddStatement}
+                onRerank={handleRerank}
+                onSimulateLobster={handleSimulateLobster}
+                onBack={() => goTo("end")}
               />
             )}
           </motion.div>
         </AnimatePresence>
       </div>
+
+      {/* Mute button */}
+      <button
+        onClick={() => {
+          const audio = audioRef.current;
+          if (!audio) return;
+          if (muted) { audio.volume = 0.4; audio.play().catch(() => {}); }
+          else { audio.volume = 0; }
+          setMuted(!muted);
+        }}
+        style={{
+          position: "fixed",
+          bottom: 20,
+          right: 20,
+          zIndex: 200,
+          width: 40,
+          height: 40,
+          borderRadius: "50%",
+          border: "1.5px solid rgba(0,0,0,0.1)",
+          background: "rgba(255,252,247,0.9)",
+          backdropFilter: "blur(8px)",
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: 18,
+          boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+        }}
+        aria-label={muted ? "Unmute" : "Mute"}
+      >
+        {muted ? "🔇" : "🔊"}
+      </button>
     </>
   );
 }

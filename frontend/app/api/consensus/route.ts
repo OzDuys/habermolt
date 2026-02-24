@@ -90,23 +90,25 @@ export async function POST(req: NextRequest) {
 
   try {
     if (action === "setup") {
-      const { question } = body as { action: string; question: string };
+      const { question, playerOpinion } = body as { action: string; question: string; playerOpinion?: string };
+
+      const playerContext = playerOpinion ? `\nOne participant has already shared this opinion: "${playerOpinion}"\nMake sure the three agents respond to the SPECIFIC topic and framing of this question, not generic debate positions.` : "";
 
       const setupRaw = await openrouter([
         {
           role: "system",
-          content: `You are generating three AI debate agents with different views. Return ONLY a valid JSON object with these exact keys: "agent1Name", "agent1Opinion", "agent2Name", "agent2Opinion", "agent3Name", "agent3Opinion".
+          content: `You are generating three AI debate agents with different views on a SPECIFIC topic. Return ONLY a valid JSON object with these exact keys: "agent1Name", "agent1Opinion", "agent2Name", "agent2Opinion", "agent3Name", "agent3Opinion".
 
 agent1 is PRO (strongly in favor). agent2 is CON (strongly against). agent3 is MODERATE (nuanced middle ground, sees both sides).
-Names should be short and techy, like "PROTO-7", "DENY-BOT", "NOODLE-9", "AXIOM-X". Each name 6-8 chars max.
-Opinions: 2-3 punchy sentences. Be opinionated and direct.
-No preamble, no markdown — just the raw JSON object.`,
+Names should be fun lobster-themed names inspired by real names, like "AkashBot", "VanClaw", "OmerJr", "PramodPincer", "MarianaMolt", "BhavyeshShrimp", "YvesCrab". Pick 3 different ones.
+Opinions: 2-3 punchy sentences that directly address the SPECIFIC question asked. Be opinionated and direct. Reference the actual topic, not generic debate language.
+No preamble, no markdown, no code fences — just the raw JSON object.`,
         },
         {
           role: "user",
-          content: `The debate question is: "${question}"
+          content: `The debate question is: "${question}"${playerContext}
 
-Generate three AI agents with different views on this question.`,
+Generate three AI agents with different views on this SPECIFIC question. Their opinions must clearly be about "${question}".`,
         },
       ]);
 
@@ -121,13 +123,14 @@ Generate three AI agents with different views on this question.`,
         agent3Name = parsed.agent3Name;
         agent3Opinion = parsed.agent3Opinion;
         if (!agent1Name || !agent1Opinion || !agent2Name || !agent2Opinion || !agent3Name || !agent3Opinion) throw new Error("missing fields");
-      } catch {
-        agent1Name = "PROTO-7";
-        agent1Opinion = `The answer is clearly yes. This is the only rational position. My analysis is conclusive.`;
-        agent2Name = "DENY-BOT";
-        agent2Opinion = `Objection. The premise is flawed. My client formally disputes this entire framing. Motion denied.`;
-        agent3Name = "NUANCE-3";
-        agent3Opinion = `Both sides have valid points. The real answer depends on context and how we define the terms. Let's dig deeper.`;
+      } catch (parseErr) {
+        console.error("Setup parse error:", parseErr, "Raw response:", setupRaw?.slice(0, 500));
+        agent1Name = "AkashBot";
+        agent1Opinion = `Regarding "${question}" — absolutely yes. The logic is clear and the benefits far outweigh any concerns.`;
+        agent2Name = "VanClaw";
+        agent2Opinion = `On "${question}" — strong objection. The premise is flawed and the downsides are being ignored entirely.`;
+        agent3Name = "OmerJr";
+        agent3Opinion = `"${question}" — both sides have valid points. The real answer depends on context and how we define the terms.`;
       }
 
       return NextResponse.json({ agent1Name, agent1Opinion, agent2Name, agent2Opinion, agent3Name, agent3Opinion });
@@ -298,6 +301,71 @@ Predict ranking position (0-${numStatements - 1}).`,
         agent2Ranking: fixed[2],
         agent3Ranking: fixed[3],
       });
+    }
+
+    if (action === "simulate-lobster") {
+      const { question, statements: stmts, existingOpinions } = body as {
+        action: string;
+        question: string;
+        statements: { label: string; text: string }[];
+        existingOpinions: string[];
+      };
+
+      const n = stmts.length + 1; // includes the new statement this lobster will add
+
+      const raw = await openrouter([
+        {
+          role: "system",
+          content: `You are generating a NEW AI lobster agent that joins an ongoing deliberation. This agent has a unique perspective different from existing participants.
+
+Return ONLY a valid JSON object with these keys:
+- "name": fun lobster-themed name inspired by a real name (like "PramodPincer", "MarianaMolt", "BhavyeshShrimp", "YvesCrab")
+- "opinion": 2-3 punchy sentences with a fresh take on the question
+- "statementEmoji": a single emoji for the consensus statement
+- "statementLabel": 2-4 word title for a consensus statement
+- "statementText": 1-2 sentence consensus statement that offers a new angle
+- "ranking": array of ${n} numbers (0=best, ${n - 1}=worst) ranking ALL statements including the new one (new statement is index ${n - 1})
+
+No preamble, no markdown — just the raw JSON object.`,
+        },
+        {
+          role: "user",
+          content: `Question: "${question}"
+
+Existing statements:
+${stmts.map((s, i) => `${i}: "${s.label}" — ${s.text}`).join("\n")}
+
+Existing opinions from other lobsters:
+${existingOpinions.map((o, i) => `- Lobster ${i}: "${o}"`).join("\n")}
+
+Generate a new lobster with a DIFFERENT perspective. Their consensus statement should be index ${n - 1} in the ranking.`,
+        },
+      ]);
+
+      try {
+        const parsed = JSON.parse((raw.match(/\{[\s\S]*\}/) || ["{}"])[0]);
+        let ranking = parsed.ranking;
+        if (!Array.isArray(ranking) || ranking.length !== n) {
+          ranking = Array.from({ length: n }, (_, i) => i);
+        }
+        return NextResponse.json({
+          name: parsed.name || "PramodPincer",
+          opinion: parsed.opinion || `On "${question}" — there's an angle nobody has considered yet.`,
+          statementEmoji: parsed.statementEmoji || "🦞",
+          statementLabel: parsed.statementLabel || "Fresh Take",
+          statementText: parsed.statementText || "The best consensus emerges when we question our core assumptions.",
+          ranking,
+        });
+      } catch {
+        return NextResponse.json({
+          name: "PramodPincer",
+          opinion: `On "${question}" — there's an angle nobody has considered yet.`,
+          statementEmoji: "🦞",
+          statementLabel: "Fresh Take",
+          statementText: "The best consensus emerges when we question our core assumptions.",
+          ranking: Array.from({ length: n }, (_, i) => i),
+        });
+      }
     }
 
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });
