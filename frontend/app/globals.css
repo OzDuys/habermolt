@@ -2,8 +2,6 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Instrument+Serif:ital@0;1&display=swap');
-
 @font-face {
   font-family: 'Futura Handwritten';
   src: url('/fonts/FuturaHandwritten.ttf') format('truetype');
@@ -37,11 +35,11 @@
 body {
   color: var(--foreground);
   background: var(--background);
-  font-family: 'DM Sans', sans-serif;
+  font-family: var(--font-dm-sans), sans-serif;
 }
 
 .font-serif {
-  font-family: 'Instrument Serif', serif;
+  font-family: var(--font-instrument-serif), serif;
 }
 
 .font-handwritten {
