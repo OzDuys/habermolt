@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import Fuse from "fuse.js";
 import { api } from "@/lib/api";
 import type { Deliberation, StatsResponse } from "@/lib/types";
 import Link from "next/link";
@@ -344,6 +345,8 @@ export default function HomePage() {
   const [activeCategory, setActiveCategory] = useState<Category>("trending");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchFocused, setSearchFocused] = useState(false);
+  const PAGE_SIZE = 48;
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   useEffect(() => {
     async function load() {
@@ -368,19 +371,32 @@ export default function HomePage() {
     (d) => d.mechanism_type === "continuous"
   );
 
-  const filteredDeliberations = baseDeliberations
-    .filter((d) => {
-      const matchesCat = matchesCategory(d, activeCategory);
-      const matchesSearch =
-        searchQuery.trim() === "" ||
-        d.question.toLowerCase().includes(searchQuery.toLowerCase().trim());
-      return matchesCat && matchesSearch;
-    })
-    .sort((a, b) =>
-      activeCategory === "trending"
-        ? trendingScore(b) - trendingScore(a)
-        : new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
-    );
+  const fuse = useMemo(
+    () =>
+      new Fuse(baseDeliberations, {
+        keys: ["question", "categories"],
+        threshold: 0.4,       // 0 = exact, 1 = match anything
+        minMatchCharLength: 2,
+        ignoreLocation: true, // don't penalise matches far from start
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [baseDeliberations.map((d) => d.id).join(",")]
+  );
+
+  const filteredDeliberations = (() => {
+    const q = searchQuery.trim();
+    const candidates = q
+      ? fuse.search(q).map((r) => r.item)
+      : baseDeliberations;
+
+    return candidates
+      .filter((d) => matchesCategory(d, activeCategory))
+      .sort((a, b) =>
+        activeCategory === "trending"
+          ? trendingScore(b) - trendingScore(a)
+          : new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+      );
+  })();
 
   const stageColors: Record<string, string> = {
     active: "bg-red-100 text-red-700",
@@ -494,7 +510,7 @@ export default function HomePage() {
               {CATEGORIES.map((cat) => (
                 <button
                   key={cat.id}
-                  onClick={() => setActiveCategory(cat.id)}
+                  onClick={() => { setActiveCategory(cat.id); setVisibleCount(PAGE_SIZE); }}
                   className={`relative flex shrink-0 items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium transition-all ${
                     activeCategory === cat.id
                       ? "bg-stone-900 text-white"
@@ -530,7 +546,7 @@ export default function HomePage() {
                 type="text"
                 placeholder="Search deliberations..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => { setSearchQuery(e.target.value); setVisibleCount(PAGE_SIZE); }}
                 onFocus={() => setSearchFocused(true)}
                 onBlur={() => setSearchFocused(false)}
                 className="w-40 bg-transparent text-sm text-stone-700 placeholder-stone-400 outline-none sm:w-52"
@@ -585,9 +601,10 @@ export default function HomePage() {
                   )}
                 </div>
               ) : (
+                <>
                 <AnimatePresence mode="popLayout">
                   <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                    {filteredDeliberations.map((deliberation, i) => (
+                    {filteredDeliberations.slice(0, visibleCount).map((deliberation, i) => (
                       <motion.div
                         key={deliberation.id}
                         initial={{ opacity: 0, y: 16 }}
@@ -621,17 +638,28 @@ export default function HomePage() {
                     ))}
                   </div>
                 </AnimatePresence>
+                {visibleCount < filteredDeliberations.length && (
+                  <div className="mt-8 flex justify-center">
+                    <button
+                      onClick={() => setVisibleCount((n) => n + PAGE_SIZE)}
+                      className="rounded-full border border-stone-300 bg-white px-6 py-2.5 text-sm font-medium text-stone-700 transition-all hover:border-red-300 hover:text-red-600 hover:shadow-md"
+                    >
+                      Show more deliberations ({filteredDeliberations.length - visibleCount} remaining)
+                    </button>
+                  </div>
+                )}
+                </>
               )}
             </>
           )}
 
           {/* Evolution image — flush to bottom */}
-          <div className="mx-auto mt-12 max-w-lg" style={{ marginBottom: "1px" }}>
+          <div className="mx-auto mt-12 max-w-xs" style={{ marginBottom: "1px" }}>
             <Image
               src="/evolution.png"
               alt="Evolution of Habermolt"
-              width={400}
-              height={125}
+              width={300}
+              height={94}
               className="mx-auto block"
               style={{ maxWidth: "100%", display: "block" }}
             />
