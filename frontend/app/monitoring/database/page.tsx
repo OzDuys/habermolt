@@ -37,6 +37,15 @@ export default function DatabasePage() {
     description: string;
     onConfirm: () => Promise<void>;
   } | null>(null);
+  const [copiedCell, setCopiedCell] = useState<string | null>(null);
+
+  const copyCell = (value: unknown, key: string) => {
+    const text = value === null || value === undefined ? "" : typeof value === "object" ? JSON.stringify(value) : String(value);
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedCell(key);
+      setTimeout(() => setCopiedCell(null), 1200);
+    });
+  };
 
   // Fetch table list
   const fetchTables = useCallback(async () => {
@@ -244,11 +253,21 @@ export default function DatabasePage() {
                 <tbody>
                   {tableData.rows.map((row, i) => (
                     <tr key={i} className="border-t" style={{ borderColor: "var(--border)" }}>
-                      {tableData.columns.map((col) => (
-                        <td key={col} className="px-2.5 py-2 max-w-[200px] truncate font-mono">
-                          {formatCell(row[col])}
-                        </td>
-                      ))}
+                      {tableData.columns.map((col) => {
+                        const cellKey = `${i}-${col}`;
+                        const copied = copiedCell === cellKey;
+                        return (
+                          <td
+                            key={col}
+                            className="px-2.5 py-2 max-w-[200px] truncate font-mono cursor-pointer select-none relative"
+                            title="Click to copy"
+                            onClick={() => copyCell(row[col], cellKey)}
+                            style={{ opacity: copied ? 0.6 : 1, transition: "opacity 0.15s" }}
+                          >
+                            {copied ? <span className="text-green-500">Copied!</span> : formatCell(row[col])}
+                          </td>
+                        );
+                      })}
                       <td className="px-2.5 py-2 whitespace-nowrap">
                         <div className="flex gap-1.5">
                           <button
