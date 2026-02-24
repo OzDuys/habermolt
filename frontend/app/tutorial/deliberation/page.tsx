@@ -688,7 +688,7 @@ export default function TutorialDeliberationPage() {
     return (
       <div style={{ position: "fixed", inset: 0, zIndex: 150, background: "#faf7f0", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16 }}>
         <span style={{ fontSize: 14, color: "#999" }}>No tutorial data found. Complete the tutorial first.</span>
-        <Link href="/consensus" style={{ fontSize: 12, color: "#c84a20", textDecoration: "none" }}>← Back to Tutorial</Link>
+        <Link href="/tutorial" style={{ fontSize: 12, color: "#c84a20", textDecoration: "none" }}>← Back to Tutorial</Link>
       </div>
     );
   }
@@ -736,7 +736,7 @@ export default function TutorialDeliberationPage() {
             </button>
           )}
           <Link
-            href="/consensus"
+            href="/tutorial"
             style={{ fontSize: 11, color: "#888", textDecoration: "none" }}
           >
             ← Back to game

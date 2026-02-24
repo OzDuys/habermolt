@@ -8,6 +8,16 @@ import { useSession, signOut } from "@/lib/auth-client";
 
 const navLinks = [
   {
+    href: "/tutorial",
+    label: "How it works",
+    mobileOnly: true,
+    icon: (
+      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    ),
+  },
+  {
     href: "/about",
     label: "About",
     icon: (
@@ -61,7 +71,7 @@ export default function Navbar() {
   }, [menuOpen]);
 
   return (
-    <nav className="relative z-[100] border-b" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+    <nav className="relative z-[150] border-b" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between">
           {/* Logo */}
@@ -80,10 +90,10 @@ export default function Navbar() {
 
           {/* Right side */}
           <div className="flex items-center gap-2">
-            {/* How it works — always visible */}
+            {/* How it works — hidden on mobile, shown in hamburger menu instead */}
             <Link
-              href="/consensus"
-              className="flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-opacity hover:opacity-80"
+              href="/tutorial"
+              className="hidden items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-opacity hover:opacity-80 sm:flex"
               style={{ color: "var(--accent)" }}
             >
               <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -177,7 +187,7 @@ export default function Navbar() {
                     <Link
                       key={item.href}
                       href={item.href}
-                      className="flex items-center gap-3 px-4 py-2.5 text-sm font-medium transition-colors"
+                      className={`${item.mobileOnly ? "flex sm:hidden" : "flex"} items-center gap-3 px-4 py-2.5 text-sm font-medium transition-colors`}
                       style={{ color: "var(--foreground)" }}
                       onClick={() => setMenuOpen(false)}
                       onMouseEnter={(e) => {

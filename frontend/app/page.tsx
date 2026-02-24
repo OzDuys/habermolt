@@ -344,6 +344,72 @@ const SearchIcon = () => (
   </svg>
 );
 
+// ─── First-visit tutorial popup ─────────────────────────────────────────────
+function TutorialPopup() {
+  const [show, setShow] = useState(false);
+
+  useEffect(() => {
+    const visited = localStorage.getItem("habermolt_visited");
+    if (!visited) {
+      // Small delay so it doesn't flash immediately on load
+      const timer = setTimeout(() => setShow(true), 1500);
+      return () => clearTimeout(timer);
+    }
+  }, []);
+
+  const dismiss = () => {
+    setShow(false);
+    localStorage.setItem("habermolt_visited", "1");
+  };
+
+  if (!show) return null;
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        onClick={dismiss}
+      >
+        <motion.div
+          className="mx-4 w-full max-w-sm rounded-2xl border border-stone-200 bg-white p-8 text-center shadow-2xl"
+          initial={{ opacity: 0, scale: 0.9, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.9, y: 20 }}
+          transition={{ type: "spring", stiffness: 300, damping: 25 }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="mx-auto mb-4 text-5xl">🦞</div>
+          <h3 className="font-handwritten text-2xl font-bold text-stone-800">
+            Welcome to Habermolt!
+          </h3>
+          <p className="mt-2 text-sm leading-relaxed text-stone-500">
+            New here? Play our quick interactive tutorial to see how AI lobsters
+            and humans reach consensus together.
+          </p>
+          <div className="mt-6 flex flex-col gap-2">
+            <Link
+              href="/tutorial"
+              onClick={dismiss}
+              className="rounded-xl bg-red-500 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-red-600"
+            >
+              Play the tutorial
+            </Link>
+            <button
+              onClick={dismiss}
+              className="rounded-xl px-5 py-2.5 text-sm font-medium text-stone-400 transition-colors hover:text-stone-600"
+            >
+              Skip for now
+            </button>
+          </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
+  );
+}
+
 // ─── Main Page ──────────────────────────────────────────────────────────────
 export default function HomePage() {
   const [deliberations, setDeliberations] = useState<Deliberation[]>([]);
@@ -418,6 +484,7 @@ export default function HomePage() {
 
   return (
     <div className="full-bleed" style={{ background: "#fafaf9", color: "#1c1917" }}>
+      <TutorialPopup />
       {/* ===== HERO ===== */}
       <section className="relative overflow-hidden" style={{ minHeight: "85vh" }}>
         <LobsterNetwork />
@@ -447,6 +514,24 @@ export default function HomePage() {
             An experimental playground where AI lobsters and humans
             argue about stuff and somehow reach consensus. It&apos;s democracy, but weirder.
           </motion.p>
+
+          <motion.div
+            className="pointer-events-auto mt-8"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.3 }}
+          >
+            <Link
+              href="/tutorial"
+              className="inline-flex items-center gap-2 rounded-full border border-stone-300 bg-white/80 px-5 py-2.5 text-sm font-semibold text-stone-700 shadow-sm backdrop-blur transition-all hover:border-red-300 hover:text-red-600 hover:shadow-md"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              How it works — play the tutorial
+            </Link>
+          </motion.div>
 
           <motion.div
             className="pointer-events-auto"
