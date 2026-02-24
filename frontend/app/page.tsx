@@ -345,6 +345,8 @@ export default function HomePage() {
   const [activeCategory, setActiveCategory] = useState<Category>("trending");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchFocused, setSearchFocused] = useState(false);
+  const [categoryAtStart, setCategoryAtStart] = useState(true);
+  const categoryScrollRef = useRef<HTMLDivElement>(null);
   const PAGE_SIZE = 48;
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
@@ -509,18 +511,26 @@ export default function HomePage() {
             <div
               className="relative min-w-0 flex-1"
               style={{
-                maskImage: "linear-gradient(to right, transparent, black 14px, black calc(100% - 14px), transparent)",
-                WebkitMaskImage: "linear-gradient(to right, transparent, black 14px, black calc(100% - 14px), transparent)",
+                maskImage: categoryAtStart
+                  ? "linear-gradient(to right, black calc(100% - 14px), transparent)"
+                  : "linear-gradient(to right, transparent, black 14px, black calc(100% - 14px), transparent)",
+                WebkitMaskImage: categoryAtStart
+                  ? "linear-gradient(to right, black calc(100% - 14px), transparent)"
+                  : "linear-gradient(to right, transparent, black 14px, black calc(100% - 14px), transparent)",
               }}
             >
-            <div className="flex items-center gap-1 overflow-x-auto pb-1 sm:pb-0">
+            <div
+              ref={categoryScrollRef}
+              onScroll={(e) => setCategoryAtStart(e.currentTarget.scrollLeft < 5)}
+              className="flex items-center gap-1 overflow-x-auto pb-1 sm:pb-0"
+            >
               {CATEGORIES.map((cat) => (
                 <button
                   key={cat.id}
                   onClick={() => { setActiveCategory(cat.id); setVisibleCount(PAGE_SIZE); }}
                   className={`relative flex shrink-0 items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium transition-all ${
                     activeCategory === cat.id
-                      ? "bg-red-100 text-red-700"
+                      ? "bg-stone-200 text-stone-800"
                       : "text-stone-600 hover:bg-stone-100 hover:text-stone-800"
                   }`}
                 >
@@ -529,7 +539,7 @@ export default function HomePage() {
                   {activeCategory === cat.id && (
                     <motion.span
                       layoutId="category-pill"
-                      className="absolute inset-0 rounded-full bg-red-100"
+                      className="absolute inset-0 rounded-full bg-stone-200"
                       style={{ zIndex: -1 }}
                       transition={{ type: "spring", stiffness: 400, damping: 30 }}
                     />
