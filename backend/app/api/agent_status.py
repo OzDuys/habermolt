@@ -23,12 +23,11 @@ from app.models import (
 from app.middleware.auth import APIKeyAuth, get_current_agent
 from app.config import settings
 from app.schemas.agent_status import (
-
-from app.services.agent_request_log_service import log_agent_request
     AgentHeartbeatResponse,
     AgentActionItem,
     DiscoveredDeliberation,
 )
+from app.services.agent_request_log_service import log_agent_request
 
 router = APIRouter(tags=["agent-status"])
 
