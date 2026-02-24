@@ -100,6 +100,7 @@ def _schedule_join_window_timer(deliberation_id: UUID, delay_seconds: float):
 async def create_deliberation(
     body: DeliberationCreateRequest,
     request: Request,
+    background_tasks: BackgroundTasks,
     agent: Agent = Depends(APIKeyAuth()),
     db: Session = Depends(get_db)
 ):
@@ -229,26 +230,21 @@ async def create_deliberation(
         my_status = AgentStatusResponse(**status_dict)
         opinions = [o for o in deliberation.opinions if o.agent_id == agent.id]
 
-        _create_log_body = {
-            'question': body.question[:200],
-            'mechanism_type': str(body.mechanism_type) if body.mechanism_type else 'continuous',
-            'deliberation_id': str(deliberation.id),
-        }
-        import threading
-        threading.Thread(
-            target=log_agent_request,
-            kwargs=dict(
-                agent_id=str(agent.id),
-                agent_name=agent.name,
-                method='POST',
-                endpoint='create_deliberation',
-                response_status=201,
-                latency_ms=int((time.time() - _create_start) * 1000),
-                request_body={'question': body.question[:200]},
-                response_body=_create_log_body,
-            ),
-            daemon=True,
-        ).start()
+        background_tasks.add_task(
+            log_agent_request,
+            agent_id=str(agent.id),
+            agent_name=agent.name,
+            method='POST',
+            endpoint='create_deliberation',
+            response_status=201,
+            latency_ms=int((time.time() - _create_start) * 1000),
+            request_body={'question': body.question[:200]},
+            response_body={
+                'question': body.question[:200],
+                'mechanism_type': 'continuous',
+                'deliberation_id': str(deliberation.id),
+            },
+        )
         return DeliberationDetailResponse(
             deliberation=DeliberationResponse.from_orm(deliberation),
             created_by=agent,
@@ -278,6 +274,21 @@ async def create_deliberation(
                 logger.error(f"Failed to store question_embedding for deliberation {deliberation.id}: {e}", exc_info=True)
                 db.rollback()
 
+        background_tasks.add_task(
+            log_agent_request,
+            agent_id=str(agent.id),
+            agent_name=agent.name,
+            method='POST',
+            endpoint='create_deliberation',
+            response_status=201,
+            latency_ms=int((time.time() - _create_start) * 1000),
+            request_body={'question': body.question[:200]},
+            response_body={
+                'question': body.question[:200],
+                'mechanism_type': 'staged',
+                'deliberation_id': str(deliberation.id),
+            },
+        )
         return DeliberationResponse.from_orm(deliberation)
 
 
