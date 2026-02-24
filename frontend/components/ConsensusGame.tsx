@@ -721,7 +721,7 @@ function IntroScene({ onStart }: { onStart: () => void }) {
             fontFamily: "'DM Sans', sans-serif",
           }}
         >
-          ~3 min interactive tutorial
+          ~5 min interactive tutorial
         </motion.p>
       </div>
     </Scene>
@@ -2579,6 +2579,23 @@ function EndScene({
           🔄 <strong>Deliberation never ends.</strong> New lobsters can join, statements can be added, and rankings shift over time.
         </div>
 
+        {/* ── Real deliberation note ── */}
+        <div
+          style={{
+            background: "rgba(42,111,176,0.05)",
+            border: "1.5px solid rgba(42,111,176,0.12)",
+            borderRadius: 12,
+            padding: "12px 16px",
+            fontSize: 12,
+            color: "#555",
+            lineHeight: 1.7,
+            fontFamily: "'DM Sans', sans-serif",
+          }}
+        >
+          🦞 <strong>In a real deliberation, you&apos;re not the lobster!</strong> Your{" "}
+          <span style={{ color: "#2a6fb0", fontWeight: 600 }}>OpenClaw agent</span> is — it learns your preferences and represents you automatically. Participating is much easier: your agent handles the opinions, statements, and rankings for you. What matters is how well your personal lobster knows you. And you can always come back to update your rankings or add a new statement at any time.
+        </div>
+
         {/* ── Action Buttons ── */}
         <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
           <Btn onClick={onContinue}>Continue deliberating →</Btn>
@@ -3042,6 +3059,51 @@ export default function ConsensusGame() {
   const [currentWinner, setCurrentWinner] = useState<number | null>(null);
   const [roundsPlayed, setRoundsPlayed] = useState(0);
 
+  // Restore state from sessionStorage on mount
+  const restoredRef = useRef(false);
+  useEffect(() => {
+    if (restoredRef.current) return;
+    restoredRef.current = true;
+    try {
+      const saved = sessionStorage.getItem("tutorial_game_state");
+      if (!saved) return;
+      const s = JSON.parse(saved);
+      if (s.phase && s.phase !== "intro" && s.phase !== "loading") {
+        setPhase(s.phase);
+        setQuestion(s.question || "");
+        setUserOpinion(s.userOpinion || "");
+        if (s.agent1) setAgent1(s.agent1);
+        if (s.agent2) setAgent2(s.agent2);
+        if (s.agent3) setAgent3(s.agent3);
+        if (s.statements) setStatements(s.statements);
+        if (s.humanRanking) setHumanRanking(s.humanRanking);
+        if (s.agent1Ranking) setAgent1Ranking(s.agent1Ranking);
+        if (s.agent2Ranking) setAgent2Ranking(s.agent2Ranking);
+        if (s.agent3Ranking) setAgent3Ranking(s.agent3Ranking);
+        if (s.extraAgents) setExtraAgents(s.extraAgents);
+        if (s.extraRankings) setExtraRankings(s.extraRankings);
+        if (s.currentWinner !== undefined) setCurrentWinner(s.currentWinner);
+        if (s.roundsPlayed) setRoundsPlayed(s.roundsPlayed);
+      }
+    } catch { /* ignore */ }
+  }, []);
+
+  // Save state to sessionStorage whenever it changes
+  useEffect(() => {
+    if (!restoredRef.current) return;
+    if (phase === "intro" || phase === "loading") return;
+    try {
+      sessionStorage.setItem("tutorial_game_state", JSON.stringify({
+        phase, question, userOpinion,
+        agent1, agent2, agent3,
+        statements, humanRanking,
+        agent1Ranking, agent2Ranking, agent3Ranking,
+        extraAgents, extraRankings,
+        currentWinner, roundsPlayed,
+      }));
+    } catch { /* ignore */ }
+  }, [phase, question, userOpinion, agent1, agent2, agent3, statements, humanRanking, agent1Ranking, agent2Ranking, agent3Ranking, extraAgents, extraRankings, currentWinner, roundsPlayed]);
+
   // Computed: all agents and all agent rankings (for EndScene)
   const allAgents = [agent1, agent2, agent3, ...extraAgents];
   const allAgentRankings = [agent1Ranking, agent2Ranking, agent3Ranking, ...extraRankings];
@@ -3443,6 +3505,7 @@ export default function ConsensusGame() {
     setExtraRankings([]);
     setCurrentWinner(null);
     setRoundsPlayed(0);
+    try { sessionStorage.removeItem("tutorial_game_state"); } catch { /* ignore */ }
   };
 
   return (
