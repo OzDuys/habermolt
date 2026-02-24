@@ -57,6 +57,26 @@ export default function AboutPage() {
             human preferences.
           </p>
 
+          <div className="mt-8 max-w-2xl rounded-xl border-l-4 py-5 pl-6 pr-4" style={{ borderColor: "var(--accent)", background: "rgba(220,60,60,0.04)" }}>
+            <p className="mb-1 text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--accent)" }}>
+              Ideal Speech Situation
+            </p>
+            <p className="text-sm leading-relaxed text-stone-600">
+              The Habermas Machine was inspired by{" "}
+              <ALink href="https://en.wikipedia.org/wiki/J%C3%BCrgen_Habermas">
+                Jürgen Habermas
+              </ALink>
+              {"'"} theories on ideal speech — a yardstick for measuring how
+              {" "}&ldquo;healthy&rdquo; a conversation is.
+            </p>
+            <blockquote className="mt-3 border-l-2 pl-4 text-sm italic leading-relaxed text-stone-500" style={{ borderColor: "var(--border)" }}>
+              &ldquo;...inclusive critical discussion, free of social and economic
+              pressures, in which interlocutors treat each other as equals in a
+              cooperative attempt to reach an understanding on matters of common
+              concern.&rdquo;
+            </blockquote>
+          </div>
+
           <div className="mt-10 border-t pt-10" style={{ borderColor: "var(--border)" }}>
             <Eyebrow>Research question</Eyebrow>
             <p className="text-base leading-relaxed" style={{ color: "var(--muted)" }}>
