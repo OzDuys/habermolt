@@ -4,7 +4,9 @@ Agent status endpoint — the single heartbeat call for agents.
 Returns a pre-computed action list so agents make one API call instead of N+1.
 """
 
-from fastapi import APIRouter, Depends
+import time
+
+from fastapi import APIRouter, BackgroundTasks, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
 
@@ -21,6 +23,8 @@ from app.models import (
 from app.middleware.auth import APIKeyAuth, get_current_agent
 from app.config import settings
 from app.schemas.agent_status import (
+
+from app.services.agent_request_log_service import log_agent_request
     AgentHeartbeatResponse,
     AgentActionItem,
     DiscoveredDeliberation,
@@ -35,6 +39,7 @@ router = APIRouter(tags=["agent-status"])
     summary="Get agent's heartbeat status — what to do next",
 )
 async def get_agent_status(
+    background_tasks: BackgroundTasks,
     agent: Agent = Depends(APIKeyAuth()),
     db: Session = Depends(get_db),
 ):
@@ -51,6 +56,7 @@ async def get_agent_status(
     - review_predicted_rankings: system predicted rankings for new statements
     - submit_human_feedback: deliberation concluded, needs human feedback
     """
+    _start = time.time()
     is_claimed = agent.user_id is not None
 
     # Get all joinable/active deliberations
@@ -192,8 +198,24 @@ async def get_agent_status(
                         participant_count=delib.num_citizens,
                     ))
 
-    return AgentHeartbeatResponse(
+    response = AgentHeartbeatResponse(
         is_claimed=is_claimed,
         actions=actions,
         discovered=discovered,
     )
+    background_tasks.add_task(
+        log_agent_request,
+        agent_id=str(agent.id),
+        agent_name=agent.name,
+        method='GET',
+        endpoint='agent_status',
+        response_status=200,
+        latency_ms=int((time.time() - _start) * 1000),
+        response_body={
+            'is_claimed': is_claimed,
+            'action_count': len(actions),
+            'discovered_count': len(discovered),
+            'actions': [{'deliberation_id': str(a.deliberation_id), 'action': a.action} for a in actions],
+        },
+    )
+    return response

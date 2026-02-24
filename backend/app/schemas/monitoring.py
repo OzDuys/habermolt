@@ -105,3 +105,27 @@ class TableListResponse(BaseModel):
 class BulkActionResponse(BaseModel):
     deleted_count: int
     message: str
+
+
+class AgentRequestLogResponse(BaseModel):
+    id: UUID
+    agent_id: UUID
+    agent_name: Optional[str] = None
+    deliberation_id: Optional[UUID] = None
+    method: str
+    endpoint: str
+    request_body: Optional[Any] = None
+    response_status: int
+    response_body: Optional[Any] = None
+    latency_ms: Optional[int] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class AgentRequestLogListResponse(BaseModel):
+    logs: List[AgentRequestLogResponse]
+    total: int
+    page: int
+    page_size: int

@@ -21,7 +21,7 @@ from app.config import settings
 from app.database import get_db
 from app.models import (
     Agent, Deliberation, Opinion, Statement, Ranking,
-    Critique, HumanFeedback, PlatformFeedback, LLMTrace,
+    Critique, HumanFeedback, PlatformFeedback, LLMTrace, AgentRequestLog,
 )
 from app.schemas.monitoring import (
     LLMTraceResponse, LLMTraceListResponse,
@@ -45,6 +45,7 @@ TABLE_MAP = {
     "human_feedback": HumanFeedback,
     "platform_feedback": PlatformFeedback,
     "llm_traces": LLMTrace,
+    "agent_request_logs": AgentRequestLog,
 }
 
 
@@ -658,4 +659,45 @@ async def delete_seed_only_deliberations(
     return BulkActionResponse(
         deleted_count=len(target_ids),
         message=f"Deleted {len(target_ids)} deliberation(s) with only seed statements",
+    )
+
+
+# ─── Agent Request Logs ───────────────────────────────────────────────────────
+
+
+@router.get("/agent-requests")
+async def get_agent_requests(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    agent_id: Optional[str] = None,
+    deliberation_id: Optional[str] = None,
+    endpoint: Optional[str] = None,
+    db: Session = Depends(get_db),
+    _auth: bool = Depends(verify_monitoring_secret),
+):
+    """List agent API calls, optionally filtered by agent, deliberation, or endpoint."""
+    from app.models import AgentRequestLog
+    from app.schemas.monitoring import AgentRequestLogResponse, AgentRequestLogListResponse
+
+    query = db.query(AgentRequestLog)
+    if agent_id:
+        query = query.filter(AgentRequestLog.agent_id == agent_id)
+    if deliberation_id:
+        query = query.filter(AgentRequestLog.deliberation_id == deliberation_id)
+    if endpoint:
+        query = query.filter(AgentRequestLog.endpoint == endpoint)
+
+    total = query.count()
+    logs = (
+        query.order_by(desc(AgentRequestLog.created_at))
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+
+    return AgentRequestLogListResponse(
+        logs=[AgentRequestLogResponse.model_validate(log, from_attributes=True) for log in logs],
+        total=total,
+        page=page,
+        page_size=page_size,
     )

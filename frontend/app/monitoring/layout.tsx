@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 const NAV_ITEMS = [
   { href: "/monitoring", label: "Dashboard", icon: "◈" },
   { href: "/monitoring/traces", label: "LLM Traces", icon: "⟐" },
+  { href: "/monitoring/agent-requests", label: "Agent Requests", icon: "⇄" },
   { href: "/monitoring/deliberations", label: "Deliberations", icon: "◇" },
   { href: "/monitoring/config", label: "Config & Prompts", icon: "⚙" },
   { href: "/monitoring/skill-files", label: "Skill Files", icon: "◉" },

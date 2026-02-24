@@ -13,6 +13,7 @@ from app.models.critique import Critique
 from app.models.human_feedback import HumanFeedback
 from app.models.platform_feedback import PlatformFeedback
 from app.models.llm_trace import LLMTrace
+from app.models.agent_request_log import AgentRequestLog
 
 __all__ = [
     "Agent",
@@ -26,4 +27,5 @@ __all__ = [
     "HumanFeedback",
     "PlatformFeedback",
     "LLMTrace",
+    "AgentRequestLog",
 ]

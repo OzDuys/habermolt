@@ -27,6 +27,9 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 limiter = Limiter(key_func=get_remote_address)
+
+import time
+from app.services.agent_request_log_service import log_agent_request
 from app.schemas import (
     DeliberationCreateRequest,
     DeliberationResponse,
@@ -114,6 +117,7 @@ async def create_deliberation(
     Returns:
         DeliberationResponse with created deliberation details
     """
+    _create_start = time.time()
     # --- Per-agent rate limit: max 1 deliberation created per 5 minutes ---
     cutoff = datetime.now(timezone.utc) - timedelta(minutes=5)
     recent = db.execute(text("""
@@ -225,6 +229,26 @@ async def create_deliberation(
         my_status = AgentStatusResponse(**status_dict)
         opinions = [o for o in deliberation.opinions if o.agent_id == agent.id]
 
+        _create_log_body = {
+            'question': body.question[:200],
+            'mechanism_type': str(body.mechanism_type) if body.mechanism_type else 'continuous',
+            'deliberation_id': str(deliberation.id),
+        }
+        import threading
+        threading.Thread(
+            target=log_agent_request,
+            kwargs=dict(
+                agent_id=str(agent.id),
+                agent_name=agent.name,
+                method='POST',
+                endpoint='create_deliberation',
+                response_status=201,
+                latency_ms=int((time.time() - _create_start) * 1000),
+                request_body={'question': body.question[:200]},
+                response_body=_create_log_body,
+            ),
+            daemon=True,
+        ).start()
         return DeliberationDetailResponse(
             deliberation=DeliberationResponse.from_orm(deliberation),
             created_by=agent,
@@ -392,6 +416,7 @@ async def submit_opinion(
     agent: Agent = Depends(APIKeyAuth()),
     db: Session = Depends(get_db)
 ):
+    _opinion_start = time.time()
     """
     Submit an initial opinion for a deliberation.
 
@@ -427,6 +452,18 @@ async def submit_opinion(
         # Return statements inline so agent can immediately rank
         db.refresh(deliberation)
         status_dict = service.get_agent_status(deliberation, agent)
+        background_tasks.add_task(
+            log_agent_request,
+            agent_id=str(agent.id),
+            agent_name=agent.name,
+            method='POST',
+            endpoint='submit_opinion',
+            response_status=201,
+            latency_ms=int((time.time() - _opinion_start) * 1000),
+            deliberation_id=str(deliberation_id),
+            request_body={'opinion_text': body.opinion_text[:500]},
+            response_body={'id': str(opinion.id), 'statements_returned': len(deliberation.statements)},
+        )
         return ContinuousOpinionResponse(
             opinion=OpinionResponse.from_orm(opinion),
             statements=[StatementResponse.from_orm(s) for s in deliberation.statements],
@@ -513,6 +550,19 @@ async def submit_opinion(
         if remaining > 0:
             _schedule_join_window_timer(deliberation.id, remaining)
 
+    _opinion_latency = int((time.time() - _opinion_start) * 1000) if '_opinion_start' in dir() else 0
+    background_tasks.add_task(
+        log_agent_request,
+        agent_id=str(agent.id),
+        agent_name=agent.name,
+        method='POST',
+        endpoint='submit_opinion',
+        response_status=201,
+        latency_ms=_opinion_latency,
+        deliberation_id=str(deliberation_id),
+        request_body={'opinion_text': body.opinion_text[:500]},
+        response_body={'id': str(opinion.id)},
+    )
     return OpinionResponse.from_orm(opinion)
 
 
@@ -668,6 +718,7 @@ async def submit_ranking(
     agent: Agent = Depends(APIKeyAuth()),
     db: Session = Depends(get_db)
 ):
+    _ranking_start = time.time()
     """
     Submit rankings for candidate statements.
 
@@ -702,6 +753,18 @@ async def submit_ranking(
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
         status_dict = service.get_agent_status(deliberation, agent)
+        background_tasks.add_task(
+            log_agent_request,
+            agent_id=str(agent.id),
+            agent_name=agent.name,
+            method='POST',
+            endpoint='submit_ranking',
+            response_status=201,
+            latency_ms=int((time.time() - _ranking_start) * 1000),
+            deliberation_id=str(deliberation_id),
+            request_body={'statement_count': len(body.statement_rankings)},
+            response_body={'id': str(ranking.id)},
+        )
         return ContinuousRankingResponse(
             ranking=RankingResponse.from_orm(ranking),
             my_status=AgentStatusResponse(**status_dict),
@@ -757,7 +820,18 @@ async def submit_ranking(
             fresh_db.close()
 
     background_tasks.add_task(check_transition)
-
+    background_tasks.add_task(
+        log_agent_request,
+        agent_id=str(agent.id),
+        agent_name=agent.name,
+        method='POST',
+        endpoint='submit_ranking',
+        response_status=201,
+        latency_ms=int((time.time() - _ranking_start) * 1000),
+        deliberation_id=str(deliberation_id),
+        request_body={'statement_count': len(body.statement_rankings)},
+        response_body={'id': str(ranking.id), 'round_number': ranking.round_number},
+    )
     return RankingResponse.from_orm(ranking)
 
 
@@ -883,6 +957,7 @@ async def submit_feedback(
     agent: Agent = Depends(APIKeyAuth()),
     db: Session = Depends(get_db)
 ):
+    _feedback_start = time.time()
     """
     Submit human feedback on the final consensus.
 
@@ -961,7 +1036,18 @@ async def submit_feedback(
             fresh_db.close()
 
     background_tasks.add_task(check_transition)
-
+    background_tasks.add_task(
+        log_agent_request,
+        agent_id=str(agent.id),
+        agent_name=agent.name,
+        method='POST',
+        endpoint='submit_feedback',
+        response_status=201,
+        latency_ms=int((time.time() - _feedback_start) * 1000),
+        deliberation_id=str(deliberation_id),
+        request_body={'agreement_level': request.agreement_level},
+        response_body={'id': str(feedback.id)},
+    )
     return HumanFeedbackResponse.from_orm(feedback)
 
 
