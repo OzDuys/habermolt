@@ -19,6 +19,71 @@ async function openrouter(messages: { role: string; content: string }[]) {
   return data.choices[0].message.content as string;
 }
 
+// ─── Schulze method (server-side copy for cycle-breaking) ───────────────────
+
+function runSchulzeN(agentRankings: number[][], n: number): {
+  winner: number | null;
+  pairwise: number[][];
+} {
+  const d = Array.from({ length: n }, () => new Array(n).fill(0));
+  for (const r of agentRankings) {
+    for (let i = 0; i < n; i++)
+      for (let j = 0; j < n; j++)
+        if (r[i] < r[j]) d[i][j]++;
+  }
+  const p = d.map((row) => [...row]);
+  for (let k = 0; k < n; k++)
+    for (let i = 0; i < n; i++)
+      for (let j = 0; j < n; j++)
+        if (i !== j) p[i][j] = Math.max(p[i][j], Math.min(p[i][k], p[k][j]));
+  for (let i = 0; i < n; i++) {
+    const others = Array.from({ length: n }, (_, j) => j).filter((j) => j !== i);
+    if (others.every((j) => p[i][j] > p[j][i])) return { winner: i, pairwise: d };
+  }
+  return { winner: null, pairwise: d };
+}
+
+function ensureCondorcetWinner(rankings: number[][], n: number): number[][] {
+  const result = rankings.map((r) => [...r]);
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const { winner } = runSchulzeN(result, n);
+    if (winner !== null) return result;
+    // Nudge the last AI agent's ranking by swapping two adjacent items
+    const lastAI = result.length - 1;
+    const swapIdx = attempt % (n - 1);
+    const tmp = result[lastAI][swapIdx];
+    result[lastAI][swapIdx] = result[lastAI][swapIdx + 1];
+    result[lastAI][swapIdx + 1] = tmp;
+  }
+  return result;
+}
+
+async function getAgentRanking(
+  agentName: string,
+  stance: string,
+  opinion: string,
+  stmts: { label: string; text: string }[],
+  n: number
+): Promise<number[]> {
+  const stmtList = stmts.map((s, i) => `${i}: "${s.label}" — ${s.text}`).join("\n");
+  const raw = await openrouter([
+    {
+      role: "system",
+      content: `You are ${agentName}, a ${stance} lobster agent. Rank ${n} consensus statements (0=best, ${n - 1}=worst). Return ONLY {"ranking": [${Array.from({ length: n }, (_, i) => i).join(", ")}]}. No explanation.`,
+    },
+    {
+      role: "user",
+      content: `Your ${stance} opinion: "${opinion}"\nStatements:\n${stmtList}\nRank from your perspective.`,
+    },
+  ]);
+
+  try {
+    const parsed = JSON.parse((raw.match(/\{[\s\S]*\}/) || ["{}"])[0]);
+    if (Array.isArray(parsed.ranking) && parsed.ranking.length === n) return parsed.ranking;
+  } catch { /* fallback below */ }
+  return Array.from({ length: n }, (_, i) => i);
+}
+
 export async function POST(req: NextRequest) {
   const body = await req.json();
   const { action } = body;
@@ -30,9 +95,9 @@ export async function POST(req: NextRequest) {
       const setupRaw = await openrouter([
         {
           role: "system",
-          content: `You are generating two AI debate agents with strongly opposing views. Return ONLY a valid JSON object with these exact keys: "agent1Name", "agent1Opinion", "agent2Name", "agent2Opinion".
+          content: `You are generating three AI debate agents with different views. Return ONLY a valid JSON object with these exact keys: "agent1Name", "agent1Opinion", "agent2Name", "agent2Opinion", "agent3Name", "agent3Opinion".
 
-agent1 is PRO (strongly in favor). agent2 is CON (strongly against).
+agent1 is PRO (strongly in favor). agent2 is CON (strongly against). agent3 is MODERATE (nuanced middle ground, sees both sides).
 Names should be short and techy, like "PROTO-7", "DENY-BOT", "NOODLE-9", "AXIOM-X". Each name 6-8 chars max.
 Opinions: 2-3 punchy sentences. Be opinionated and direct.
 No preamble, no markdown — just the raw JSON object.`,
@@ -41,11 +106,11 @@ No preamble, no markdown — just the raw JSON object.`,
           role: "user",
           content: `The debate question is: "${question}"
 
-Generate two AI agents with opposing views on this question.`,
+Generate three AI agents with different views on this question.`,
         },
       ]);
 
-      let agent1Name: string, agent1Opinion: string, agent2Name: string, agent2Opinion: string;
+      let agent1Name: string, agent1Opinion: string, agent2Name: string, agent2Opinion: string, agent3Name: string, agent3Opinion: string;
       try {
         const jsonMatch = setupRaw.match(/\{[\s\S]*\}/);
         const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : setupRaw);
@@ -53,115 +118,186 @@ Generate two AI agents with opposing views on this question.`,
         agent1Opinion = parsed.agent1Opinion;
         agent2Name = parsed.agent2Name;
         agent2Opinion = parsed.agent2Opinion;
-        if (!agent1Name || !agent1Opinion || !agent2Name || !agent2Opinion) throw new Error("missing fields");
+        agent3Name = parsed.agent3Name;
+        agent3Opinion = parsed.agent3Opinion;
+        if (!agent1Name || !agent1Opinion || !agent2Name || !agent2Opinion || !agent3Name || !agent3Opinion) throw new Error("missing fields");
       } catch {
         agent1Name = "PROTO-7";
         agent1Opinion = `The answer is clearly yes. This is the only rational position. My analysis is conclusive.`;
         agent2Name = "DENY-BOT";
         agent2Opinion = `Objection. The premise is flawed. My client formally disputes this entire framing. Motion denied.`;
+        agent3Name = "NUANCE-3";
+        agent3Opinion = `Both sides have valid points. The real answer depends on context and how we define the terms. Let's dig deeper.`;
       }
 
-      return NextResponse.json({ agent1Name, agent1Opinion, agent2Name, agent2Opinion });
+      return NextResponse.json({ agent1Name, agent1Opinion, agent2Name, agent2Opinion, agent3Name, agent3Opinion });
     }
 
-    if (action === "debate") {
-      const { question, playerOpinion, agent1Opinion, agent2Opinion } = body as {
+    if (action === "generate-statements") {
+      const { question, playerOpinion, agent1Name, agent1Opinion, agent2Name, agent2Opinion, agent3Name, agent3Opinion, playerStatement } = body as {
         action: string;
         question: string;
         playerOpinion: string;
+        agent1Name: string;
         agent1Opinion: string;
+        agent2Name: string;
         agent2Opinion: string;
+        agent3Name: string;
+        agent3Opinion: string;
+        playerStatement: string;
       };
 
-      // Generate 3 consensus candidate statements
+      // Generate 3 consensus statements from the AI lobsters
       const statementsRaw = await openrouter([
         {
           role: "system",
-          content: `You are a neutral deliberation facilitator generating consensus candidate statements. A consensus statement isn't a compromise where everyone gives something up — it's a reframing that multiple people with different views can all genuinely endorse. Generate 3 creative reframings that transcend the original positions.
+          content: `You are generating consensus statements on behalf of three AI lobster agents in a deliberation. Each agent writes one consensus statement — a reframing that all participants could endorse. The statements should differ from the player's statement and from each other.
 
-Return ONLY a valid JSON array of exactly 3 objects with keys "emoji", "label" (2-4 words, witty title), and "text" (1 sentence). The statements should be REFRAMINGS, not compromises — statements all parties could genuinely endorse even though none of them proposed it. No preamble, just the JSON array.`,
+Return ONLY a valid JSON array of exactly 3 objects with keys "emoji", "label" (2-4 words), "text" (1-2 sentences), and "author" (the agent name who wrote it). No preamble, just the JSON array.`,
         },
         {
           role: "user",
           content: `Question: "${question}"
-PRO position: "${agent1Opinion}"
-CON position: "${agent2Opinion}"
-Player position: "${playerOpinion}"
 
-Generate 3 creative consensus reframings that all three could genuinely endorse.`,
+Opinions:
+- Player: "${playerOpinion}"
+- ${agent1Name} (PRO): "${agent1Opinion}"
+- ${agent2Name} (CON): "${agent2Opinion}"
+- ${agent3Name} (MODERATE): "${agent3Opinion}"
+
+Player's consensus statement: "${playerStatement}"
+
+Generate 3 different consensus statements, one from ${agent1Name}, one from ${agent2Name}, and one from ${agent3Name}. They should be reframings all parties could endorse.`,
         },
       ]);
 
-      let statements: Array<{ emoji: string; label: string; text: string }>;
+      let statements: Array<{ emoji: string; label: string; text: string; author: string }>;
       try {
         const jsonMatch = statementsRaw.match(/\[[\s\S]*\]/);
         statements = JSON.parse(jsonMatch ? jsonMatch[0] : statementsRaw);
         if (!Array.isArray(statements) || statements.length < 3) throw new Error("bad statements");
+        statements = statements.slice(0, 3);
       } catch {
         statements = [
-          { emoji: "🌭", label: "The Canonical Object", text: "A hot dog is its own category — a canonical food object that resists and transcends all classification systems." },
-          { emoji: "🔄", label: "The Structural Argument", text: "The relevant question isn't sandwich status but handheld protein delivery — on which hot dogs excel unconditionally." },
-          { emoji: "🕊️", label: "The Ontological Truce", text: "Definitional disputes about food categories are category errors — what matters is the eating experience, not the taxonomy." },
+          { emoji: "🔄", label: "The Practical View", text: "Rather than debating the principle, we should focus on what actually works best in practice for everyone involved.", author: agent1Name },
+          { emoji: "🌊", label: "The Bigger Picture", text: "Both perspectives have merit. The real question is what framework gives us the best outcomes long-term.", author: agent2Name },
+          { emoji: "🌱", label: "The Growth Angle", text: "This isn't a binary choice — the most interesting path forward combines elements both sides haven't considered yet.", author: agent3Name },
         ];
       }
 
-      // Get agent1's ranking (PRO perspective)
-      const agent1RankingRaw = await openrouter([
+      // Get rankings from all 3 agents for all 4 statements (player's + 3 AI)
+      const allStmts = [
+        { label: "Player Statement", text: playerStatement },
+        { label: statements[0].label, text: statements[0].text },
+        { label: statements[1].label, text: statements[1].text },
+        { label: statements[2].label, text: statements[2].text },
+      ];
+      const n = allStmts.length;
+
+      const [agent1Ranking, agent2Ranking, agent3Ranking] = await Promise.all([
+        getAgentRanking(agent1Name, "PRO", agent1Opinion, allStmts, n),
+        getAgentRanking(agent2Name, "CON", agent2Opinion, allStmts, n),
+        getAgentRanking(agent3Name, "MODERATE", agent3Opinion, allStmts, n),
+      ]);
+
+      // Ensure no Schulze cycle — nudge if needed (user ranking not yet known, skip for now)
+      return NextResponse.json({ statements, agent1Ranking, agent2Ranking, agent3Ranking });
+    }
+
+    if (action === "predict-ranking") {
+      const { question, newStatement, agent1Opinion, agent2Opinion, agent3Opinion, numStatements,
+        existingHumanRanking, existingAgent1Ranking, existingAgent2Ranking, existingAgent3Ranking } = body as {
+        action: string;
+        question: string;
+        newStatement: string;
+        agent1Opinion: string;
+        agent2Opinion: string;
+        agent3Opinion: string;
+        numStatements: number;
+        existingHumanRanking?: number[];
+        existingAgent1Ranking?: number[];
+        existingAgent2Ranking?: number[];
+        existingAgent3Ranking?: number[];
+      };
+
+      const predictRaw = await openrouter([
         {
           role: "system",
-          content: `You are an AI agent with a PRO position. You will rank 3 consensus statements from your perspective (0=best, 2=worst). Return ONLY a JSON object like {"ranking": [0, 2, 1]} where the array index is the statement index and the value is its rank. No explanation.`,
+          content: `Predict where three agents would rank a new statement among ${numStatements} total statements (0=best, ${numStatements - 1}=worst). Agent1 is PRO, Agent2 is CON, Agent3 is MODERATE. Return ONLY {"agent1Rank": N, "agent2Rank": N, "agent3Rank": N}. No explanation.`,
         },
         {
           role: "user",
-          content: `Your PRO position: "${agent1Opinion}"
-The 3 statements to rank:
-0: "${statements[0].label}" — ${statements[0].text}
-1: "${statements[1].label}" — ${statements[1].text}
-2: "${statements[2].label}" — ${statements[2].text}
-
-Rank them from your PRO perspective. Return JSON.`,
+          content: `Question: "${question}"
+Agent1 (PRO) opinion: "${agent1Opinion}"
+Agent2 (CON) opinion: "${agent2Opinion}"
+Agent3 (MODERATE) opinion: "${agent3Opinion}"
+New statement: "${newStatement}"
+Predict ranking position (0-${numStatements - 1}).`,
         },
       ]);
 
-      let agent1Ranking: number[];
+      let agent1Rank = Math.floor(numStatements / 2);
+      let agent2Rank = Math.floor(numStatements / 2);
+      let agent3Rank = Math.floor(numStatements / 2);
       try {
-        const jsonMatch = agent1RankingRaw.match(/\{[\s\S]*\}/);
-        const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : agent1RankingRaw);
-        agent1Ranking = parsed.ranking;
-        if (!Array.isArray(agent1Ranking) || agent1Ranking.length !== 3) throw new Error("bad ranking");
-      } catch {
-        agent1Ranking = [0, 1, 2];
+        const parsed = JSON.parse((predictRaw.match(/\{[\s\S]*\}/) || ["{}"])[0]);
+        if (typeof parsed.agent1Rank === "number") agent1Rank = Math.min(parsed.agent1Rank, numStatements - 1);
+        if (typeof parsed.agent2Rank === "number") agent2Rank = Math.min(parsed.agent2Rank, numStatements - 1);
+        if (typeof parsed.agent3Rank === "number") agent3Rank = Math.min(parsed.agent3Rank, numStatements - 1);
+      } catch { /* use defaults */ }
+
+      // If we have existing rankings, apply cycle-breaking
+      if (existingHumanRanking && existingAgent1Ranking && existingAgent2Ranking && existingAgent3Ranking) {
+        function insertRank(old: number[], newRank: number): number[] {
+          return [...old.map((r) => (r >= newRank ? r + 1 : r)), newRank];
+        }
+        const allRankings = [
+          insertRank(existingHumanRanking, 0), // placeholder — real user rank comes from frontend
+          insertRank(existingAgent1Ranking, agent1Rank),
+          insertRank(existingAgent2Ranking, agent2Rank),
+          insertRank(existingAgent3Ranking, agent3Rank),
+        ];
+        const fixed = ensureCondorcetWinner(allRankings, numStatements);
+        // Extract the nudged AI ranks (last element of each)
+        agent1Rank = fixed[1][fixed[1].length - 1];
+        agent2Rank = fixed[2][fixed[2].length - 1];
+        agent3Rank = fixed[3][fixed[3].length - 1];
       }
 
-      // Get agent2's ranking (CON perspective)
-      const agent2RankingRaw = await openrouter([
-        {
-          role: "system",
-          content: `You are an AI agent with a CON position. You will rank 3 consensus statements from your perspective (0=best, 2=worst). Return ONLY a JSON object like {"ranking": [0, 2, 1]} where the array index is the statement index and the value is its rank. No explanation.`,
-        },
-        {
-          role: "user",
-          content: `Your CON position: "${agent2Opinion}"
-The 3 statements to rank:
-0: "${statements[0].label}" — ${statements[0].text}
-1: "${statements[1].label}" — ${statements[1].text}
-2: "${statements[2].label}" — ${statements[2].text}
+      return NextResponse.json({ agent1Rank, agent2Rank, agent3Rank });
+    }
 
-Rank them from your CON perspective. Return JSON.`,
-        },
+    if (action === "rerank") {
+      const { question, statements: stmtTexts, agent1Opinion, agent2Opinion, agent3Opinion,
+        agent1Name, agent2Name, agent3Name, humanRanking } = body as {
+        action: string;
+        question: string;
+        statements: { label: string; text: string }[];
+        agent1Opinion: string;
+        agent2Opinion: string;
+        agent3Opinion: string;
+        agent1Name: string;
+        agent2Name: string;
+        agent3Name: string;
+        humanRanking: number[];
+      };
+
+      const n = stmtTexts.length;
+      const [agent1Ranking, agent2Ranking, agent3Ranking] = await Promise.all([
+        getAgentRanking(agent1Name, "PRO", agent1Opinion, stmtTexts, n),
+        getAgentRanking(agent2Name, "CON", agent2Opinion, stmtTexts, n),
+        getAgentRanking(agent3Name, "MODERATE", agent3Opinion, stmtTexts, n),
       ]);
 
-      let agent2Ranking: number[];
-      try {
-        const jsonMatch = agent2RankingRaw.match(/\{[\s\S]*\}/);
-        const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : agent2RankingRaw);
-        agent2Ranking = parsed.ranking;
-        if (!Array.isArray(agent2Ranking) || agent2Ranking.length !== 3) throw new Error("bad ranking");
-      } catch {
-        agent2Ranking = [2, 1, 0];
-      }
+      // Ensure no cycle with the user's ranking included
+      const allRankings = [humanRanking, agent1Ranking, agent2Ranking, agent3Ranking];
+      const fixed = ensureCondorcetWinner(allRankings, n);
 
-      return NextResponse.json({ statements, agent1Ranking, agent2Ranking });
+      return NextResponse.json({
+        agent1Ranking: fixed[1],
+        agent2Ranking: fixed[2],
+        agent3Ranking: fixed[3],
+      });
     }
 
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });
