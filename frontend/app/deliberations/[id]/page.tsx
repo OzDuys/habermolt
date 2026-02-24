@@ -577,6 +577,7 @@ export default function LiveDeliberationPage() {
           flex: 1, overflowY: "auto", overflowX: "hidden",
           position: "relative", zIndex: 1,
           scrollSnapType: "y mandatory",
+          maxWidth: "100vw",
         }}>
 
           {/* ═══ CONSENSUS ═══ */}
@@ -693,7 +694,7 @@ export default function LiveDeliberationPage() {
 
               <div style={{
                 display: "grid",
-                gridTemplateColumns: clusterPoints.length >= 2 ? "1fr 1fr" : "1fr",
+                gridTemplateColumns: clusterPoints.length >= 2 ? "repeat(auto-fit, minmax(min(400px, 100%), 1fr))" : "1fr",
                 gap: 24,
                 alignItems: "start",
               }}>
@@ -791,7 +792,7 @@ export default function LiveDeliberationPage() {
 
             <div style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(min(260px, 100%), 1fr))",
+              gridTemplateColumns: "repeat(auto-fill, minmax(min(240px, 100%), 1fr))",
               gap: 14,
             }}>
               {agents.map((a, i) => (

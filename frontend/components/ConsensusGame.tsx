@@ -362,7 +362,7 @@ function Scene({ children }: { children: React.ReactNode }) {
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "safe center",
-        padding: "24px 20px",
+        padding: "24px 0",
       }}
     >
       {children}
@@ -527,7 +527,7 @@ function Card({
         border: "1.5px solid rgba(200,74,32,0.12)",
         borderRadius: 20,
         boxShadow: "0 4px 24px rgba(200,74,32,0.06)",
-        padding: "28px 32px",
+        padding: "28px clamp(16px, 4vw, 32px)",
         maxWidth: 600,
         width: "100%",
         ...style,
@@ -1177,7 +1177,7 @@ function OpinionsRevealScene({
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+            gridTemplateColumns: "repeat(auto-fit, minmax(min(180px, 100%), 1fr))",
             gap: 12,
           }}
         >
@@ -1961,7 +1961,7 @@ function LobsterRankingsScene({
       rank: ranking[i],
     })).sort((a, b) => a.rank - b.rank);
     return (
-      <div style={{ flex: 1, minWidth: 160 }}>
+      <div style={{ flex: 1, minWidth: "min(160px, 100%)" }}>
         <div
           style={{
             display: "flex",
@@ -2050,7 +2050,7 @@ function LobsterRankingsScene({
           The other lobsters have ranked
         </motion.h2>
 
-        <div style={{ display: "flex", gap: 16 }}>
+        <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
           {renderRanking(
             agent1Ranking,
             agent1.color,
@@ -3606,6 +3606,7 @@ export default function ConsensusGame() {
               justifyContent: "flex-start",
               padding: "20px",
               overflowY: "auto",
+              overflowX: "hidden",
             }}
           >
             {phase === "intro" && (
