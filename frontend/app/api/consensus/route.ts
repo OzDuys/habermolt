@@ -368,6 +368,80 @@ Generate a new lobster with a DIFFERENT perspective. Their consensus statement s
       }
     }
 
+    if (action === "auto-generate") {
+      const { type, question, playerOpinion, agents } = body as {
+        action: string;
+        type: "opinion" | "statement" | "ranking";
+        question: string;
+        playerOpinion?: string;
+        agents?: Array<{ name: string; opinion: string }>;
+      };
+
+      if (type === "opinion") {
+        const raw = await openrouter([
+          {
+            role: "system",
+            content: `You are helping a user quickly draft their opinion for a group deliberation. Generate a concise, authentic-sounding opinion (2-3 sentences) that a real person might hold. Be opinionated and direct. Return ONLY a JSON object: {"opinion": "..."}. No preamble.`,
+          },
+          {
+            role: "user",
+            content: `The debate question is: "${question}"\nGenerate a plausible human opinion on this topic.`,
+          },
+        ]);
+        try {
+          const parsed = JSON.parse((raw.match(/\{[\s\S]*\}/) || ["{}"])[0]);
+          return NextResponse.json({ result: parsed.opinion });
+        } catch {
+          return NextResponse.json({ result: `I think "${question}" is a nuanced topic with valid points on both sides, but I lean towards supporting it with reasonable guardrails.` });
+        }
+      }
+
+      if (type === "statement") {
+        const agentContext = agents?.map((a) => `- ${a.name}: "${a.opinion}"`).join("\n") || "";
+        const raw = await openrouter([
+          {
+            role: "system",
+            content: `You are helping a user draft a consensus statement for a group deliberation. A consensus statement is a reframing that all participants could endorse. Return ONLY a JSON object: {"label": "2-4 word title", "text": "1-2 sentence statement"}. No preamble.`,
+          },
+          {
+            role: "user",
+            content: `Question: "${question}"\nUser's opinion: "${playerOpinion}"\nOther participants:\n${agentContext}\n\nGenerate a consensus statement that bridges these perspectives.`,
+          },
+        ]);
+        try {
+          const parsed = JSON.parse((raw.match(/\{[\s\S]*\}/) || ["{}"])[0]);
+          return NextResponse.json({ label: parsed.label, text: parsed.text });
+        } catch {
+          return NextResponse.json({ label: "Common Ground", text: "The key insight is finding a framework that respects all perspectives while moving toward practical outcomes." });
+        }
+      }
+
+      if (type === "ranking") {
+        const { statements: stmts } = body as { statements: Array<{ label: string; text: string }> };
+        const n = stmts.length;
+        const stmtList = stmts.map((s, i) => `${i}: "${s.label}" — ${s.text}`).join("\n");
+        const raw = await openrouter([
+          {
+            role: "system",
+            content: `You are helping a user rank ${n} consensus statements based on their opinion. Rank from best (0) to worst (${n - 1}). Return ONLY {"ranking": [${Array.from({ length: n }, (_, i) => i).join(", ")}]}. No explanation.`,
+          },
+          {
+            role: "user",
+            content: `Question: "${question}"\nUser's opinion: "${playerOpinion}"\nStatements:\n${stmtList}\nRank these statements based on how well they align with the user's perspective.`,
+          },
+        ]);
+        try {
+          const parsed = JSON.parse((raw.match(/\{[\s\S]*\}/) || ["{}"])[0]);
+          if (Array.isArray(parsed.ranking) && parsed.ranking.length === n) {
+            return NextResponse.json({ ranking: parsed.ranking });
+          }
+        } catch { /* fallback */ }
+        return NextResponse.json({ ranking: Array.from({ length: n }, (_, i) => i) });
+      }
+
+      return NextResponse.json({ error: "Unknown auto-generate type" }, { status: 400 });
+    }
+
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Unknown error";
