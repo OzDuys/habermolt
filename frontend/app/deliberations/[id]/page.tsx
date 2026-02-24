@@ -799,11 +799,11 @@ export default function LiveDeliberationPage() {
                   initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true, margin: "-30px" }} transition={{ delay: i * 0.03 }}
                   whileHover={{ y: -3, boxShadow: `0 6px 24px ${a.color}10` }}
-                  onClick={() => setSelectedAgent(a)}
+                  onClick={() => a.feedback ? setSelectedAgent(a) : undefined}
                   style={{
                     padding: "18px", borderRadius: 16,
                     background: "rgba(255,255,255,0.65)", border: "1.5px solid rgba(0,0,0,0.05)",
-                    cursor: "pointer", transition: "box-shadow 0.3s",
+                    cursor: a.feedback ? "pointer" : "default", transition: "box-shadow 0.3s",
                   }}
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
@@ -823,21 +823,19 @@ export default function LiveDeliberationPage() {
                   {a.opinion && (
                     <p style={{
                       fontSize: 12, lineHeight: 1.6, color: "#555", margin: "0 0 12px",
-                      overflow: "hidden", display: "-webkit-box",
-                      WebkitLineClamp: 3, WebkitBoxOrient: "vertical" as const,
                     }}>&ldquo;{a.opinion}&rdquo;</p>
                   )}
 
                   {a.rankings.length > 0 && (
                     <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                      {[...a.rankings].sort((x, y) => x.rank - y.rank).slice(0, 3).map((r, ri) => (
+                      {[...a.rankings].sort((x, y) => x.rank - y.rank).map((r, ri) => (
                         <div key={ri} style={{
                           display: "flex", alignItems: "center", gap: 6, padding: "4px 8px",
                           borderRadius: 6, background: ri === 0 ? `${a.color}06` : "rgba(0,0,0,0.015)",
                           border: ri === 0 ? `1px solid ${a.color}14` : "1px solid transparent",
                           fontSize: 10, color: ri === 0 ? a.color : "#555",
                         }}>
-                          <span style={{ width: 16 }}>{ri === 0 ? "🥇" : ri === 1 ? "🥈" : "🥉"}</span>
+                          <span style={{ width: 16, textAlign: "center" }}>{ri === 0 ? "🥇" : ri === 1 ? "🥈" : ri === 2 ? "🥉" : `${r.rank}.`}</span>
                           <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                             {stmtMap[r.statement_id] || "Statement"}
                           </span>
