@@ -8,7 +8,7 @@ import Link from "next/link";
 // ─── Schulze Method ─────────────────────────────────────────────────────────
 
 function runSchulzeN(agentRankings: number[][], n: number): {
-  winner: number | null;
+  winner: number;
   pairwise: number[][];
 } {
   const d = Array.from({ length: n }, () => new Array(n).fill(0));
@@ -22,11 +22,24 @@ function runSchulzeN(agentRankings: number[][], n: number): {
     for (let i = 0; i < n; i++)
       for (let j = 0; j < n; j++)
         if (i !== j) p[i][j] = Math.max(p[i][j], Math.min(p[i][k], p[k][j]));
+  // Strict Condorcet winner
   for (let i = 0; i < n; i++) {
     const others = Array.from({ length: n }, (_, j) => j).filter((j) => j !== i);
     if (others.every((j) => p[i][j] > p[j][i])) return { winner: i, pairwise: d };
   }
-  return { winner: null, pairwise: d };
+  // Fallback: pick candidate with most pairwise wins (ties broken by strongest path sum)
+  const scores = Array.from({ length: n }, (_, i) => {
+    let wins = 0;
+    let pathSum = 0;
+    for (let j = 0; j < n; j++) {
+      if (j === i) continue;
+      if (p[i][j] >= p[j][i]) wins++;
+      pathSum += p[i][j];
+    }
+    return { i, wins, pathSum };
+  });
+  scores.sort((a, b) => b.wins - a.wins || b.pathSum - a.pathSum);
+  return { winner: scores[0].i, pairwise: d };
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -339,18 +352,17 @@ function Typewriter({
 
 // ─── Shared Components ───────────────────────────────────────────────────────
 
-function Scene({ children, padTop = false }: { children: React.ReactNode; padTop?: boolean }) {
+function Scene({ children }: { children: React.ReactNode }) {
   return (
     <div
       style={{
         width: "100%",
-        height: "100%",
+        minHeight: "100%",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
-        padding: padTop ? "110px 20px 24px" : "24px 20px",
-        overflowY: "auto",
+        padding: "24px 20px",
       }}
     >
       {children}
@@ -416,7 +428,7 @@ function ProgressBar({ phase, loadingFrom, onBack }: { phase: Phase; loadingFrom
     <div
       style={{
         position: "fixed",
-        top: 64,
+        top: "4rem",
         left: 0,
         right: 0,
         zIndex: 100,
@@ -740,7 +752,7 @@ function QuestionScene({
   const [text, setText] = useState(initialValue);
 
   return (
-    <Scene padTop>
+    <Scene>
       <Card>
         <div style={{ textAlign: "center", marginBottom: 20 }}>
           <motion.div
@@ -874,7 +886,7 @@ function OpinionScene({
   };
 
   return (
-    <Scene padTop>
+    <Scene>
       <Card>
         <div
           style={{
@@ -980,7 +992,7 @@ function LoadingScene() {
     "> preparing for deliberation...",
   ];
   return (
-    <Scene padTop>
+    <Scene>
       <Card style={{ maxWidth: 440 }}>
         <div style={{ textAlign: "center", marginBottom: 20 }}>
           <div
@@ -1128,7 +1140,7 @@ function OpinionsRevealScene({
   ];
 
   return (
-    <Scene padTop>
+    <Scene>
       <div
         style={{
           maxWidth: 640,
@@ -1250,7 +1262,7 @@ function OpinionsRevealScene({
 
 function ExplainConsensusScene({ onNext }: { onNext: () => void }) {
   return (
-    <Scene padTop>
+    <Scene>
       <Card style={{ maxWidth: 520 }}>
         <div style={{ textAlign: "center", marginBottom: 20 }}>
           <span style={{ fontSize: 36 }}>🤝</span>
@@ -1367,7 +1379,7 @@ function WriteStatementScene({
   };
 
   return (
-    <Scene padTop>
+    <Scene>
       <Card>
         <div
           style={{
@@ -1534,7 +1546,7 @@ function LobsterStatementsScene({
   }, []);
 
   return (
-    <Scene padTop>
+    <Scene>
       <div
         style={{
           maxWidth: 600,
@@ -1749,7 +1761,7 @@ function RankingScene({
   const done = ranking.every((r) => r !== -1);
 
   return (
-    <Scene padTop>
+    <Scene>
       <div
         style={{
           display: "flex",
@@ -2013,7 +2025,7 @@ function LobsterRankingsScene({
   };
 
   return (
-    <Scene padTop>
+    <Scene>
       <div
         style={{
           maxWidth: 520,
@@ -2093,7 +2105,7 @@ function SchulzeScene({
   agent1Ranking: number[];
   agent2Ranking: number[];
   agent3Ranking: number[];
-  onNext: (winner: number | null) => void;
+  onNext: (winner: number) => void;
 }) {
   const n = statements.length;
   const { winner, pairwise } = runSchulzeN(
@@ -2132,7 +2144,7 @@ function SchulzeScene({
   }
 
   return (
-    <Scene padTop>
+    <Scene>
       <div
         style={{
           maxWidth: 560,
@@ -2287,65 +2299,41 @@ function SchulzeScene({
                 textAlign: "center",
               }}
             >
-              {winner !== null ? (
-                <>
-                  <div style={{ fontSize: 36, marginBottom: 8 }}>
-                    🏆 {statements[winner].emoji}
-                  </div>
-                  <h3
-                    className="font-handwritten"
-                    style={{
-                      fontSize: 22,
-                      color: "#1a5a2a",
-                      margin: "0 0 6px",
-                    }}
-                  >
-                    {statements[winner].label} wins!
-                  </h3>
-                  <p
-                    style={{
-                      fontSize: 13,
-                      color: "#3a6a3a",
-                      lineHeight: 1.6,
-                      margin: "0 0 12px",
-                      fontFamily: "'DM Sans', sans-serif",
-                    }}
-                  >
-                    {statements[winner].text}
-                  </p>
-                  <p
-                    style={{
-                      fontSize: 12,
-                      color: "#7a9a7a",
-                      margin: 0,
-                      fontFamily: "'DM Sans', sans-serif",
-                    }}
-                  >
-                    This statement beat all others in head-to-head matchups —
-                    that&apos;s the Condorcet winner.
-                  </p>
-                </>
-              ) : (
-                <>
-                  <div style={{ fontSize: 36, marginBottom: 8 }}>🏆</div>
-                  <h3
-                    className="font-handwritten"
-                    style={{ fontSize: 22, color: "#1a5a2a", margin: "0 0 6px" }}
-                  >
-                    Close race!
-                  </h3>
-                  <p
-                    style={{
-                      fontSize: 13,
-                      color: "#3a6a3a",
-                      margin: 0,
-                      fontFamily: "'DM Sans', sans-serif",
-                    }}
-                  >
-                    The matchups are very tight — more deliberation could tip the balance.
-                  </p>
-                </>
-              )}
+              <div style={{ fontSize: 36, marginBottom: 8 }}>
+                🏆 {statements[winner].emoji}
+              </div>
+              <h3
+                className="font-handwritten"
+                style={{
+                  fontSize: 22,
+                  color: "#1a5a2a",
+                  margin: "0 0 6px",
+                }}
+              >
+                {statements[winner].label} wins!
+              </h3>
+              <p
+                style={{
+                  fontSize: 13,
+                  color: "#3a6a3a",
+                  lineHeight: 1.6,
+                  margin: "0 0 12px",
+                  fontFamily: "'DM Sans', sans-serif",
+                }}
+              >
+                {statements[winner].text}
+              </p>
+              <p
+                style={{
+                  fontSize: 12,
+                  color: "#7a9a7a",
+                  margin: 0,
+                  fontFamily: "'DM Sans', sans-serif",
+                }}
+              >
+                This statement beat all others in head-to-head matchups —
+                that&apos;s the Condorcet winner.
+              </p>
             </motion.div>
           )}
         </AnimatePresence>
@@ -2414,7 +2402,7 @@ function EndScene({
   };
 
   return (
-    <Scene padTop>
+    <Scene>
       <div
         style={{
           maxWidth: 580,
@@ -2796,7 +2784,7 @@ function ContinueScene({
   };
 
   return (
-    <Scene padTop>
+    <Scene>
       <div
         style={{
           maxWidth: 580,
@@ -3337,7 +3325,7 @@ export default function ConsensusGame() {
   };
 
   // Part 3: Schulze result
-  const handleSchulzeResult = (winner: number | null) => {
+  const handleSchulzeResult = (winner: number) => {
     setCurrentWinner(winner);
     setRoundsPlayed((p) => p + 1);
     goTo("end");
@@ -3576,7 +3564,7 @@ export default function ConsensusGame() {
       <div
         style={{
           position: "fixed",
-          top: 64,
+          top: "4rem",
           left: 0,
           right: 0,
           bottom: 0,
@@ -3591,13 +3579,12 @@ export default function ConsensusGame() {
       <div
         style={{
           position: "fixed",
-          top: 64,
+          top: "4rem",
           left: 0,
           right: 0,
           bottom: 0,
           zIndex: 1,
           overflow: "hidden",
-          paddingTop: phase === "intro" ? 0 : 36,
         }}
       >
         <AnimatePresence mode="wait">
@@ -3609,10 +3596,14 @@ export default function ConsensusGame() {
             transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
             style={{
               position: "absolute",
-              inset: 0,
+              top: phase === "intro" ? 0 : 36,
+              left: 0,
+              right: 0,
+              bottom: 0,
               display: "flex",
+              flexDirection: "column",
               alignItems: "center",
-              justifyContent: "center",
+              justifyContent: "flex-start",
               padding: "20px",
               overflowY: "auto",
             }}
