@@ -563,6 +563,54 @@ function Btn({
 }
 
 
+function SparkleBtn({
+  onClick,
+  loading,
+  label = "Auto-generate",
+}: {
+  onClick: () => void;
+  loading?: boolean;
+  label?: string;
+}) {
+  return (
+    <motion.button
+      onClick={onClick}
+      disabled={loading}
+      whileHover={!loading ? { scale: 1.05 } : {}}
+      whileTap={!loading ? { scale: 0.95 } : {}}
+      style={{
+        background: "none",
+        border: "1.5px solid #c84a2040",
+        borderRadius: 12,
+        padding: "12px 20px",
+        fontFamily: "'DM Sans', sans-serif",
+        fontSize: 14,
+        fontWeight: 600,
+        cursor: loading ? "wait" : "pointer",
+        color: "#c84a20",
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+        transition: "all 0.2s",
+        opacity: loading ? 0.6 : 1,
+      }}
+    >
+      {loading ? (
+        <motion.span
+          animate={{ rotate: 360 }}
+          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+          style={{ display: "inline-block" }}
+        >
+          ✨
+        </motion.span>
+      ) : (
+        "✨"
+      )}
+      {loading ? "Generating..." : label}
+    </motion.button>
+  );
+}
+
 // ─── Scene: Intro ────────────────────────────────────────────────────────────
 
 function IntroScene({ onStart }: { onStart: () => void }) {
@@ -809,6 +857,21 @@ function OpinionScene({
   initialValue?: string;
 }) {
   const [text, setText] = useState(initialValue);
+  const [generating, setGenerating] = useState(false);
+
+  const autoGenerate = async () => {
+    setGenerating(true);
+    try {
+      const res = await fetch("/api/consensus", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "auto-generate", type: "opinion", question }),
+      });
+      const data = await res.json();
+      if (data.result) setText(data.result);
+    } catch { /* ignore */ }
+    setGenerating(false);
+  };
 
   return (
     <Scene padTop>
@@ -892,8 +955,10 @@ function OpinionScene({
             marginTop: 14,
             display: "flex",
             justifyContent: "flex-end",
+            gap: 10,
           }}
         >
+          <SparkleBtn onClick={autoGenerate} loading={generating} />
           <Btn
             onClick={() => text.trim().length > 5 && onSubmit(text.trim())}
             disabled={text.trim().length <= 5}
@@ -1263,6 +1328,32 @@ function WriteStatementScene({
 }) {
   const [text, setText] = useState(initialStatement?.text || "");
   const [label, setLabel] = useState(initialStatement?.label || "");
+  const [generating, setGenerating] = useState(false);
+
+  const autoGenerate = async () => {
+    setGenerating(true);
+    try {
+      const res = await fetch("/api/consensus", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "auto-generate",
+          type: "statement",
+          question,
+          playerOpinion: userOpinion,
+          agents: [
+            { name: agent1.name, opinion: agent1.opinion },
+            { name: agent2.name, opinion: agent2.opinion },
+            { name: agent3.name, opinion: agent3.opinion },
+          ],
+        }),
+      });
+      const data = await res.json();
+      if (data.label) setLabel(data.label);
+      if (data.text) setText(data.text);
+    } catch { /* ignore */ }
+    setGenerating(false);
+  };
 
   const handleSubmit = () => {
     if (text.trim().length <= 10) return;
@@ -1407,8 +1498,10 @@ function WriteStatementScene({
             marginTop: 14,
             display: "flex",
             justifyContent: "flex-end",
+            gap: 10,
           }}
         >
+          <SparkleBtn onClick={autoGenerate} loading={generating} />
           <Btn onClick={handleSubmit} disabled={text.trim().length <= 10}>
             Submit statement →
           </Btn>
@@ -1580,9 +1673,13 @@ function LobsterStatementsScene({
 
 function RankingScene({
   statements,
+  question,
+  userOpinion,
   onSubmit,
 }: {
   statements: Statement[];
+  question: string;
+  userOpinion: string;
   onSubmit: (ranking: number[]) => void;
 }) {
   const n = statements.length;
@@ -1590,6 +1687,33 @@ function RankingScene({
     new Array(n).fill(-1)
   );
   const [order, setOrder] = useState<number[]>([]);
+  const [generating, setGenerating] = useState(false);
+
+  const autoGenerate = async () => {
+    setGenerating(true);
+    try {
+      const res = await fetch("/api/consensus", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "auto-generate",
+          type: "ranking",
+          question,
+          playerOpinion: userOpinion,
+          statements: statements.map((s) => ({ label: s.label, text: s.text })),
+        }),
+      });
+      const data = await res.json();
+      if (Array.isArray(data.ranking) && data.ranking.length === n) {
+        setRanking(data.ranking);
+        // Rebuild order from ranking
+        const newOrder = Array.from({ length: n }, (_, i) => i);
+        newOrder.sort((a, b) => data.ranking[a] - data.ranking[b]);
+        setOrder(newOrder);
+      }
+    } catch { /* ignore */ }
+    setGenerating(false);
+  };
 
   const handleClick = (id: number) => {
     if (ranking[id] !== -1) {
@@ -1759,12 +1883,15 @@ function RankingScene({
           >
             {done ? "All ranked ✓" : `${order.length}/${n}`}
           </span>
-          <Btn
-            onClick={() => done && onSubmit(ranking)}
-            disabled={!done}
-          >
-            Submit ranking →
-          </Btn>
+          <div style={{ display: "flex", gap: 10 }}>
+            <SparkleBtn onClick={autoGenerate} loading={generating} label="Auto-rank" />
+            <Btn
+              onClick={() => done && onSubmit(ranking)}
+              disabled={!done}
+            >
+              Submit ranking →
+            </Btn>
+          </div>
         </div>
       </div>
     </Scene>
@@ -2775,160 +2902,94 @@ function ContinueScene({
             </div>
           </Card>
         )}
-      </div>
-    </Scene>
-  );
-}
 
-// ─── Scene: End ──────────────────────────────────────────────────────────────
-
-function EndScene({
-  statements,
-  currentWinner,
-  roundsPlayed,
-  onAddMore,
-  onReset,
-}: {
-  statements: Statement[];
-  currentWinner: number | null;
-  roundsPlayed: number;
-  onAddMore: () => void;
-  onReset: () => void;
-}) {
-  return (
-    <Scene>
-      <div
-        style={{
-          maxWidth: 500,
-          width: "100%",
-          zIndex: 1,
-          textAlign: "center",
-          display: "flex",
-          flexDirection: "column",
-          gap: 20,
-          alignItems: "center",
-        }}
-      >
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-        >
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "center",
-              gap: 6,
-              marginBottom: 16,
-            }}
-          >
-            {[USER_COLOR, ...AGENT_COLORS].map((c, i) => (
-              <motion.div
-                key={i}
-                animate={{
-                  y: [0, -6, 0],
-                  rotate: [0, i % 2 === 0 ? 5 : -5, 0],
-                }}
-                transition={{
-                  duration: 2 + i * 0.3,
-                  repeat: Infinity,
-                  delay: i * 0.15,
-                }}
-              >
-                <GameLobster color={c} size={44} variant={i} />
-              </motion.div>
-            ))}
-          </div>
-          <h2
-            className="font-handwritten"
-            style={{
-              fontSize: 32,
-              color: "#c84a20",
-              margin: "0 0 8px",
-            }}
-          >
-            Deliberation Complete!
-          </h2>
-        </motion.div>
-
-        <div
-          style={{
-            fontSize: 13,
-            color: "#666",
-            lineHeight: 1.7,
-            fontFamily: "'DM Sans', sans-serif",
-          }}
-        >
-          <p style={{ margin: "0 0 8px" }}>
-            You deliberated across <strong>{roundsPlayed}</strong> round
-            {roundsPlayed > 1 ? "s" : ""} with{" "}
-            <strong>{statements.length}</strong> consensus statements.
-          </p>
-          {currentWinner !== null && (
-            <div
-              style={{
-                background: "#1a8a5008",
-                border: "1.5px solid #1a8a5015",
-                borderRadius: 12,
-                padding: "12px 16px",
-                marginTop: 12,
-              }}
-            >
-              <span style={{ fontSize: 18 }}>🏆</span>
-              <div
-                style={{
-                  fontWeight: 700,
-                  color: "#1a5a2a",
-                  fontSize: 14,
-                  marginTop: 4,
-                }}
-              >
-                {statements[currentWinner].label}
-              </div>
-              <div style={{ fontSize: 12, color: "#3a6a3a", marginTop: 4 }}>
-                {statements[currentWinner].text}
+        {/* ── Re-rank UI ── */}
+        {mode === "rerank" && (
+          <Card style={{ padding: "20px 24px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+              <GameLobster color={USER_COLOR} size={36} />
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a1a", fontFamily: "'DM Sans', sans-serif" }}>
+                  Re-rank the statements
+                </div>
+                <div style={{ fontSize: 11, color: "#888", fontFamily: "'DM Sans', sans-serif" }}>
+                  Click 1st choice, then 2nd. Last fills automatically.
+                </div>
               </div>
             </div>
-          )}
-        </div>
 
-        <div
-          style={{
-            background: "rgba(0,0,0,0.03)",
-            border: "1.5px solid rgba(0,0,0,0.06)",
-            borderRadius: 14,
-            padding: "16px 20px",
-            fontSize: 13,
-            color: "#555",
-            lineHeight: 1.6,
-            fontFamily: "'DM Sans', sans-serif",
-            textAlign: "left",
-          }}
-        >
-          <strong>That&apos;s how Habermolt works!</strong> AI lobster agents
-          represent humans, share opinions, write consensus statements, and
-          rank them. The Schulze method finds the statement everyone can
-          agree on. And it never stops — new perspectives can join at any
-          time.
-        </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {statements.map((s) => {
+                const r = rerankRanking[s.id];
+                const isRanked = r !== -1;
+                return (
+                  <motion.button
+                    key={s.id}
+                    onClick={() => handleRerankClick(s.id)}
+                    whileHover={{ scale: 1.01, x: 3 }}
+                    whileTap={{ scale: 0.99 }}
+                    style={{
+                      background: isRanked ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.6)",
+                      border: `1.5px solid ${isRanked ? RANK_COLORS[r] + "60" : "rgba(0,0,0,0.06)"}`,
+                      borderRadius: 12,
+                      padding: "12px 14px",
+                      textAlign: "left",
+                      cursor: "pointer",
+                      display: "flex",
+                      gap: 12,
+                      alignItems: "center",
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 32,
+                        height: 32,
+                        borderRadius: 8,
+                        flexShrink: 0,
+                        background: isRanked ? RANK_COLORS[r] : "#e8e2d8",
+                        border: isRanked ? "none" : "1.5px dashed #c8c0b4",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: isRanked ? 15 : 14,
+                        color: isRanked ? "white" : "#b8b0a4",
+                        fontFamily: "'DM Sans', sans-serif",
+                        fontWeight: 700,
+                      }}
+                    >
+                      {isRanked ? RANK_MEDALS[r] : "?"}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: "#1a1a1a", fontFamily: "'DM Sans', sans-serif" }}>
+                        {s.emoji} {s.label}
+                      </div>
+                      <div style={{ fontSize: 12, color: "#666", fontFamily: "'DM Sans', sans-serif", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {s.text}
+                      </div>
+                    </div>
+                  </motion.button>
+                );
+              })}
+            </div>
 
-        <div
-          style={{
-            display: "flex",
-            gap: 10,
-            flexWrap: "wrap",
-            justifyContent: "center",
-          }}
-        >
-          <Btn onClick={onAddMore} color="#2a6fb0">
-            Keep deliberating
-          </Btn>
-          <Btn onClick={onReset} color="#888">
-            New topic
-          </Btn>
-          <Link href="/">
-            <Btn color="#1a8a50">See real deliberations →</Btn>
-          </Link>
-        </div>
+            <div style={{ marginTop: 14, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <button onClick={() => setMode("options")} style={{ background: "none", border: "none", fontSize: 12, color: "#999", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", textDecoration: "underline" }}>← Back</button>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 12, color: "#999", fontFamily: "'DM Sans', sans-serif" }}>
+                  {rerankDone ? "All ranked ✓" : `${rerankOrder.length}/${n}`}
+                </span>
+                {!submitting ? (
+                  <Btn onClick={handleSubmitRerank} disabled={!rerankDone}>Submit ranking →</Btn>
+                ) : (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: "linear" }} style={{ width: 14, height: 14, border: "2px solid #c84a20", borderTopColor: "transparent", borderRadius: "50%" }} />
+                    <span style={{ fontSize: 12, color: "#999", fontFamily: "'DM Sans', sans-serif" }}>Updating rankings...</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </Card>
+        )}
       </div>
     </Scene>
   );
@@ -3486,6 +3547,8 @@ export default function ConsensusGame() {
             {phase === "ranking" && statements.length > 0 && (
               <RankingScene
                 statements={statements}
+                question={question}
+                userOpinion={userOpinion}
                 onSubmit={submitRanking}
               />
             )}
