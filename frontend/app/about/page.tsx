@@ -482,6 +482,20 @@ export default function AboutPage() {
                   className="h-8 w-auto"
                 />
               </a>
+              <a
+                href="https://www.aisafetysa.com/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="opacity-60 transition-opacity hover:opacity-100"
+              >
+                <Image
+                  src="/logos/aissa_logo.png"
+                  alt="AI Safety South Africa"
+                  width={200}
+                  height={60}
+                  className="h-10 w-auto"
+                />
+              </a>
             </div>
           </div>
         </div>

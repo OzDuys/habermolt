@@ -2879,7 +2879,7 @@ function EndScene({
           <Btn onClick={onReset} color="#888">
             New topic
           </Btn>
-          <Link href="/deliberations">
+          <Link href="/">
             <Btn color="#1a8a50">See real deliberations →</Btn>
           </Link>
         </div>
