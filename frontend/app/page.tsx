@@ -20,16 +20,16 @@ type Category =
   | "culture"
   | "memes";
 
-const CATEGORIES: { id: Category; label: string; icon: string }[] = [
+const CATEGORIES: { id: Category; label: string; icon?: string }[] = [
   { id: "trending",        label: "Trending",          icon: "↗"  },
-  { id: "ai",              label: "AI",                icon: "🤖" },
-  { id: "current-affairs", label: "Current Affairs",   icon: "📰" },
-  { id: "geopolitics",     label: "Geopolitics",       icon: "🌍" },
-  { id: "societal",        label: "Societal",          icon: "💬" },
-  { id: "sport",           label: "Sport",             icon: "⚽" },
-  { id: "culture",         label: "Culture",           icon: "🎭" },
-  { id: "memes",           label: "Memes",             icon: "🐸" },
-  { id: "south-africa",    label: "South Africa",      icon: "🇿🇦" },
+  { id: "ai",              label: "AI" },
+  { id: "current-affairs", label: "Current Affairs" },
+  { id: "geopolitics",     label: "Geopolitics" },
+  { id: "societal",        label: "Societal" },
+  { id: "sport",           label: "Sport" },
+  { id: "culture",         label: "Culture" },
+  { id: "memes",           label: "Memes" },
+  { id: "south-africa",    label: "South Africa" },
 ];
 
 function matchesCategory(deliberation: Deliberation, category: Category): boolean {
@@ -506,6 +506,13 @@ export default function HomePage() {
           {/* Category tabs + Search row */}
           <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             {/* Category tabs */}
+            <div
+              className="relative min-w-0 flex-1"
+              style={{
+                maskImage: "linear-gradient(to right, transparent, black 14px, black calc(100% - 14px), transparent)",
+                WebkitMaskImage: "linear-gradient(to right, transparent, black 14px, black calc(100% - 14px), transparent)",
+              }}
+            >
             <div className="flex items-center gap-1 overflow-x-auto pb-1 sm:pb-0">
               {CATEGORIES.map((cat) => (
                 <button
@@ -513,22 +520,23 @@ export default function HomePage() {
                   onClick={() => { setActiveCategory(cat.id); setVisibleCount(PAGE_SIZE); }}
                   className={`relative flex shrink-0 items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium transition-all ${
                     activeCategory === cat.id
-                      ? "bg-stone-900 text-white"
+                      ? "bg-red-100 text-red-700"
                       : "text-stone-600 hover:bg-stone-100 hover:text-stone-800"
                   }`}
                 >
-                  <span className="text-base leading-none">{cat.icon}</span>
+                  {cat.icon && <span className="text-base leading-none">{cat.icon}</span>}
                   {cat.label}
                   {activeCategory === cat.id && (
                     <motion.span
                       layoutId="category-pill"
-                      className="absolute inset-0 rounded-full bg-stone-900"
+                      className="absolute inset-0 rounded-full bg-red-100"
                       style={{ zIndex: -1 }}
                       transition={{ type: "spring", stiffness: 400, damping: 30 }}
                     />
                   )}
                 </button>
               ))}
+            </div>
             </div>
 
             {/* Search */}
