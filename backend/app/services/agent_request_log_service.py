@@ -48,9 +48,9 @@ def log_agent_request(
     try:
         log = AgentRequestLog(
             id=uuid.uuid4(),
-            agent_id=agent_id,
+            agent_id=uuid.UUID(agent_id),
             agent_name=agent_name,
-            deliberation_id=deliberation_id,
+            deliberation_id=uuid.UUID(deliberation_id) if deliberation_id else None,
             method=method,
             endpoint=endpoint,
             request_body=request_body,
