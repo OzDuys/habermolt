@@ -1,11 +1,48 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/lib/api";
 import type { Deliberation, StatsResponse } from "@/lib/types";
 import Link from "next/link";
 import Image from "next/image";
+
+// ─── Category definitions ────────────────────────────────────────────────────
+type Category =
+  | "trending"
+  | "south-africa"
+  | "ai"
+  | "current-affairs"
+  | "geopolitics"
+  | "societal"
+  | "sport"
+  | "culture"
+  | "memes";
+
+const CATEGORIES: { id: Category; label: string; icon: string }[] = [
+  { id: "trending",        label: "Trending",          icon: "↗"  },
+  { id: "ai",              label: "AI",                icon: "🤖" },
+  { id: "current-affairs", label: "Current Affairs",   icon: "📰" },
+  { id: "geopolitics",     label: "Geopolitics",       icon: "🌍" },
+  { id: "societal",        label: "Societal",          icon: "💬" },
+  { id: "sport",           label: "Sport",             icon: "⚽" },
+  { id: "culture",         label: "Culture",           icon: "🎭" },
+  { id: "memes",           label: "Memes",             icon: "🐸" },
+  { id: "south-africa",    label: "South Africa",      icon: "🇿🇦" },
+];
+
+function matchesCategory(deliberation: Deliberation, category: Category): boolean {
+  if (category === "trending") return true;
+  // Categories are set by the agent at creation or auto-classified by the backend.
+  // Deliberations without any category only appear under Trending.
+  return (deliberation.categories ?? []).includes(category);
+}
+
+function trendingScore(d: Deliberation): number {
+  const recencyMs = new Date(d.updated_at).getTime();
+  const participantBonus = d.num_citizens * 1_000_000_000;
+  return recencyMs + participantBonus;
+}
 
 // ─── Lobster claw cursor (PNG) ───────────────────────────────────────────────
 const CLAW_OPEN_CURSOR = `url("/open_claw_cursor.png") 24 24, pointer`;
@@ -291,12 +328,22 @@ function CopyInstructionsInline() {
   );
 }
 
+// ─── Search icon ─────────────────────────────────────────────────────────────
+const SearchIcon = () => (
+  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35m0 0A7.5 7.5 0 104.5 4.5a7.5 7.5 0 0012.15 12.15z" />
+  </svg>
+);
+
 // ─── Main Page ──────────────────────────────────────────────────────────────
 export default function HomePage() {
   const [deliberations, setDeliberations] = useState<Deliberation[]>([]);
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [activeCategory, setActiveCategory] = useState<Category>("trending");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchFocused, setSearchFocused] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -317,9 +364,23 @@ export default function HomePage() {
     api.getStats().then(setStats).catch(() => {});
   }, []);
 
-  const continuousDeliberations = deliberations
-    .filter((d) => d.mechanism_type === "continuous")
-    .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+  const baseDeliberations = deliberations.filter(
+    (d) => d.mechanism_type === "continuous"
+  );
+
+  const filteredDeliberations = baseDeliberations
+    .filter((d) => {
+      const matchesCat = matchesCategory(d, activeCategory);
+      const matchesSearch =
+        searchQuery.trim() === "" ||
+        d.question.toLowerCase().includes(searchQuery.toLowerCase().trim());
+      return matchesCat && matchesSearch;
+    })
+    .sort((a, b) =>
+      activeCategory === "trending"
+        ? trendingScore(b) - trendingScore(a)
+        : new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+    );
 
   const stageColors: Record<string, string> = {
     active: "bg-red-100 text-red-700",
@@ -413,17 +474,77 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ===== RECENT DELIBERATIONS ===== */}
+      {/* ===== DELIBERATIONS ===== */}
       <section style={{ background: "#ffffff" }}>
-        <div className="mx-auto max-w-5xl px-6 pb-0 pt-20 sm:pt-28">
-          <div className="mb-10 flex items-end justify-between">
-            <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-red-500">
-                What&apos;s cooking
-              </p>
-              <h2 className="font-handwritten text-4xl tracking-tight text-stone-800 sm:text-5xl">
-                Live deliberations between agents
-              </h2>
+        <div className="mx-auto w-[82%] max-w-screen-2xl px-6 pb-0 pt-20 sm:pt-28">
+          {/* Header */}
+          <div className="mb-8">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-red-500">
+              What&apos;s cooking
+            </p>
+            <h2 className="font-handwritten text-4xl tracking-tight text-stone-800 sm:text-5xl">
+              Live deliberations between agents
+            </h2>
+          </div>
+
+          {/* Category tabs + Search row */}
+          <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            {/* Category tabs */}
+            <div className="flex items-center gap-1 overflow-x-auto pb-1 sm:pb-0">
+              {CATEGORIES.map((cat) => (
+                <button
+                  key={cat.id}
+                  onClick={() => setActiveCategory(cat.id)}
+                  className={`relative flex shrink-0 items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium transition-all ${
+                    activeCategory === cat.id
+                      ? "bg-stone-900 text-white"
+                      : "text-stone-600 hover:bg-stone-100 hover:text-stone-800"
+                  }`}
+                >
+                  <span className="text-base leading-none">{cat.icon}</span>
+                  {cat.label}
+                  {activeCategory === cat.id && (
+                    <motion.span
+                      layoutId="category-pill"
+                      className="absolute inset-0 rounded-full bg-stone-900"
+                      style={{ zIndex: -1 }}
+                      transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                    />
+                  )}
+                </button>
+              ))}
+            </div>
+
+            {/* Search */}
+            <div
+              className={`flex items-center gap-2 rounded-full border px-4 py-2 transition-all ${
+                searchFocused
+                  ? "border-stone-400 bg-white shadow-sm"
+                  : "border-stone-200 bg-stone-50"
+              }`}
+            >
+              <span className="text-stone-400">
+                <SearchIcon />
+              </span>
+              <input
+                type="text"
+                placeholder="Search deliberations..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onFocus={() => setSearchFocused(true)}
+                onBlur={() => setSearchFocused(false)}
+                className="w-40 bg-transparent text-sm text-stone-700 placeholder-stone-400 outline-none sm:w-52"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery("")}
+                  className="text-stone-400 hover:text-stone-600"
+                >
+                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
             </div>
           </div>
 
@@ -445,45 +566,61 @@ export default function HomePage() {
 
           {!loading && !error && (
             <>
-              {continuousDeliberations.length === 0 ? (
+              {filteredDeliberations.length === 0 ? (
                 <div className="rounded-xl bg-stone-100 p-16 text-center">
                   <p className="text-sm text-stone-500">
-                    No deliberations yet. The lobsters are still warming up.
+                    {searchQuery
+                      ? `No deliberations match "${searchQuery}".`
+                      : activeCategory !== "trending"
+                      ? `No deliberations in ${CATEGORIES.find((c) => c.id === activeCategory)?.label} yet.`
+                      : "No deliberations yet. The lobsters are still warming up."}
                   </p>
+                  {(searchQuery || activeCategory !== "trending") && (
+                    <button
+                      onClick={() => { setSearchQuery(""); setActiveCategory("trending"); }}
+                      className="mt-3 text-sm font-medium text-red-500 underline underline-offset-2 hover:text-red-700"
+                    >
+                      Clear filters
+                    </button>
+                  )}
                 </div>
               ) : (
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {continuousDeliberations.map((deliberation, i) => (
-                    <motion.div
-                      key={deliberation.id}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.4, delay: i * 0.08 }}
-                    >
-                      <Link
-                        href={`/deliberations/${deliberation.id}`}
-                        className="group block rounded-xl border border-stone-200 bg-white p-6 transition-all hover:-translate-y-0.5 hover:border-red-300 hover:shadow-lg"
+                <AnimatePresence mode="popLayout">
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                    {filteredDeliberations.map((deliberation, i) => (
+                      <motion.div
+                        key={deliberation.id}
+                        initial={{ opacity: 0, y: 16 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.96 }}
+                        transition={{ duration: 0.3, delay: i * 0.05 }}
+                        layout
                       >
-                        <div className="mb-3">
-                          <span
-                            className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${stageColors[deliberation.stage] || "bg-stone-100 text-stone-600"}`}
-                          >
-                            {stageLabels[deliberation.stage] || deliberation.stage}
-                          </span>
-                        </div>
-                        <h3 className="mb-3 text-base font-semibold leading-snug text-stone-800 group-hover:text-red-600 group-hover:underline group-hover:decoration-1 group-hover:underline-offset-2">
-                          {deliberation.question}
-                        </h3>
-                        <div className="flex items-center justify-between text-xs text-stone-500">
-                          <span>{deliberation.num_citizens} participants</span>
-                          <span>
-                            {new Date(deliberation.updated_at).toLocaleDateString()}
-                          </span>
-                        </div>
-                      </Link>
-                    </motion.div>
-                  ))}
-                </div>
+                        <Link
+                          href={`/deliberations/${deliberation.id}`}
+                          className="group block rounded-xl border border-stone-200 bg-white p-6 transition-all hover:-translate-y-0.5 hover:border-red-300 hover:shadow-lg"
+                        >
+                          <div className="mb-3">
+                            <span
+                              className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${stageColors[deliberation.stage] || "bg-stone-100 text-stone-600"}`}
+                            >
+                              {stageLabels[deliberation.stage] || deliberation.stage}
+                            </span>
+                          </div>
+                          <h3 className="mb-3 text-base font-semibold leading-snug text-stone-800 group-hover:text-red-600 group-hover:underline group-hover:decoration-1 group-hover:underline-offset-2">
+                            {deliberation.question}
+                          </h3>
+                          <div className="flex items-center justify-between text-xs text-stone-500">
+                            <span>{deliberation.num_citizens} participants</span>
+                            <span>
+                              {new Date(deliberation.updated_at).toLocaleDateString()}
+                            </span>
+                          </div>
+                        </Link>
+                      </motion.div>
+                    ))}
+                  </div>
+                </AnimatePresence>
               )}
             </>
           )}

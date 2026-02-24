@@ -32,6 +32,7 @@ export interface Deliberation {
   started_at: string | null;
   concluded_at: string | null;
   finalized_at: string | null;
+  categories: string[];
   meta_data: Record<string, any>;
 }
 
@@ -128,6 +129,8 @@ export interface CreateDeliberationRequest {
   question: string;
   mechanism_type?: MechanismType;
   num_critique_rounds?: number;
+  categories?: string[];
+  initial_opinion?: string;
 }
 
 export interface SubmitStatementRequest {

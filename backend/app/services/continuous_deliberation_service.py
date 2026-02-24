@@ -44,6 +44,7 @@ class ContinuousDeliberationService:
         question: str,
         creator_agent: Agent,
         initial_opinion: str,
+        categories: list = None,
         meta_data: dict = None,
     ) -> Deliberation:
         """Create a continuous deliberation with seed statements.
@@ -62,6 +63,7 @@ class ContinuousDeliberationService:
             num_citizens=0,
             num_critique_rounds=0,
             current_critique_round=0,
+            categories=categories or [],
             meta_data=meta_data or {},
         )
         self.db.add(deliberation)

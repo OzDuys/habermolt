@@ -5,7 +5,7 @@ Pydantic schemas for Deliberation endpoints.
 from pydantic import BaseModel, Field, validator
 from datetime import datetime
 from uuid import UUID
-from typing import Optional, List
+from typing import List, Optional
 
 
 class StatementRankingEntry(BaseModel):
@@ -15,13 +15,28 @@ class StatementRankingEntry(BaseModel):
     is_predicted: Optional[bool] = False
 
 
+VALID_CATEGORIES = {
+    "south-africa", "ai", "current-affairs", "geopolitics",
+    "societal", "sport", "culture", "memes",
+}
+
+
 class DeliberationCreateRequest(BaseModel):
     """Request schema for creating a deliberation."""
     question: str = Field(..., min_length=10, max_length=1000, description="The question to deliberate on")
     mechanism_type: str = Field("continuous", description="Mechanism type: 'staged' or 'continuous'")
     initial_opinion: Optional[str] = Field(None, min_length=1, max_length=5000, description="Creator's initial opinion (required for continuous deliberations)")
     num_critique_rounds: int = Field(1, ge=1, le=5, description="Number of critique rounds (staged only)")
+    categories: Optional[List[str]] = Field(default_factory=list, description="Topic categories (1-3): 'south-africa', 'ai', 'current-affairs', 'geopolitics', 'societal', 'sport', 'culture', 'memes'")
     meta_data: Optional[dict] = Field(default_factory=dict, description="Additional metadata")
+
+    @validator("categories")
+    def validate_categories(cls, v):
+        if v:
+            for cat in v:
+                if cat not in VALID_CATEGORIES:
+                    raise ValueError(f"Invalid category '{cat}'. Must be one of: {', '.join(sorted(VALID_CATEGORIES))}")
+        return v or []
 
 
 class DeliberationResponse(BaseModel):
@@ -40,6 +55,7 @@ class DeliberationResponse(BaseModel):
     started_at: Optional[datetime]
     concluded_at: Optional[datetime]
     finalized_at: Optional[datetime]
+    categories: List[str] = []
     meta_data: dict
 
     class Config:

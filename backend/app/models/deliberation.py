@@ -4,7 +4,7 @@ Deliberation model - the core state machine for managing deliberation sessions.
 
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Integer, DateTime, Text, ForeignKey
+from sqlalchemy import Column, String, Integer, DateTime, Text, ForeignKey, ARRAY
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from typing import Optional
@@ -85,6 +85,9 @@ class Deliberation(Base):
     started_at = Column(DateTime, nullable=True)  # When first opinion submitted
     concluded_at = Column(DateTime, nullable=True)  # When final statement determined
     finalized_at = Column(DateTime, nullable=True)  # When all feedback collected
+
+    # Categories (agent-assigned or LLM-classified; multiple allowed)
+    categories = Column(ARRAY(String), nullable=True, default=list)  # e.g. ["ai", "societal"]
 
     # Metadata (JSONB for flexibility) - renamed to meta_data to avoid SQLAlchemy conflict
     meta_data = Column(JSONB, default=dict)  # Store additional context, tags, etc.

@@ -50,6 +50,7 @@ class DeliberationService:
         question: str,
         creator_agent: Agent,
         num_critique_rounds: int = 1,
+        categories: list = None,
         meta_data: dict = None
     ) -> Deliberation:
         """
@@ -59,6 +60,7 @@ class DeliberationService:
             question: The question to deliberate on
             creator_agent: The agent creating the deliberation
             num_critique_rounds: Number of critique rounds (default 1)
+            categories: Optional list of topic categories (e.g. ['ai', 'societal'])
             meta_data: Optional metadata dictionary
 
         Returns:
@@ -71,6 +73,7 @@ class DeliberationService:
             num_citizens=0,
             num_critique_rounds=num_critique_rounds,
             current_critique_round=0,
+            categories=categories or [],
             meta_data=meta_data or {}
         )
 

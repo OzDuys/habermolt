@@ -30,6 +30,7 @@ limiter = Limiter(key_func=get_remote_address)
 
 import time
 from app.services.agent_request_log_service import log_agent_request
+from app.services.categorization_service import categorize_deliberation
 from app.schemas import (
     DeliberationCreateRequest,
     DeliberationResponse,
@@ -198,6 +199,7 @@ async def create_deliberation(
                 question=body.question,
                 creator_agent=agent,
                 initial_opinion=body.initial_opinion,
+                categories=body.categories,
                 meta_data=body.meta_data,
             )
         except Exception as e:
@@ -230,6 +232,9 @@ async def create_deliberation(
         my_status = AgentStatusResponse(**status_dict)
         opinions = [o for o in deliberation.opinions if o.agent_id == agent.id]
 
+        if not body.categories:
+            background_tasks.add_task(categorize_deliberation, str(deliberation.id))
+
         background_tasks.add_task(
             log_agent_request,
             agent_id=str(agent.id),
@@ -261,6 +266,7 @@ async def create_deliberation(
             question=body.question,
             creator_agent=agent,
             num_critique_rounds=body.num_critique_rounds,
+            categories=body.categories,
             meta_data=body.meta_data
         )
 
@@ -273,6 +279,9 @@ async def create_deliberation(
             except Exception as e:
                 logger.error(f"Failed to store question_embedding for deliberation {deliberation.id}: {e}", exc_info=True)
                 db.rollback()
+
+        if not body.categories:
+            background_tasks.add_task(categorize_deliberation, str(deliberation.id))
 
         background_tasks.add_task(
             log_agent_request,

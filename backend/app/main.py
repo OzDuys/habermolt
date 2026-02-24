@@ -134,6 +134,9 @@ app.include_router(monitoring.router, prefix=settings.API_V1_PREFIX)
 @app.on_event("startup")
 async def startup_event():
     """Initialize application on startup."""
+    import threading
+    from app.services.categorization_service import backfill_uncategorized
+
     # Security check: reject default salt in production
     if settings.ENVIRONMENT != "development":
         if settings.API_KEY_SALT == "habermolt-default-salt-change-in-production":
@@ -158,6 +161,10 @@ async def startup_event():
     )
     for i, model in enumerate(models):
         logger.info(f"  Model {i + 1}: {model}")
+
+    # Back-fill category for any deliberations created before categorisation was added
+    thread = threading.Thread(target=backfill_uncategorized, daemon=True)
+    thread.start()
 
 
 # Shutdown event
