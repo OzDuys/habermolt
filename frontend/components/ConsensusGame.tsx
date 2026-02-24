@@ -361,7 +361,7 @@ function Scene({ children }: { children: React.ReactNode }) {
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
-        justifyContent: "center",
+        justifyContent: "safe center",
         padding: "24px 20px",
       }}
     >
@@ -523,7 +523,7 @@ function Card({
   return (
     <div
       style={{
-        background: "rgba(255,252,247,0.95)",
+        background: "rgba(255,252,247,1)",
         border: "1.5px solid rgba(200,74,32,0.12)",
         borderRadius: 20,
         boxShadow: "0 4px 24px rgba(200,74,32,0.06)",
@@ -1188,7 +1188,7 @@ function OpinionsRevealScene({
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.4, type: "spring", damping: 18 }}
               style={{
-                background: "rgba(255,255,255,0.9)",
+                background: "rgba(255,255,255,1)",
                 border: `1.5px solid ${l.color}25`,
                 borderRadius: 16,
                 padding: "16px",
@@ -1601,7 +1601,7 @@ function LobsterStatementsScene({
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: i * 0.3 }}
                 style={{
-                  background: "rgba(255,255,255,0.9)",
+                  background: "rgba(255,255,255,1)",
                   border: `1.5px solid ${authorColor}18`,
                   borderRadius: 14,
                   padding: "14px 16px",
@@ -1819,8 +1819,8 @@ function RankingScene({
                 whileTap={{ scale: 0.99 }}
                 style={{
                   background: isRanked
-                    ? "rgba(255,255,255,0.95)"
-                    : "rgba(255,255,255,0.6)",
+                    ? "rgba(255,255,255,1)"
+                    : "rgba(255,255,255,0.85)",
                   border: `1.5px solid ${isRanked ? RANK_COLORS[r] + "60" : "rgba(0,0,0,0.06)"}`,
                   borderRadius: 12,
                   padding: "12px 14px",
@@ -2201,7 +2201,7 @@ function SchulzeScene({
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: i * 0.2 }}
                     style={{
-                      background: "rgba(255,255,255,0.9)",
+                      background: "rgba(255,255,255,1)",
                       border: "1.5px solid rgba(0,0,0,0.06)",
                       borderRadius: 14,
                       padding: "12px 16px",
@@ -2447,7 +2447,7 @@ function EndScene({
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             style={{
-              background: "rgba(26,138,80,0.05)",
+              background: "rgba(240,252,244,1)",
               border: "1.5px solid rgba(26,138,80,0.15)",
               borderRadius: 16,
               padding: "16px 20px",
@@ -2475,7 +2475,7 @@ function EndScene({
                   key={p.name}
                   layout
                   style={{
-                    background: "rgba(255,255,255,0.9)",
+                    background: "rgba(255,255,255,1)",
                     border: `1.5px solid ${p.color}20`,
                     borderRadius: 14,
                     overflow: "hidden",
@@ -2554,7 +2554,7 @@ function EndScene({
         {/* ── Deliberation never ends ── */}
         <div
           style={{
-            background: "rgba(0,0,0,0.03)",
+            background: "rgba(250,248,243,1)",
             border: "1.5px solid rgba(0,0,0,0.06)",
             borderRadius: 12,
             padding: "12px 16px",
@@ -2570,7 +2570,7 @@ function EndScene({
         {/* ── Real deliberation note ── */}
         <div
           style={{
-            background: "rgba(42,111,176,0.05)",
+            background: "rgba(238,246,253,1)",
             border: "1.5px solid rgba(42,111,176,0.12)",
             borderRadius: 12,
             padding: "12px 16px",
@@ -2819,7 +2819,7 @@ function ContinueScene({
               whileTap={{ scale: 0.99 }}
               onClick={() => { setMode("add"); setText(""); setLabel(""); }}
               style={{
-                background: "rgba(255,255,255,0.9)",
+                background: "rgba(255,255,255,1)",
                 border: `1.5px solid ${USER_COLOR}20`,
                 borderRadius: 12,
                 padding: "14px 16px",
@@ -2841,7 +2841,7 @@ function ContinueScene({
               whileTap={{ scale: 0.99 }}
               onClick={startRerank}
               style={{
-                background: "rgba(255,255,255,0.9)",
+                background: "rgba(255,255,255,1)",
                 border: "1.5px solid rgba(42,111,176,0.2)",
                 borderRadius: 12,
                 padding: "14px 16px",
@@ -2864,7 +2864,7 @@ function ContinueScene({
               onClick={handleSimulate}
               disabled={simulating}
               style={{
-                background: "rgba(255,255,255,0.9)",
+                background: "rgba(255,255,255,1)",
                 border: "1.5px solid rgba(42,138,74,0.2)",
                 borderRadius: 12,
                 padding: "14px 16px",
@@ -2986,7 +2986,7 @@ function ContinueScene({
                     whileHover={{ scale: 1.01, x: 3 }}
                     whileTap={{ scale: 0.99 }}
                     style={{
-                      background: isRanked ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.6)",
+                      background: isRanked ? "rgba(255,255,255,1)" : "rgba(255,255,255,0.85)",
                       border: `1.5px solid ${isRanked ? RANK_COLORS[r] + "60" : "rgba(0,0,0,0.06)"}`,
                       borderRadius: 12,
                       padding: "12px 14px",
@@ -3731,7 +3731,7 @@ export default function ConsensusGame() {
           height: 40,
           borderRadius: "50%",
           border: "1.5px solid rgba(0,0,0,0.1)",
-          background: "rgba(255,252,247,0.9)",
+          background: "rgba(255,252,247,1)",
           backdropFilter: "blur(8px)",
           cursor: "pointer",
           display: "flex",
