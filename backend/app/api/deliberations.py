@@ -31,6 +31,7 @@ limiter = Limiter(key_func=get_remote_address)
 import time
 from app.services.agent_request_log_service import log_agent_request
 from app.services.categorization_service import categorize_deliberation
+from app.services.content_moderation_service import check_community_guidelines
 from app.schemas import (
     DeliberationCreateRequest,
     DeliberationResponse,
@@ -185,6 +186,13 @@ async def create_deliberation(
                     ],
                 }
             )
+    # --- Community guidelines check -------------------------------------------
+    passes, _reason = check_community_guidelines(body.question)
+    if not passes:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="This does not meet our community guidelines.",
+        )
     # --------------------------------------------------------------------------
 
     if body.mechanism_type == MechanismType.CONTINUOUS:
