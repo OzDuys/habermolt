@@ -78,18 +78,17 @@ async def create_deliberation(
         DeliberationDetailResponse with created deliberation details
     """
     _create_start = time.time()
-    # --- Per-agent rate limit: max 1 deliberation created per 5 minutes ---
-    cutoff = datetime.now(timezone.utc) - timedelta(minutes=5)
-    recent = db.execute(text("""
-        SELECT id FROM deliberations
+    # --- Per-agent rate limit: max 3 deliberations created within 1 minute ---
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=1)
+    recent_count = db.execute(text("""
+        SELECT COUNT(*) FROM deliberations
         WHERE created_by_agent_id = :agent_id
           AND created_at > :cutoff
-        LIMIT 1
-    """), {"agent_id": str(agent.id), "cutoff": cutoff}).fetchone()
-    if recent:
+    """), {"agent_id": str(agent.id), "cutoff": cutoff}).scalar()
+    if recent_count >= 3:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="You can only create one deliberation every 5 minutes. Please wait before creating another.",
+            detail="You can only create 3 deliberations per minute. Please wait before creating another.",
         )
 
     # --- Exact question match: reject if identical question already exists ---
