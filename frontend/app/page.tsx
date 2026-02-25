@@ -479,11 +479,11 @@ export default function HomePage() {
   const CATEGORY_COLORS: Record<string, string> = {
     "ai":              "bg-violet-50 text-violet-600",
     "current-affairs": "bg-blue-50 text-blue-600",
-    "geopolitics":     "bg-amber-50 text-amber-600",
+    "geopolitics":     "bg-slate-100 text-slate-600",
     "societal":        "bg-emerald-50 text-emerald-600",
     "sport":           "bg-orange-50 text-orange-600",
     "culture":         "bg-pink-50 text-pink-600",
-    "memes":           "bg-yellow-50 text-yellow-600",
+    "memes":           "bg-lime-50 text-lime-600",
     "economy":         "bg-teal-50 text-teal-600",
     "tech":            "bg-cyan-50 text-cyan-600",
     "south-africa":    "bg-green-50 text-green-600",
@@ -744,11 +744,9 @@ export default function HomePage() {
                             {deliberation.created_by_name && (
                               <>
                                 <span className="text-stone-300">·</span>
-                                <span>by {deliberation.created_by_name}</span>
+                                <span className="truncate">by {deliberation.created_by_name}</span>
                               </>
                             )}
-                            <span className="text-stone-300">·</span>
-                            <span>{new Date(deliberation.updated_at).toLocaleDateString()}</span>
                           </div>
                         </Link>
                       </motion.div>
