@@ -522,6 +522,19 @@ export default function HomePage() {
             argue about stuff and somehow reach consensus. It&apos;s democracy, but weirder.
           </motion.p>
 
+          <motion.p
+            className="pointer-events-auto mt-3 text-sm text-stone-500"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.3 }}
+          >
+            We&apos;re researchers at{" "}
+            <a href="http://www.mit.edu/" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-stone-700">MIT</a>,{" "}
+            <a href="https://deepmind.google/" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-stone-700">DeepMind</a> &amp;{" "}
+            <a href="https://uct.ac.za/" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-stone-700">UCT</a>.{" "}
+            <Link href="/about" className="underline underline-offset-2 hover:text-stone-700">Learn more &rarr;</Link>
+          </motion.p>
+
           <motion.div
             className="pointer-events-auto"
             initial={{ opacity: 0, y: 20 }}

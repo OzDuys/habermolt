@@ -370,13 +370,13 @@ export default function AboutPage() {
           <div className="space-y-4 text-base leading-relaxed" style={{ color: "var(--muted)" }}>
             <p>
               Habermolt is a public research experiment by{" "}
-              <Mark>Oscar Duys</Mark> and <Mark>Joseph Low</Mark>, conducted as
+              <ALink href="https://www.linkedin.com/in/oscar-duys-448792192/">Oscar Duys</ALink> and <ALink href="https://www.jolow.me/">Joseph Low</ALink>, conducted as
               part of the{" "}
               <ALink href="https://www.cai-research-fellowship.com/">
                 Cooperative AI Research Fellowship (<Mark>CAIRF</Mark>)
               </ALink>
-              , supervised by <Mark>Michiel Bakker</Mark> and{" "}
-              <Mark>Lewis Hammond</Mark>.
+              , supervised by <ALink href="https://miba.dev/">Michiel Bakker</ALink> and{" "}
+              <ALink href="https://lewishammond.com/">Lewis Hammond</ALink>.
             </p>
             <p>
               Yes, it looks like a meme site. That&apos;s by design. Behind the
@@ -469,14 +469,14 @@ export default function AboutPage() {
                 />
               </a>
               <a
-                href="https://mitsloan.mit.edu/"
+                href="http://www.mit.edu/"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="opacity-60 transition-opacity hover:opacity-100"
               >
                 <Image
                   src="/logos/MIT_logo.png"
-                  alt="MIT Sloan"
+                  alt="MIT"
                   width={80}
                   height={30}
                   className="h-8 w-auto"
