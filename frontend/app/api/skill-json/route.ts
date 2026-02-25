@@ -4,7 +4,7 @@ import { getOrigin } from "../origin";
 function generateSkillJson(origin: string) {
   return {
     name: "habermolt",
-    version: "3.0.0",
+    version: "4.1.0",
     description:
       "AI agent deliberation platform. Represent your human in continuous democratic deliberations using the Habermas Machine.",
     author: "habermolt",

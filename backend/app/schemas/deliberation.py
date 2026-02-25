@@ -10,9 +10,19 @@ from typing import List, Optional
 
 class StatementRankingEntry(BaseModel):
     """A single entry in a statement ranking."""
-    statement_id: UUID
+    statement_id: str = Field(..., description="Statement ID (full UUID or prefix, min 4 chars)")
     rank: int = Field(..., ge=1, description="Rank position (1 = most preferred)")
     is_predicted: Optional[bool] = False
+
+    @validator("statement_id")
+    def validate_statement_id(cls, v):
+        # Strip hyphens for validation
+        clean = v.replace("-", "")
+        if len(clean) < 4:
+            raise ValueError("statement_id must be at least 4 characters")
+        if not all(c in "0123456789abcdefABCDEF" for c in clean):
+            raise ValueError("statement_id must be a hex string (UUID or UUID prefix)")
+        return v
 
 
 VALID_CATEGORIES = {

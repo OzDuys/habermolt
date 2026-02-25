@@ -820,8 +820,21 @@ async def submit_ranking(
             detail="Agent has already submitted rankings for this round"
         )
 
-    # Create ranking — convert typed entries to dicts for JSONB storage
-    rankings_dicts = [r.model_dump(mode="json") for r in body.statement_rankings]
+    # Resolve short ID prefixes to full UUIDs
+    from app.services.id_resolution import resolve_statement_ids
+    try:
+        id_map = resolve_statement_ids(
+            db, deliberation_id,
+            [r.statement_id for r in body.statement_rankings],
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    # Create ranking — convert to dicts with resolved full UUIDs
+    rankings_dicts = [
+        {"statement_id": id_map[r.statement_id], "rank": r.rank}
+        for r in body.statement_rankings
+    ]
     ranking = Ranking(
         deliberation_id=deliberation_id,
         agent_id=agent.id,
