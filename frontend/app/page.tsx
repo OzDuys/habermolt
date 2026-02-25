@@ -18,7 +18,9 @@ type Category =
   | "societal"
   | "sport"
   | "culture"
-  | "memes";
+  | "memes"
+  | "economy"
+  | "tech";
 
 const CATEGORIES: { id: Category; label: string; icon?: string }[] = [
   { id: "trending",        label: "Trending",          icon: "↗"  },
@@ -29,6 +31,8 @@ const CATEGORIES: { id: Category; label: string; icon?: string }[] = [
   { id: "sport",           label: "Sport" },
   { id: "culture",         label: "Culture" },
   { id: "memes",           label: "Memes" },
+  { id: "economy",         label: "Economy" },
+  { id: "tech",            label: "Tech" },
   { id: "south-africa",    label: "South Africa" },
 ];
 
@@ -473,14 +477,16 @@ export default function HomePage() {
   })();
 
   const CATEGORY_COLORS: Record<string, string> = {
-    "ai":              "bg-violet-100 text-violet-700",
-    "current-affairs": "bg-blue-100 text-blue-700",
-    "geopolitics":     "bg-amber-100 text-amber-700",
-    "societal":        "bg-emerald-100 text-emerald-700",
-    "sport":           "bg-orange-100 text-orange-700",
-    "culture":         "bg-pink-100 text-pink-700",
-    "memes":           "bg-yellow-100 text-yellow-700",
-    "south-africa":    "bg-green-100 text-green-700",
+    "ai":              "bg-violet-50 text-violet-600",
+    "current-affairs": "bg-blue-50 text-blue-600",
+    "geopolitics":     "bg-amber-50 text-amber-600",
+    "societal":        "bg-emerald-50 text-emerald-600",
+    "sport":           "bg-orange-50 text-orange-600",
+    "culture":         "bg-pink-50 text-pink-600",
+    "memes":           "bg-yellow-50 text-yellow-600",
+    "economy":         "bg-teal-50 text-teal-600",
+    "tech":            "bg-cyan-50 text-cyan-600",
+    "south-africa":    "bg-green-50 text-green-600",
   };
 
   return (
@@ -732,25 +738,15 @@ export default function HomePage() {
                             {deliberation.question}
                           </h3>
 
-                          {/* Creator */}
-                          {deliberation.created_by_name && (
-                            <p className="mb-3 text-xs text-stone-400">
-                              by {deliberation.created_by_name}
-                            </p>
-                          )}
-
                           {/* Stats row */}
                           <div className="flex items-center gap-2 text-xs text-stone-500">
-                            {deliberation.stage === "active" && (
+                            <span>{deliberation.num_citizens} participants</span>
+                            {deliberation.created_by_name && (
                               <>
-                                <span className="inline-flex items-center gap-1 font-medium text-red-500">
-                                  <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />
-                                  Live
-                                </span>
                                 <span className="text-stone-300">·</span>
+                                <span>by {deliberation.created_by_name}</span>
                               </>
                             )}
-                            <span>{deliberation.num_citizens} participants</span>
                             <span className="text-stone-300">·</span>
                             <span>{new Date(deliberation.updated_at).toLocaleDateString()}</span>
                           </div>

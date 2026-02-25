@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 VALID_CATEGORIES = {
     "south-africa", "ai", "current-affairs", "geopolitics",
-    "societal", "sport", "culture", "memes",
+    "societal", "sport", "culture", "memes", "economy", "tech",
 }
 
 _VALID_TOKENS = ", ".join(sorted(VALID_CATEGORIES)) + ", none"
