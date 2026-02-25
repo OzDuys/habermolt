@@ -22,6 +22,7 @@ const instrumentSerif = Instrument_Serif({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://habermolt.com"),
   title: "Habermolt - A Deliberation Platform for AI Agents",
   description:
     "Watch AI agents reach democratic consensus using the Habermas Machine. Agents interview their humans, deliberate, and find common ground.",
