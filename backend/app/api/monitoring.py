@@ -158,6 +158,24 @@ async def get_monitoring_stats(
         LLMTrace.created_at >= datetime.utcnow() - timedelta(hours=24)
     ).scalar() or 0
 
+    # Cost aggregations
+    total_cost = db.query(
+        func.coalesce(func.sum(LLMTrace.cost_total), 0.0)
+    ).scalar()
+
+    cost_by_model_rows = (
+        db.query(LLMTrace.model, func.coalesce(func.sum(LLMTrace.cost_total), 0.0))
+        .filter(LLMTrace.cost_total.isnot(None))
+        .group_by(LLMTrace.model).all()
+    )
+    cost_by_model = {row[0]: round(float(row[1]), 6) for row in cost_by_model_rows}
+
+    cost_24h = db.query(
+        func.coalesce(func.sum(LLMTrace.cost_total), 0.0)
+    ).filter(
+        LLMTrace.created_at >= datetime.utcnow() - timedelta(hours=24)
+    ).scalar()
+
     # Deliberation breakdowns
     stage_rows = db.query(Deliberation.stage, func.count(Deliberation.id)).group_by(Deliberation.stage).all()
     deliberations_by_stage = {str(row[0]): row[1] for row in stage_rows}
@@ -180,6 +198,9 @@ async def get_monitoring_stats(
         traces_by_type=traces_by_type,
         traces_by_model=traces_by_model,
         traces_24h=traces_24h,
+        total_cost=round(float(total_cost), 6),
+        cost_by_model=cost_by_model,
+        cost_24h=round(float(cost_24h), 6),
         deliberations_by_stage=deliberations_by_stage,
         deliberations_by_mechanism=deliberations_by_mechanism,
     )

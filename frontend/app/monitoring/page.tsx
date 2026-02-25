@@ -18,6 +18,9 @@ interface Stats {
   traces_by_type: Record<string, number>;
   traces_by_model: Record<string, number>;
   traces_24h: number;
+  total_cost: number;
+  cost_by_model: Record<string, number>;
+  cost_24h: number;
   deliberations_by_stage: Record<string, number>;
   deliberations_by_mechanism: Record<string, number>;
 }
@@ -49,7 +52,6 @@ export default function MonitoringDashboard() {
   if (!stats) return <ErrorMsg message="No data" />;
 
   const totalTokens = stats.total_tokens_in + stats.total_tokens_out;
-  const estimatedCost = (totalTokens / 1_000_000) * 0.5;
 
   return (
     <div className="max-w-6xl">
@@ -81,10 +83,17 @@ export default function MonitoringDashboard() {
           value={totalTokens > 1_000_000 ? `${(totalTokens / 1_000_000).toFixed(1)}M` : totalTokens.toLocaleString()}
           sub={`${stats.total_tokens_in.toLocaleString()} in / ${stats.total_tokens_out.toLocaleString()} out`}
         />
-        <StatCard label="Est. Cost" value={`$${estimatedCost.toFixed(2)}`} sub="@ $0.50/1M tokens" />
+        <StatCard
+          label="Total Cost"
+          value={`$${stats.total_cost.toFixed(2)}`}
+          sub={`$${stats.cost_24h.toFixed(2)} last 24h`}
+        />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        {/* Cost by Model */}
+        <CostBreakdownCard title="Cost by Model" data={stats.cost_by_model} />
+
         {/* Traces by Type */}
         <BreakdownCard title="Traces by Type" data={stats.traces_by_type} />
 
@@ -167,6 +176,50 @@ function BreakdownCard({ title, data }: { title: string; data: Record<string, nu
               <div
                 className="h-full rounded-full"
                 style={{ width: `${(count / max) * 100}%`, background: "var(--foreground)", opacity: 0.6 }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CostBreakdownCard({ title, data }: { title: string; data: Record<string, number> }) {
+  const entries = Object.entries(data).sort((a, b) => b[1] - a[1]);
+  const max = Math.max(...entries.map(([, v]) => v), 0.001);
+  const total = entries.reduce((sum, [, v]) => sum + v, 0);
+
+  if (entries.length === 0) {
+    return (
+      <div className="p-5 rounded-xl border" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+        <h3 className="text-sm font-bold mb-3">{title}</h3>
+        <p className="text-xs" style={{ color: "var(--muted)" }}>No cost data yet</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-5 rounded-xl border" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+      <h3 className="text-sm font-bold mb-3">{title}</h3>
+      <div className="space-y-2">
+        {entries.map(([key, cost]) => (
+          <div key={key}>
+            <div className="flex justify-between text-xs mb-0.5">
+              <span className="font-mono truncate mr-2">{key}</span>
+              <span className="font-bold tabular-nums">
+                ${cost.toFixed(4)}
+                {total > 0 && (
+                  <span className="font-normal ml-1" style={{ color: "var(--muted)" }}>
+                    ({((cost / total) * 100).toFixed(0)}%)
+                  </span>
+                )}
+              </span>
+            </div>
+            <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "var(--border)" }}>
+              <div
+                className="h-full rounded-full"
+                style={{ width: `${(cost / max) * 100}%`, background: "#d97706", opacity: 0.7 }}
               />
             </div>
           </div>

@@ -46,6 +46,11 @@ class LLMTrace(Base):
     tokens_out = Column(Integer, nullable=True)
     latency_ms = Column(Integer, nullable=True)
 
+    # Cost tracking (USD) — from OpenRouter usage.cost or estimated from pricing
+    cost_input = Column(Float, nullable=True)
+    cost_output = Column(Float, nullable=True)
+    cost_total = Column(Float, nullable=True)
+
     # Error information
     error_message = Column(Text, nullable=True)
 

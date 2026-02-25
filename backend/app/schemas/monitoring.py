@@ -22,6 +22,7 @@ class LLMTraceResponse(BaseModel):
     tokens_in: Optional[int] = None
     tokens_out: Optional[int] = None
     latency_ms: Optional[int] = None
+    cost_total: Optional[float] = None
     error_message: Optional[str] = None
     deliberation_id: Optional[UUID] = None
     agent_id: Optional[UUID] = None
@@ -55,6 +56,10 @@ class MonitoringStatsResponse(BaseModel):
     traces_by_type: Dict[str, int]
     traces_by_model: Dict[str, int]
     traces_24h: int
+    # Cost tracking
+    total_cost: float
+    cost_by_model: Dict[str, float]
+    cost_24h: float
     # Deliberation breakdowns
     deliberations_by_stage: Dict[str, int]
     deliberations_by_mechanism: Dict[str, int]

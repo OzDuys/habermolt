@@ -3,7 +3,7 @@
 Supports any OpenAI-compatible provider (OpenRouter, OpenAI, local models, etc.)
 by configuring LLM_BASE_URL and LLM_API_KEY in .env.
 
-Automatically logs all calls to llm_traces table for monitoring.
+Automatically logs all calls (including cost) to llm_traces table for monitoring.
 """
 
 import logging
@@ -16,6 +16,19 @@ from openai import OpenAI
 from app.config import settings
 
 logger = logging.getLogger(__name__)
+
+# Fallback pricing per 1M tokens (USD): (input, output)
+# Used when the provider doesn't return cost directly.
+MODEL_PRICING_FALLBACK: dict[str, tuple[float, float]] = {
+    "x-ai/grok-4.1-fast":                  (5.00, 25.00),
+    "google/gemini-3-flash-preview":        (0.075, 0.30),
+    "deepseek/deepseek-v3.2":              (0.27, 1.10),
+    "minimax/minimax-m2.5":                (0.20, 1.10),
+    "z-ai/glm-5":                          (0.50, 1.50),
+    "arcee-ai/trinity-large-preview:free":  (0.00, 0.00),
+    "openai/text-embedding-3-small":       (0.02, 0.00),
+}
+DEFAULT_PRICING = (0.50, 1.50)  # fallback for unknown models
 
 
 class LLMClient:
@@ -98,6 +111,9 @@ class LLMClient:
             tokens_in = usage.prompt_tokens if usage else None
             tokens_out = usage.completion_tokens if usage else None
 
+            # Extract cost — OpenRouter returns it in the usage object
+            cost_total = self._extract_cost(usage, tokens_in, tokens_out)
+
             self._log_trace(
                 messages=messages,
                 output_text=output_text,
@@ -106,6 +122,7 @@ class LLMClient:
                 tokens_out=tokens_out,
                 latency_ms=latency_ms,
                 status="success",
+                cost_total=cost_total,
             )
 
             self._clear_trace_context()
@@ -122,6 +139,35 @@ class LLMClient:
             self._clear_trace_context()
             logger.error(f"LLM API error: {e}")
             return ""
+
+    def _extract_cost(self, usage, tokens_in: int = None, tokens_out: int = None) -> Optional[float]:
+        """Extract cost from OpenRouter response, or estimate from pricing table."""
+        if usage is not None:
+            # OpenRouter includes cost in the usage object (non-standard field)
+            cost = getattr(usage, 'cost', None)
+            if cost is not None:
+                try:
+                    return float(cost)
+                except (TypeError, ValueError):
+                    pass
+            # Also check model_extra for pydantic v2 SDK
+            extra = getattr(usage, 'model_extra', None) or {}
+            if 'cost' in extra:
+                try:
+                    return float(extra['cost'])
+                except (TypeError, ValueError):
+                    pass
+
+        # Fallback: estimate from token counts and pricing table
+        if tokens_in is not None and tokens_out is not None:
+            return self._estimate_cost(self._model_name, tokens_in, tokens_out)
+        return None
+
+    @staticmethod
+    def _estimate_cost(model: str, tokens_in: int, tokens_out: int) -> float:
+        """Estimate cost from token counts using the pricing table."""
+        pricing = MODEL_PRICING_FALLBACK.get(model, DEFAULT_PRICING)
+        return (tokens_in * pricing[0] / 1_000_000) + (tokens_out * pricing[1] / 1_000_000)
 
     def _extract_provider(self) -> str:
         base_url = settings.LLM_BASE_URL.lower()
@@ -143,6 +189,7 @@ class LLMClient:
         latency_ms: int = None,
         status: str = "success",
         error_message: str = None,
+        cost_total: float = None,
     ):
         """Log trace to database. Never crashes the caller."""
         try:
@@ -162,6 +209,7 @@ class LLMClient:
                     tokens_in=tokens_in,
                     tokens_out=tokens_out,
                     latency_ms=latency_ms,
+                    cost_total=cost_total,
                     error_message=error_message,
                     deliberation_id=self._trace_deliberation_id,
                     agent_id=self._trace_agent_id,
