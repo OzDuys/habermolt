@@ -76,8 +76,8 @@ const nextConfig = {
         destination: `${BACKEND_URL}/api/feedback`,
       },
       {
-        source: "/api/waitlist/:path*",
-        destination: `${BACKEND_URL}/api/waitlist/:path*`,
+        source: "/api/waitlist/email",
+        destination: `${BACKEND_URL}/api/waitlist/email`,
       },
       {
         source: "/health",
