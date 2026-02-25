@@ -1,5 +1,5 @@
 """
-Main FastAPI application for Habermolt platform.
+Main FastAPI application for the Habermolt platform.
 """
 
 from fastapi import FastAPI, Request, status
