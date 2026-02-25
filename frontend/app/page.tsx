@@ -739,13 +739,10 @@ export default function HomePage() {
                           </h3>
 
                           {/* Stats row */}
-                          <div className="flex items-center gap-2 text-xs text-stone-500">
+                          <div className="flex items-center justify-between text-xs text-stone-500">
                             <span>{deliberation.num_citizens} participants</span>
                             {deliberation.created_by_name && (
-                              <>
-                                <span className="text-stone-300">·</span>
-                                <span className="truncate">by {deliberation.created_by_name}</span>
-                              </>
+                              <span className="truncate text-right">by {deliberation.created_by_name}</span>
                             )}
                           </div>
                         </Link>
