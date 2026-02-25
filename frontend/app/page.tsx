@@ -474,12 +474,15 @@ export default function HomePage() {
       );
   })();
 
-  const stageColors: Record<string, string> = {
-    active: "bg-red-100 text-red-700",
-  };
-
-  const stageLabels: Record<string, string> = {
-    active: "Live",
+  const CATEGORY_COLORS: Record<string, string> = {
+    "ai":              "bg-violet-100 text-violet-700",
+    "current-affairs": "bg-blue-100 text-blue-700",
+    "geopolitics":     "bg-amber-100 text-amber-700",
+    "societal":        "bg-emerald-100 text-emerald-700",
+    "sport":           "bg-orange-100 text-orange-700",
+    "culture":         "bg-pink-100 text-pink-700",
+    "memes":           "bg-yellow-100 text-yellow-700",
+    "south-africa":    "bg-green-100 text-green-700",
   };
 
   return (
@@ -695,36 +698,63 @@ export default function HomePage() {
                 </div>
               ) : (
                 <>
-                <AnimatePresence mode="popLayout">
-                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                <AnimatePresence mode="sync">
+                  <div className="columns-1 gap-4 sm:columns-2 lg:columns-3 xl:columns-4">
                     {filteredDeliberations.slice(0, visibleCount).map((deliberation, i) => (
                       <motion.div
                         key={deliberation.id}
+                        className="mb-4 break-inside-avoid"
                         initial={{ opacity: 0, y: 16 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.96 }}
                         transition={{ duration: 0.3, delay: i * 0.05 }}
-                        layout
                       >
                         <Link
                           href={`/deliberations/${deliberation.id}`}
-                          className="group block rounded-xl border border-stone-200 bg-white p-6 transition-all hover:-translate-y-0.5 hover:border-red-300 hover:shadow-lg"
+                          className="group block rounded-xl border border-stone-200 bg-white p-5 transition-all hover:-translate-y-0.5 hover:border-red-300 hover:shadow-lg"
                         >
-                          <div className="mb-3">
-                            <span
-                              className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${stageColors[deliberation.stage] || "bg-stone-100 text-stone-600"}`}
-                            >
-                              {stageLabels[deliberation.stage] || deliberation.stage}
-                            </span>
-                          </div>
-                          <h3 className="mb-3 text-base font-semibold leading-snug text-stone-800 group-hover:text-red-600 group-hover:underline group-hover:decoration-1 group-hover:underline-offset-2">
+                          {/* Category badges */}
+                          {deliberation.categories?.length > 0 && (
+                            <div className="mb-3 flex flex-wrap gap-1.5">
+                              {deliberation.categories.map((cat) => (
+                                <span
+                                  key={cat}
+                                  className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
+                                    CATEGORY_COLORS[cat] || "bg-stone-100 text-stone-600"
+                                  }`}
+                                >
+                                  {CATEGORIES.find((c) => c.id === cat)?.label || cat}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Question */}
+                          <h3 className="mb-2 text-base font-semibold leading-snug text-stone-800 group-hover:text-red-600 group-hover:underline group-hover:decoration-1 group-hover:underline-offset-2">
                             {deliberation.question}
                           </h3>
-                          <div className="flex items-center justify-between text-xs text-stone-500">
+
+                          {/* Creator */}
+                          {deliberation.created_by_name && (
+                            <p className="mb-3 text-xs text-stone-400">
+                              by {deliberation.created_by_name}
+                            </p>
+                          )}
+
+                          {/* Stats row */}
+                          <div className="flex items-center gap-2 text-xs text-stone-500">
+                            {deliberation.stage === "active" && (
+                              <>
+                                <span className="inline-flex items-center gap-1 font-medium text-red-500">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />
+                                  Live
+                                </span>
+                                <span className="text-stone-300">·</span>
+                              </>
+                            )}
                             <span>{deliberation.num_citizens} participants</span>
-                            <span>
-                              {new Date(deliberation.updated_at).toLocaleDateString()}
-                            </span>
+                            <span className="text-stone-300">·</span>
+                            <span>{new Date(deliberation.updated_at).toLocaleDateString()}</span>
                           </div>
                         </Link>
                       </motion.div>

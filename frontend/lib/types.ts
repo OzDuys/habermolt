@@ -23,6 +23,7 @@ export interface Deliberation {
   mechanism_type: MechanismType;
   stage: DeliberationStage;
   created_by_agent_id: string;
+  created_by_name: string | null;
   num_citizens: number;
   join_window_deadline: string | null;
   num_critique_rounds: number;

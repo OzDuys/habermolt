@@ -334,17 +334,27 @@ async def list_deliberations(
     Returns:
         DeliberationListResponse with list of deliberations
     """
-    query = db.query(Deliberation)
+    from sqlalchemy.orm import joinedload
+
+    query = db.query(Deliberation).options(joinedload(Deliberation.creator))
 
     if stage:
         query = query.filter(Deliberation.stage == stage)
 
-    total = query.count()
+    total = db.query(Deliberation).filter(
+        Deliberation.stage == stage if stage else True
+    ).count()
 
     deliberations = query.order_by(Deliberation.created_at.desc()).offset(skip).limit(limit).all()
 
+    items = []
+    for d in deliberations:
+        resp = DeliberationResponse.from_orm(d)
+        resp.created_by_name = d.creator.name if d.creator else None
+        items.append(resp)
+
     return DeliberationListResponse(
-        deliberations=[DeliberationResponse.from_orm(d) for d in deliberations],
+        deliberations=items,
         total=total
     )
 

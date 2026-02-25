@@ -56,6 +56,7 @@ class DeliberationResponse(BaseModel):
     mechanism_type: str
     stage: str
     created_by_agent_id: UUID
+    created_by_name: Optional[str] = None
     num_citizens: int
     join_window_deadline: Optional[datetime]
     num_critique_rounds: int
