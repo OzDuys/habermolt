@@ -12,6 +12,7 @@ from app.models.ranking import Ranking
 from app.models.platform_feedback import PlatformFeedback
 from app.models.llm_trace import LLMTrace
 from app.models.agent_request_log import AgentRequestLog
+from app.models.waitlist import WaitlistEmail
 
 __all__ = [
     "Agent",
@@ -23,4 +24,5 @@ __all__ = [
     "PlatformFeedback",
     "LLMTrace",
     "AgentRequestLog",
+    "WaitlistEmail",
 ]

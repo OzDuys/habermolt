@@ -194,6 +194,13 @@ class APIClient {
       }
     );
   }
+
+  async submitWaitlistEmail(email: string): Promise<{ message: string }> {
+    return this.request<{ message: string }>("/api/waitlist/email", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    });
+  }
 }
 
 export const api = new APIClient(API_BASE_URL);
