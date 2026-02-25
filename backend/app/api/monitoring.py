@@ -21,7 +21,7 @@ from app.config import settings
 from app.database import get_db
 from app.models import (
     Agent, Deliberation, Opinion, Statement, Ranking,
-    PlatformFeedback, LLMTrace, AgentRequestLog,
+    PlatformFeedback, LLMTrace, AgentRequestLog, WaitlistEmail,
 )
 from app.schemas.monitoring import (
     LLMTraceResponse, LLMTraceListResponse,
@@ -44,6 +44,7 @@ TABLE_MAP = {
     "platform_feedback": PlatformFeedback,
     "llm_traces": LLMTrace,
     "agent_request_logs": AgentRequestLog,
+    "waitlist_emails": WaitlistEmail,
 }
 
 
@@ -473,12 +474,18 @@ async def list_tables(
     db: Session = Depends(get_db),
     _auth: bool = Depends(verify_monitoring_secret),
 ):
-    """List all tables with row counts."""
+    """List all tables with row counts (including tables without SQLAlchemy models)."""
+    # Discover all user tables from the database itself
+    result = db.execute(text(
+        "SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename"
+    ))
+    all_table_names = [row[0] for row in result]
+
     tables = []
-    for name, model in TABLE_MAP.items():
-        count = db.query(func.count(model.id)).scalar() or 0
+    for name in all_table_names:
+        count_result = db.execute(text(f'SELECT COUNT(*) FROM "{name}"'))
+        count = count_result.scalar() or 0
         tables.append(TableInfoResponse(name=name, row_count=count))
-    tables.sort(key=lambda t: t.name)
     return TableListResponse(tables=tables)
 
 
@@ -490,44 +497,90 @@ async def get_table_rows(
     db: Session = Depends(get_db),
     _auth: bool = Depends(verify_monitoring_secret),
 ):
-    """Get paginated rows for a table."""
-    model = TABLE_MAP.get(table_name)
-    if not model:
+    """Get paginated rows for a table (works for both modeled and unmodeled tables)."""
+    # Verify table exists in the database
+    exists = db.execute(text(
+        "SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = :name"
+    ), {"name": table_name}).first()
+    if not exists:
         raise HTTPException(status_code=404, detail=f"Unknown table: {table_name}")
 
-    total = db.query(func.count(model.id)).scalar() or 0
+    model = TABLE_MAP.get(table_name)
 
-    # Get column names
-    columns = [c.name for c in model.__table__.columns]
+    if model:
+        # Use SQLAlchemy model for modeled tables
+        total = db.query(func.count(model.id)).scalar() or 0
+        columns = [c.name for c in model.__table__.columns]
 
-    # Query rows — order by created_at or submitted_at if available, else by id
-    query = db.query(model)
-    if hasattr(model, 'created_at'):
-        query = query.order_by(desc(model.created_at))
-    elif hasattr(model, 'submitted_at'):
-        query = query.order_by(desc(model.submitted_at))
+        query = db.query(model)
+        if hasattr(model, 'created_at'):
+            query = query.order_by(desc(model.created_at))
+        elif hasattr(model, 'submitted_at'):
+            query = query.order_by(desc(model.submitted_at))
 
-    rows = query.offset((page - 1) * page_size).limit(page_size).all()
+        rows = query.offset((page - 1) * page_size).limit(page_size).all()
 
-    # Serialize rows
-    serialized = []
-    for row in rows:
-        row_dict = {}
-        for col in columns:
-            val = getattr(row, col, None)
-            if val is None:
-                row_dict[col] = None
-            elif isinstance(val, (UUID,)):
-                row_dict[col] = str(val)
-            elif isinstance(val, datetime):
-                row_dict[col] = val.isoformat()
-            elif hasattr(val, 'value'):  # Enum
-                row_dict[col] = str(val.value)
-            elif isinstance(val, (dict, list)):
-                row_dict[col] = val
-            else:
-                row_dict[col] = str(val) if not isinstance(val, (int, float, bool)) else val
-        serialized.append(row_dict)
+        serialized = []
+        for row in rows:
+            row_dict = {}
+            for col in columns:
+                val = getattr(row, col, None)
+                if val is None:
+                    row_dict[col] = None
+                elif isinstance(val, (UUID,)):
+                    row_dict[col] = str(val)
+                elif isinstance(val, datetime):
+                    row_dict[col] = val.isoformat()
+                elif hasattr(val, 'value'):  # Enum
+                    row_dict[col] = str(val.value)
+                elif isinstance(val, (dict, list)):
+                    row_dict[col] = val
+                else:
+                    row_dict[col] = str(val) if not isinstance(val, (int, float, bool)) else val
+            serialized.append(row_dict)
+    else:
+        # Raw SQL fallback for unmodeled tables
+        total_result = db.execute(text(f'SELECT COUNT(*) FROM "{table_name}"'))
+        total = total_result.scalar() or 0
+
+        # Get column names from information_schema
+        col_result = db.execute(text(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_schema = 'public' AND table_name = :name "
+            "ORDER BY ordinal_position"
+        ), {"name": table_name})
+        columns = [row[0] for row in col_result]
+
+        # Determine ordering column
+        order_col = "id"
+        if "created_at" in columns:
+            order_col = "created_at"
+        elif "submitted_at" in columns:
+            order_col = "submitted_at"
+        order_dir = "DESC" if order_col != "id" else "ASC"
+
+        offset = (page - 1) * page_size
+        rows_result = db.execute(text(
+            f'SELECT * FROM "{table_name}" ORDER BY "{order_col}" {order_dir} '
+            f'LIMIT :limit OFFSET :offset'
+        ), {"limit": page_size, "offset": offset})
+
+        serialized = []
+        for row in rows_result:
+            row_dict = {}
+            for i, col in enumerate(columns):
+                val = row[i]
+                if val is None:
+                    row_dict[col] = None
+                elif isinstance(val, datetime):
+                    row_dict[col] = val.isoformat()
+                elif isinstance(val, (dict, list)):
+                    row_dict[col] = val
+                elif isinstance(val, (int, float, bool)):
+                    row_dict[col] = val
+                else:
+                    row_dict[col] = str(val)
+            serialized.append(row_dict)
 
     return {
         "table_name": table_name,
@@ -552,14 +605,25 @@ async def delete_table_row(
         raise HTTPException(status_code=400, detail="Confirmation required (X-Confirm: true)")
 
     model = TABLE_MAP.get(table_name)
-    if not model:
-        raise HTTPException(status_code=404, detail=f"Unknown table: {table_name}")
+    if model:
+        row = db.query(model).filter(model.id == row_id).first()
+        if not row:
+            raise HTTPException(status_code=404, detail="Row not found")
+        db.delete(row)
+    else:
+        # Verify table exists
+        exists = db.execute(text(
+            "SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = :name"
+        ), {"name": table_name}).first()
+        if not exists:
+            raise HTTPException(status_code=404, detail=f"Unknown table: {table_name}")
+        result = db.execute(
+            text(f'DELETE FROM "{table_name}" WHERE id = :rid'),
+            {"rid": row_id},
+        )
+        if result.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Row not found")
 
-    row = db.query(model).filter(model.id == row_id).first()
-    if not row:
-        raise HTTPException(status_code=404, detail="Row not found")
-
-    db.delete(row)
     db.commit()
     return {"message": f"Deleted row {row_id} from {table_name}"}
 
