@@ -15,7 +15,6 @@ from app.models import (
     Agent,
     Deliberation,
     DeliberationStage,
-    MechanismType,
     Opinion,
     Ranking,
     Statement,
@@ -53,22 +52,14 @@ async def get_agent_status(
     - update_rankings: new statements exist since last ranking
     - add_statement: has opinion+ranking but hasn't proposed a statement yet
     - review_predicted_rankings: system predicted rankings for new statements
-    - submit_human_feedback: deliberation concluded, needs human feedback
     """
     _start = time.time()
     is_claimed = agent.user_id is not None
 
-    # Get all joinable/active deliberations
-    active_stages = [
-        DeliberationStage.ACTIVE,
-        DeliberationStage.OPINION,
-        DeliberationStage.RANKING,
-        DeliberationStage.CRITIQUE,
-        DeliberationStage.CONCLUDED,
-    ]
+    # Get all active deliberations
     deliberations = (
         db.query(Deliberation)
-        .filter(Deliberation.stage.in_(active_stages))
+        .filter(Deliberation.stage == DeliberationStage.ACTIVE)
         .order_by(Deliberation.created_at.desc())
         .all()
     )
@@ -95,12 +86,7 @@ async def get_agent_status(
 
         # Agent has NOT participated — this is a discovered deliberation
         if not opinion:
-            # Only show joinable deliberations
-            is_joinable = (
-                (delib.mechanism_type == MechanismType.CONTINUOUS and delib.stage == DeliberationStage.ACTIVE)
-                or delib.stage == DeliberationStage.OPINION
-            )
-            if is_joinable and len(discovered) < 10:
+            if len(discovered) < 10:
                 discovered.append(DiscoveredDeliberation(
                     deliberation_id=delib.id,
                     question=delib.question,
@@ -111,27 +97,9 @@ async def get_agent_status(
 
         # Agent HAS participated — determine next action
 
-        # Concluded stage: need human feedback
-        if delib.stage == DeliberationStage.CONCLUDED:
-            from app.models import HumanFeedback
-            has_feedback = db.query(HumanFeedback).filter(
-                and_(
-                    HumanFeedback.deliberation_id == delib.id,
-                    HumanFeedback.agent_id == agent.id,
-                )
-            ).first()
-            if not has_feedback:
-                actions.append(AgentActionItem(
-                    deliberation_id=delib.id,
-                    question=delib.question,
-                    action="submit_human_feedback",
-                    participant_count=delib.num_citizens,
-                ))
-            continue
-
         # No ranking yet: need to rank statements
         if not ranking:
-            # Only prompt for ranking if statements exist (i.e. deliberation has progressed)
+            # Only prompt for ranking if statements exist
             has_statements = db.query(Statement).filter(
                 Statement.deliberation_id == delib.id,
             ).count() > 0
@@ -176,26 +144,25 @@ async def get_agent_status(
             ))
         else:
             # Check if agent should propose a statement
-            if delib.mechanism_type == MechanismType.CONTINUOUS:
-                agent_statement_count = db.query(Statement).filter(
-                    and_(
-                        Statement.deliberation_id == delib.id,
-                        Statement.contributed_by_agent_id == agent.id,
-                    )
-                ).count()
-
-                can_add = (
-                    agent_statement_count < settings.CONTINUOUS_MAX_STATEMENTS_PER_AGENT
-                    and current_statement_count < settings.CONTINUOUS_MAX_STATEMENTS
+            agent_statement_count = db.query(Statement).filter(
+                and_(
+                    Statement.deliberation_id == delib.id,
+                    Statement.contributed_by_agent_id == agent.id,
                 )
+            ).count()
 
-                if agent_statement_count == 0 and can_add:
-                    actions.append(AgentActionItem(
-                        deliberation_id=delib.id,
-                        question=delib.question,
-                        action="add_statement",
-                        participant_count=delib.num_citizens,
-                    ))
+            can_add = (
+                agent_statement_count < settings.CONTINUOUS_MAX_STATEMENTS_PER_AGENT
+                and current_statement_count < settings.CONTINUOUS_MAX_STATEMENTS
+            )
+
+            if agent_statement_count == 0 and can_add:
+                actions.append(AgentActionItem(
+                    deliberation_id=delib.id,
+                    question=delib.question,
+                    action="add_statement",
+                    participant_count=delib.num_citizens,
+                ))
 
     response = AgentHeartbeatResponse(
         is_claimed=is_claimed,

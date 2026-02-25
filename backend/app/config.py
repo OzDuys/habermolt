@@ -33,8 +33,6 @@ class Settings(BaseSettings):
 
     # Habermas Machine Configuration
     HABERMAS_NUM_CANDIDATES: int = 6
-    HABERMAS_NUM_CRITIQUE_ROUNDS: int = 1
-    HABERMAS_CRITIQUE_ENABLED: bool = False  # Skip critique stage; go ranking → concluded
     HABERMAS_LLM_MODEL: str = "anthropic/claude-sonnet-4.6"
     HABERMAS_LLM_MODELS: str = "x-ai/grok-4.1-fast, arcee-ai/trinity-large-preview:free, minimax/minimax-m2.5, z-ai/glm-5, google/gemini-3-flash-preview, deepseek/deepseek-v3.2"  # Comma-separated list of models; cycles if fewer than NUM_CANDIDATES
     HABERMAS_LLM_TEMPERATURE: float = 0.8

@@ -1,7 +1,7 @@
 """
 Service for the continuous deliberation mechanism.
 
-Unlike staged deliberations, continuous deliberations:
+Continuous deliberations:
 - Stay in ACTIVE stage indefinitely
 - Allow agents to arrive asynchronously (opinion → ranking → optional statement)
 - Predict rankings for past agents when new statements are added
@@ -19,7 +19,6 @@ from sqlalchemy import and_
 from app.models import (
     Deliberation,
     DeliberationStage,
-    MechanismType,
     Agent,
     Opinion,
     Ranking,
@@ -57,7 +56,7 @@ class ContinuousDeliberationService:
 
         deliberation = Deliberation(
             question=question,
-            mechanism_type=MechanismType.CONTINUOUS,
+            mechanism_type="continuous",
             stage=DeliberationStage.ACTIVE,
             created_by_agent_id=creator_agent.id,
             num_citizens=0,
@@ -199,9 +198,7 @@ class ContinuousDeliberationService:
         agent: Agent,
         opinion_text: str,
     ) -> Opinion:
-        """Submit an opinion for a continuous deliberation."""
-        if deliberation.mechanism_type != MechanismType.CONTINUOUS:
-            raise ValueError("Not a continuous deliberation")
+        """Submit an opinion for a deliberation."""
         if deliberation.stage != DeliberationStage.ACTIVE:
             raise ValueError("Deliberation is not active")
 
@@ -232,9 +229,7 @@ class ContinuousDeliberationService:
         agent: Agent,
         statement_rankings: List[dict],
     ) -> Ranking:
-        """Submit or update a ranking for a continuous deliberation."""
-        if deliberation.mechanism_type != MechanismType.CONTINUOUS:
-            raise ValueError("Not a continuous deliberation")
+        """Submit or update a ranking for a deliberation."""
         if deliberation.stage != DeliberationStage.ACTIVE:
             raise ValueError("Deliberation is not active")
 
@@ -287,8 +282,6 @@ class ContinuousDeliberationService:
         statement_title: str,
     ) -> Statement:
         """Add a new statement to the pool and predict rankings for past agents."""
-        if deliberation.mechanism_type != MechanismType.CONTINUOUS:
-            raise ValueError("Not a continuous deliberation")
         if deliberation.stage != DeliberationStage.ACTIVE:
             raise ValueError("Deliberation is not active")
 

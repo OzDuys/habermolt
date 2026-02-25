@@ -34,9 +34,7 @@ VALID_CATEGORIES = {
 class DeliberationCreateRequest(BaseModel):
     """Request schema for creating a deliberation."""
     question: str = Field(..., min_length=10, max_length=1000, description="The question to deliberate on")
-    mechanism_type: str = Field("continuous", description="Mechanism type: 'staged' or 'continuous'")
-    initial_opinion: Optional[str] = Field(None, min_length=1, max_length=5000, description="Creator's initial opinion (required for continuous deliberations)")
-    num_critique_rounds: int = Field(1, ge=1, le=5, description="Number of critique rounds (staged only)")
+    initial_opinion: Optional[str] = Field(None, min_length=1, max_length=5000, description="Creator's initial opinion (required)")
     categories: Optional[List[str]] = Field(default_factory=list, description="Topic categories (1-3): 'south-africa', 'ai', 'current-affairs', 'geopolitics', 'societal', 'sport', 'culture', 'memes'")
     meta_data: Optional[dict] = Field(default_factory=dict, description="Additional metadata")
 
@@ -53,19 +51,12 @@ class DeliberationResponse(BaseModel):
     """Response schema for deliberation information."""
     id: UUID
     question: str
-    mechanism_type: str
     stage: str
     created_by_agent_id: UUID
     created_by_name: Optional[str] = None
     num_citizens: int
-    join_window_deadline: Optional[datetime]
-    num_critique_rounds: int
-    current_critique_round: int
     created_at: datetime
     updated_at: datetime
-    started_at: Optional[datetime]
-    concluded_at: Optional[datetime]
-    finalized_at: Optional[datetime]
     categories: List[str] = []
     meta_data: dict
 
@@ -127,7 +118,7 @@ class StatementResponse(BaseModel):
 
 
 class StatementSubmitRequest(BaseModel):
-    """Request schema for submitting a statement (continuous mechanism)."""
+    """Request schema for submitting a statement."""
     title: str = Field(..., min_length=3, max_length=200, description="Short title for this statement (5-10 words)")
     statement_text: str = Field(..., min_length=10, max_length=5000, description="Proposed consensus statement")
 
@@ -170,49 +161,8 @@ class RankingResponse(BaseModel):
         from_attributes = True
 
 
-class CritiqueSubmitRequest(BaseModel):
-    """Request schema for submitting a critique."""
-    critique_text: str = Field(..., min_length=10, max_length=5000, description="Agent's critique of the winning statement")
-
-
-class CritiqueResponse(BaseModel):
-    """Response schema for critique."""
-    id: UUID
-    deliberation_id: UUID
-    agent_id: UUID
-    winning_statement_id: UUID
-    round_number: int
-    critique_text: str
-    submitted_at: datetime
-    agent: Optional[AgentResponseMinimal] = None
-
-    class Config:
-        from_attributes = True
-
-
-class HumanFeedbackSubmitRequest(BaseModel):
-    """Request schema for submitting human feedback."""
-    agreement_level: int = Field(..., ge=1, le=5, description="Agreement level (1=strongly disagree, 5=strongly agree)")
-    feedback_text: Optional[str] = Field(None, max_length=5000, description="Optional additional comments")
-
-
-class HumanFeedbackResponse(BaseModel):
-    """Response schema for human feedback."""
-    id: UUID
-    deliberation_id: UUID
-    agent_id: UUID
-    final_statement_id: UUID
-    agreement_level: int
-    feedback_text: Optional[str]
-    submitted_at: datetime
-    agent: Optional[AgentResponseMinimal] = None
-
-    class Config:
-        from_attributes = True
-
-
 class AgentStatusResponse(BaseModel):
-    """Per-agent participation status for continuous deliberations."""
+    """Per-agent participation status."""
     has_opinion: bool = False
     has_ranking: bool = False
     statements_added: int = 0
@@ -222,7 +172,7 @@ class AgentStatusResponse(BaseModel):
 
 
 class CurrentWinnerResponse(BaseModel):
-    """Current winning statement for continuous deliberations."""
+    """Current winning statement."""
     statement: Optional[StatementResponse] = None
     total_rankings: int = 0
     total_participants: int = 0
@@ -235,8 +185,6 @@ class DeliberationDetailResponse(BaseModel):
     opinions: List[OpinionResponse]
     statements: List[StatementResponse]
     rankings: List[RankingResponse]
-    critiques: List[CritiqueResponse]
-    human_feedback: List[HumanFeedbackResponse]
     my_status: Optional[AgentStatusResponse] = None
 
     class Config:
@@ -282,7 +230,7 @@ class EnrichedStatementsResponse(BaseModel):
 
 
 class ContinuousOpinionResponse(BaseModel):
-    """Enriched response for POST /deliberations/{id}/opinions on continuous deliberations.
+    """Enriched response for POST /deliberations/{id}/opinions.
     Returns statements inline so agent can immediately rank."""
     opinion: OpinionResponse
     statements: List[StatementResponse]
@@ -290,7 +238,7 @@ class ContinuousOpinionResponse(BaseModel):
 
 
 class ContinuousRankingResponse(BaseModel):
-    """Enriched response for POST/PUT rankings on continuous deliberations.
+    """Enriched response for POST/PUT rankings.
     Returns my_status so agent knows what to do next (e.g. add_statement)."""
     ranking: RankingResponse
     my_status: AgentStatusResponse

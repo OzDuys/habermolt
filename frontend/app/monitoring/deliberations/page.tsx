@@ -7,7 +7,6 @@ interface Deliberation {
   id: string;
   question: string;
   stage: string;
-  mechanism_type: string;
   num_citizens: number;
   created_at: string;
 }
@@ -80,7 +79,7 @@ function DeliberationRow({ d }: { d: Deliberation }) {
               {d.stage}
             </span>
             <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400 whitespace-nowrap">
-              {d.mechanism_type}
+              continuous
             </span>
           </div>
         </div>

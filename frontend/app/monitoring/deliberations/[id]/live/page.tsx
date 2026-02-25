@@ -135,8 +135,7 @@ function BubbleField() {
 
 function StagePill({ stage }: { stage: string }) {
   const stageColors: Record<string, string> = {
-    opinion: "#2a6fb0", ranking: "#b07a10", active: "#b07a10",
-    critique: "#9b3a8a", concluded: "#1a8a50", finalized: "#1a8a50",
+    active: "#b07a10",
   };
   const c = stageColors[stage.toLowerCase()] || "#6b4ac8";
   return (
@@ -321,7 +320,7 @@ function InlineActivityFeed({ data }: { data: DeliberationDetail }) {
   const [expanded, setExpanded] = useState(false);
   const items = useMemo(() => {
     const activities: { id: string; type: string; agent?: string; desc: string; ts: Date }[] = [];
-    const { deliberation, opinions, statements, rankings, human_feedback } = data;
+    const { deliberation, opinions, statements, rankings } = data;
 
     const nameById = new Map<string, string>();
     for (const o of opinions) {
@@ -342,19 +341,13 @@ function InlineActivityFeed({ data }: { data: DeliberationDetail }) {
     for (const r of rankings) {
       activities.push({ id: `r-${r.id}`, type: "ranking", agent: r.agent?.name || "Agent", desc: "submitted rankings", ts: parseTimestamp(r.submitted_at) });
     }
-    for (const f of human_feedback) {
-      const levelText = f.agreement_level >= 4 ? "agreed" : f.agreement_level <= 2 ? "disagreed" : "gave neutral feedback";
-      activities.push({ id: `f-${f.id}`, type: "feedback", agent: f.agent?.human_name || f.agent?.name || "A human", desc: levelText, ts: parseTimestamp(f.submitted_at) });
-    }
-    if (deliberation.started_at) activities.push({ id: "sys-start", type: "system", desc: "Deliberation started", ts: parseTimestamp(deliberation.started_at) });
-    if (deliberation.concluded_at) activities.push({ id: "sys-end", type: "system", desc: "Deliberation concluded", ts: parseTimestamp(deliberation.concluded_at) });
-    if (deliberation.finalized_at) activities.push({ id: "sys-fin", type: "system", desc: "Results finalized", ts: parseTimestamp(deliberation.finalized_at) });
+    activities.push({ id: "sys-created", type: "system", desc: "Deliberation created", ts: parseTimestamp(deliberation.created_at) });
 
     activities.sort((a, b) => b.ts.getTime() - a.ts.getTime());
     return activities;
   }, [data]);
 
-  const isActive = !["concluded", "finalized"].includes(data.deliberation.stage);
+  const isActive = true;
 
   if (items.length === 0) return null;
 
@@ -515,12 +508,6 @@ export default function LiveDeliberationPage() {
         });
       }
     });
-    data.human_feedback.forEach((f) => {
-      const existing = map.get(f.agent_id);
-      if (existing) {
-        existing.feedback = { agreement_level: f.agreement_level, feedback_text: f.feedback_text };
-      }
-    });
     return Array.from(map.values());
   }, [data]);
 
@@ -561,7 +548,7 @@ export default function LiveDeliberationPage() {
   }
 
   const d = data.deliberation;
-  const isLive = d.mechanism_type === "continuous" || d.stage === "ranking" || d.stage === "active";
+  const isLive = true;
 
   return (
     <>

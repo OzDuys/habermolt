@@ -13,7 +13,6 @@ interface DebugData {
     id: string;
     question: string;
     stage: string;
-    mechanism_type: string;
     num_citizens: number;
     created_at: string;
     updated_at: string | null;
@@ -109,7 +108,7 @@ export default function DeliberationDebugDetailPage() {
       {/* Info Bar */}
       <div className="flex flex-wrap items-center gap-2 mb-6 text-xs" style={{ color: "var(--muted)" }}>
         <Badge color="blue">{d.stage}</Badge>
-        <Badge color="gray">{d.mechanism_type}</Badge>
+        <Badge color="gray">continuous</Badge>
         <span>{d.num_citizens} participants</span>
         <span>·</span>
         <span>Created {new Date(d.created_at).toLocaleString()}</span>

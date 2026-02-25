@@ -3,32 +3,25 @@ API routes for deliberation management and participation.
 """
 
 import logging
+import time
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status, BackgroundTasks
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
-from typing import List, Optional, Union
+from typing import Optional
 from uuid import UUID
 from datetime import datetime, timedelta, timezone
-import threading
-import asyncio
 
 import numpy as np
 from sqlalchemy import text
 
-from app.database import get_db, SessionLocal
-from app.models import Agent, Deliberation, DeliberationStage, MechanismType, Opinion, Ranking, Critique, HumanFeedback, Statement as StatementModel
+from app.database import get_db
+from app.models import Agent, Deliberation, DeliberationStage, Opinion, Ranking, Statement as StatementModel
 from app.middleware.auth import APIKeyAuth, OptionalAPIKeyAuth
-from app.services.deliberation_service import DeliberationService
 from app.services.continuous_deliberation_service import ContinuousDeliberationService
 from app.services.embedding_service import get_question_embedding, get_statement_embeddings
 from app.config import settings
-
-logger = logging.getLogger(__name__)
-limiter = Limiter(key_func=get_remote_address)
-
-import time
 from app.services.agent_request_log_service import log_agent_request
 from app.services.categorization_service import categorize_deliberation
 from app.services.content_moderation_service import check_community_guidelines
@@ -42,12 +35,7 @@ from app.schemas import (
     StatementResponse,
     RankingSubmitRequest,
     RankingResponse,
-    CritiqueSubmitRequest,
-    CritiqueResponse,
-    HumanFeedbackSubmitRequest,
-    HumanFeedbackResponse,
     AgentStatusResponse,
-    StatementSubmitRequest,
     ClusterPoint,
     ClusterResponse,
     EnrichedStatementsResponse,
@@ -56,45 +44,15 @@ from app.schemas import (
     ContinuousRankingResponse,
 )
 
+logger = logging.getLogger(__name__)
+limiter = Limiter(key_func=get_remote_address)
 
 router = APIRouter(prefix="/deliberations", tags=["deliberations"])
 
 
-def _schedule_join_window_timer(deliberation_id: UUID, delay_seconds: float):
-    """
-    Schedule a background task that fires after the join window expires.
-
-    Opens a fresh DB session, checks if still in OPINION stage,
-    and triggers the transition to RANKING if so.
-    """
-    def run_timer():
-        import time
-        time.sleep(delay_seconds)
-
-        fresh_db = SessionLocal()
-        try:
-            service = DeliberationService(fresh_db)
-            delib = fresh_db.query(Deliberation).filter(
-                Deliberation.id == deliberation_id
-            ).first()
-
-            if delib and delib.stage == DeliberationStage.OPINION:
-                print(f"[TIMER] Join window expired for deliberation {deliberation_id}, transitioning to RANKING")
-                asyncio.run(service.check_and_transition_state(delib))
-        except Exception as e:
-            print(f"[TIMER] Error during auto-transition: {e}")
-            import traceback
-            traceback.print_exc()
-        finally:
-            fresh_db.close()
-
-    thread = threading.Thread(target=run_timer, daemon=True)
-    thread.start()
-
-
 @router.post(
     "",
-    response_model=Union[DeliberationDetailResponse, DeliberationResponse],
+    response_model=DeliberationDetailResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Create a new deliberation"
 )
@@ -107,18 +65,17 @@ async def create_deliberation(
     db: Session = Depends(get_db)
 ):
     """
-    Create a new deliberation session.
+    Create a new continuous deliberation session.
 
-    A 5-minute join window starts once 2 agents have submitted opinions.
-    The creator can also start the deliberation early via POST /deliberations/{id}/start.
+    Requires an initial_opinion from the creator to seed the statement pool.
 
     Args:
-        request: Deliberation details (question, etc.)
+        body: Deliberation details (question, initial_opinion, etc.)
         agent: Authenticated agent (creator)
         db: Database session
 
     Returns:
-        DeliberationResponse with created deliberation details
+        DeliberationDetailResponse with created deliberation details
     """
     _create_start = time.time()
     # --- Per-agent rate limit: max 1 deliberation created per 5 minutes ---
@@ -195,118 +152,76 @@ async def create_deliberation(
         )
     # --------------------------------------------------------------------------
 
-    if body.mechanism_type == MechanismType.CONTINUOUS:
-        if not body.initial_opinion:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="initial_opinion is required when creating a continuous deliberation",
-            )
-        service = ContinuousDeliberationService(db)
-        try:
-            deliberation = await service.create_deliberation(
-                question=body.question,
-                creator_agent=agent,
-                initial_opinion=body.initial_opinion,
-                categories=body.categories,
-                meta_data=body.meta_data,
-            )
-        except Exception as e:
-            error_msg = str(e)
-            logger.error(f"Failed to create deliberation: {error_msg}", exc_info=True)
-            if "429" in error_msg or "quota" in error_msg.lower() or "rate" in error_msg.lower():
-                raise HTTPException(
-                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    detail="LLM API rate limit exceeded. Please try again later."
-                )
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to create deliberation. Please try again later."
-            )
-
-        # Store embedding on the newly created deliberation
-        if embedding is not None:
-            try:
-                deliberation.question_embedding = embedding
-                db.commit()
-                logger.info(f"Stored question_embedding for deliberation {deliberation.id}")
-            except Exception as e:
-                logger.error(f"Failed to store question_embedding for deliberation {deliberation.id}: {e}", exc_info=True)
-                db.rollback()
-        else:
-            logger.debug(f"Skipping question_embedding storage: embedding is None")
-
-        # Return rich response for continuous so agent can immediately rank + propose
-        status_dict = service.get_agent_status(deliberation, agent)
-        my_status = AgentStatusResponse(**status_dict)
-        opinions = [o for o in deliberation.opinions if o.agent_id == agent.id]
-
-        if not body.categories:
-            background_tasks.add_task(categorize_deliberation, str(deliberation.id))
-
-        background_tasks.add_task(
-            log_agent_request,
-            agent_id=str(agent.id),
-            agent_name=agent.name,
-            method='POST',
-            endpoint='create_deliberation',
-            response_status=201,
-            latency_ms=int((time.time() - _create_start) * 1000),
-            request_body={'question': body.question[:200]},
-            response_body={
-                'question': body.question[:200],
-                'mechanism_type': 'continuous',
-                'deliberation_id': str(deliberation.id),
-            },
+    if not body.initial_opinion:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="initial_opinion is required when creating a deliberation",
         )
-        return DeliberationDetailResponse(
-            deliberation=DeliberationResponse.from_orm(deliberation),
-            created_by=agent,
-            opinions=[OpinionResponse.from_orm(o) for o in opinions],
-            statements=[StatementResponse.from_orm(s) for s in deliberation.statements],
-            rankings=[RankingResponse.from_orm(r) for r in deliberation.rankings],
-            critiques=[],
-            human_feedback=[],
-            my_status=my_status,
-        )
-    else:
-        service = DeliberationService(db)
-        deliberation = service.create_deliberation(
+
+    service = ContinuousDeliberationService(db)
+    try:
+        deliberation = await service.create_deliberation(
             question=body.question,
             creator_agent=agent,
-            num_critique_rounds=body.num_critique_rounds,
+            initial_opinion=body.initial_opinion,
             categories=body.categories,
-            meta_data=body.meta_data
+            meta_data=body.meta_data,
+        )
+    except Exception as e:
+        error_msg = str(e)
+        logger.error(f"Failed to create deliberation: {error_msg}", exc_info=True)
+        if "429" in error_msg or "quota" in error_msg.lower() or "rate" in error_msg.lower():
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="LLM API rate limit exceeded. Please try again later."
+            )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create deliberation. Please try again later."
         )
 
-        # Store embedding on the newly created deliberation
-        if embedding is not None:
-            try:
-                deliberation.question_embedding = embedding
-                db.commit()
-                logger.info(f"Stored question_embedding for deliberation {deliberation.id}")
-            except Exception as e:
-                logger.error(f"Failed to store question_embedding for deliberation {deliberation.id}: {e}", exc_info=True)
-                db.rollback()
+    # Store embedding on the newly created deliberation
+    if embedding is not None:
+        try:
+            deliberation.question_embedding = embedding
+            db.commit()
+            logger.info(f"Stored question_embedding for deliberation {deliberation.id}")
+        except Exception as e:
+            logger.error(f"Failed to store question_embedding for deliberation {deliberation.id}: {e}", exc_info=True)
+            db.rollback()
+    else:
+        logger.debug(f"Skipping question_embedding storage: embedding is None")
 
-        if not body.categories:
-            background_tasks.add_task(categorize_deliberation, str(deliberation.id))
+    # Return rich response so agent can immediately rank + propose
+    status_dict = service.get_agent_status(deliberation, agent)
+    my_status = AgentStatusResponse(**status_dict)
+    opinions = [o for o in deliberation.opinions if o.agent_id == agent.id]
 
-        background_tasks.add_task(
-            log_agent_request,
-            agent_id=str(agent.id),
-            agent_name=agent.name,
-            method='POST',
-            endpoint='create_deliberation',
-            response_status=201,
-            latency_ms=int((time.time() - _create_start) * 1000),
-            request_body={'question': body.question[:200]},
-            response_body={
-                'question': body.question[:200],
-                'mechanism_type': 'staged',
-                'deliberation_id': str(deliberation.id),
-            },
-        )
-        return DeliberationResponse.from_orm(deliberation)
+    if not body.categories:
+        background_tasks.add_task(categorize_deliberation, str(deliberation.id))
+
+    background_tasks.add_task(
+        log_agent_request,
+        agent_id=str(agent.id),
+        agent_name=agent.name,
+        method='POST',
+        endpoint='create_deliberation',
+        response_status=201,
+        latency_ms=int((time.time() - _create_start) * 1000),
+        request_body={'question': body.question[:200]},
+        response_body={
+            'question': body.question[:200],
+            'deliberation_id': str(deliberation.id),
+        },
+    )
+    return DeliberationDetailResponse(
+        deliberation=DeliberationResponse.from_orm(deliberation),
+        created_by=agent,
+        opinions=[OpinionResponse.from_orm(o) for o in opinions],
+        statements=[StatementResponse.from_orm(s) for s in deliberation.statements],
+        rankings=[RankingResponse.from_orm(r) for r in deliberation.rankings],
+        my_status=my_status,
+    )
 
 
 @router.get(
@@ -324,15 +239,6 @@ async def list_deliberations(
     List all deliberations, optionally filtered by stage.
 
     This is the heartbeat endpoint that agents poll to discover deliberations.
-
-    Args:
-        stage: Optional filter by stage (opinion, ranking, critique, concluded, finalized)
-        skip: Number of results to skip (pagination offset)
-        limit: Maximum number of results to return (1-100, default 20)
-        db: Database session
-
-    Returns:
-        DeliberationListResponse with list of deliberations
     """
     from sqlalchemy.orm import joinedload
 
@@ -372,17 +278,9 @@ async def get_deliberation(
     """
     Get detailed information about a deliberation.
 
-    Includes statements, rankings, critiques, and feedback.
+    Includes statements, rankings.
     When called by an authenticated agent, only that agent's own opinion is returned.
     When called without auth (e.g. the public frontend), all opinions are returned.
-
-    Args:
-        deliberation_id: UUID of the deliberation
-        agent: Optional authenticated agent
-        db: Database session
-
-    Returns:
-        DeliberationDetailResponse with full deliberation details
     """
     deliberation = db.query(Deliberation).filter(Deliberation.id == deliberation_id).first()
 
@@ -406,19 +304,16 @@ async def get_deliberation(
     else:
         opinions = list(deliberation.opinions)
 
-    # Compute my_status for continuous deliberations when agent is authenticated
+    # Compute my_status when agent is authenticated
     my_status = None
-    if agent and deliberation.mechanism_type == MechanismType.CONTINUOUS:
-        from app.schemas import AgentStatusResponse
+    if agent:
         cont_service = ContinuousDeliberationService(db)
         status_dict = cont_service.get_agent_status(deliberation, agent)
         my_status = AgentStatusResponse(**status_dict)
 
     # When an agent is authenticated:
-    # - Only return that agent's own rankings (agents must not see others' rankings,
-    #   as that would influence their own ranking or re-ranking decisions)
+    # - Only return that agent's own rankings
     # - Only return statements if the agent has already submitted an opinion
-    #   (agents must form their opinion independently before seeing consensus statements)
     if agent:
         agent_has_opinion = any(o.agent_id == agent.id for o in deliberation.opinions)
         rankings = [r for r in deliberation.rankings if r.agent_id == agent.id]
@@ -433,15 +328,13 @@ async def get_deliberation(
         opinions=[OpinionResponse.from_orm(o) for o in opinions],
         statements=[StatementResponse.from_orm(s) for s in statements],
         rankings=[RankingResponse.from_orm(r) for r in rankings],
-        critiques=[CritiqueResponse.from_orm(c) for c in deliberation.critiques],
-        human_feedback=[HumanFeedbackResponse.from_orm(f) for f in deliberation.human_feedback],
         my_status=my_status,
     )
 
 
 @router.post(
     "/{deliberation_id}/opinions",
-    response_model=Union[ContinuousOpinionResponse, OpinionResponse],
+    response_model=ContinuousOpinionResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Submit an opinion"
 )
@@ -454,23 +347,14 @@ async def submit_opinion(
     agent: Agent = Depends(APIKeyAuth()),
     db: Session = Depends(get_db)
 ):
-    _opinion_start = time.time()
     """
     Submit an initial opinion for a deliberation.
 
-    Only valid during the OPINION stage while the join window is open.
-    Each agent can submit exactly one opinion.
-
-    Args:
-        deliberation_id: UUID of the deliberation
-        request: Opinion text
-        background_tasks: FastAPI background tasks
-        agent: Authenticated agent
-        db: Database session
-
-    Returns:
-        OpinionResponse with submitted opinion
+    Each agent can submit exactly one opinion. Returns statements inline
+    so the agent can immediately rank them.
     """
+    _opinion_start = time.time()
+
     deliberation = db.query(Deliberation).filter(Deliberation.id == deliberation_id).first()
 
     if not deliberation:
@@ -479,116 +363,15 @@ async def submit_opinion(
             detail="Deliberation not found"
         )
 
-    # Handle continuous mechanism — return enriched response with statements + status
-    if deliberation.mechanism_type == MechanismType.CONTINUOUS:
-        service = ContinuousDeliberationService(db)
-        try:
-            opinion = service.submit_opinion(deliberation, agent, body.opinion_text)
-        except ValueError as e:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-
-        # Return statements inline so agent can immediately rank
-        db.refresh(deliberation)
-        status_dict = service.get_agent_status(deliberation, agent)
-        background_tasks.add_task(
-            log_agent_request,
-            agent_id=str(agent.id),
-            agent_name=agent.name,
-            method='POST',
-            endpoint='submit_opinion',
-            response_status=201,
-            latency_ms=int((time.time() - _opinion_start) * 1000),
-            deliberation_id=str(deliberation_id),
-            request_body={'opinion_text': body.opinion_text[:500]},
-            response_body={'id': str(opinion.id), 'statements_returned': len(deliberation.statements)},
-        )
-        return ContinuousOpinionResponse(
-            opinion=OpinionResponse.from_orm(opinion),
-            statements=[StatementResponse.from_orm(s) for s in deliberation.statements],
-            my_status=AgentStatusResponse(**status_dict),
-        )
-
-    # --- Staged mechanism logic below ---
-
-    # Check if deliberation is accepting opinions
-    if deliberation.stage != DeliberationStage.OPINION:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Deliberation is in {deliberation.stage} stage, not accepting opinions"
-        )
-
-    # Check if join window has expired
-    if deliberation.join_window_deadline and datetime.utcnow() >= deliberation.join_window_deadline:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Join window has closed, no longer accepting opinions"
-        )
-
-    # Check if agent already submitted
-    existing = db.query(Opinion).filter(
-        Opinion.deliberation_id == deliberation_id,
-        Opinion.agent_id == agent.id
-    ).first()
-
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Agent has already submitted an opinion for this deliberation"
-        )
-
-    # Create opinion
-    opinion = Opinion(
-        deliberation_id=deliberation_id,
-        agent_id=agent.id,
-        opinion_text=body.opinion_text
-    )
-
-    db.add(opinion)
-    db.commit()
-    db.refresh(opinion)
-
-    # Check for state transition AFTER committing opinion
-    # Refresh deliberation to get latest opinions
-    db.refresh(deliberation)
-
-    # Update num_citizens to reflect actual participant count
-    deliberation.num_citizens = len(deliberation.opinions)
-    db.commit()
-
-    # Run transition check — this will set join_window_deadline when 2nd opinion arrives
-    had_deadline_before = deliberation.join_window_deadline is not None
-
-    print(f"[DEBUG] Checking transition: {len(deliberation.opinions)} opinions, deadline: {deliberation.join_window_deadline}")
+    service = ContinuousDeliberationService(db)
     try:
-        service = DeliberationService(db)
-        result = await service.check_and_transition_state(deliberation)
-        print(f"[DEBUG] Transition result: {result}, new stage: {deliberation.stage}")
-    except Exception as e:
-        print(f"[DEBUG] Transition error: {e}")
-        import traceback
-        traceback.print_exc()
+        opinion = service.submit_opinion(deliberation, agent, body.opinion_text)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
-        # Check if it's an API quota/rate limit error
-        error_msg = str(e)
-        logger.error(f"Transition error after opinion: {error_msg}", exc_info=True)
-        if "429" in error_msg or "quota" in error_msg.lower() or "rate" in error_msg.lower():
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="LLM API rate limit exceeded. Please try again later."
-            )
-
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to process deliberation. Please try again later."
-        )
-
-    # If the join window deadline was just set, schedule the auto-start timer
-    if not had_deadline_before and deliberation.join_window_deadline is not None:
-        remaining = (deliberation.join_window_deadline - datetime.utcnow()).total_seconds()
-        if remaining > 0:
-            _schedule_join_window_timer(deliberation.id, remaining)
-
-    _opinion_latency = int((time.time() - _opinion_start) * 1000) if '_opinion_start' in dir() else 0
+    # Return statements inline so agent can immediately rank
+    db.refresh(deliberation)
+    status_dict = service.get_agent_status(deliberation, agent)
     background_tasks.add_task(
         log_agent_request,
         agent_id=str(agent.id),
@@ -596,73 +379,16 @@ async def submit_opinion(
         method='POST',
         endpoint='submit_opinion',
         response_status=201,
-        latency_ms=_opinion_latency,
+        latency_ms=int((time.time() - _opinion_start) * 1000),
         deliberation_id=str(deliberation_id),
         request_body={'opinion_text': body.opinion_text[:500]},
-        response_body={'id': str(opinion.id)},
+        response_body={'id': str(opinion.id), 'statements_returned': len(deliberation.statements)},
     )
-    return OpinionResponse.from_orm(opinion)
-
-
-@router.post(
-    "/{deliberation_id}/start",
-    response_model=DeliberationResponse,
-    summary="Start deliberation early (creator only)"
-)
-async def start_deliberation(
-    deliberation_id: UUID,
-    agent: Agent = Depends(APIKeyAuth()),
-    db: Session = Depends(get_db)
-):
-    """
-    Manually start the deliberation, skipping the remaining join window.
-
-    Only the agent who created the deliberation can call this.
-    Requires at least 2 participants.
-
-    Args:
-        deliberation_id: UUID of the deliberation
-        agent: Authenticated agent (must be creator)
-        db: Database session
-
-    Returns:
-        DeliberationResponse with updated deliberation
-    """
-    deliberation = db.query(Deliberation).filter(Deliberation.id == deliberation_id).first()
-
-    if not deliberation:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Deliberation not found"
-        )
-
-    try:
-        service = DeliberationService(db)
-        await service.start_deliberation(deliberation, agent)
-    except PermissionError as e:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(e)
-        )
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
-    except Exception as e:
-        error_msg = str(e)
-        logger.error(f"Failed to start deliberation: {error_msg}", exc_info=True)
-        if "429" in error_msg or "quota" in error_msg.lower() or "rate" in error_msg.lower():
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="LLM API rate limit exceeded. Please try again later."
-            )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to start deliberation. Please try again later."
-        )
-
-    return DeliberationResponse.from_orm(deliberation)
+    return ContinuousOpinionResponse(
+        opinion=OpinionResponse.from_orm(opinion),
+        statements=[StatementResponse.from_orm(s) for s in deliberation.statements],
+        my_status=AgentStatusResponse(**status_dict),
+    )
 
 
 @router.get(
@@ -676,7 +402,7 @@ async def get_statements(
     db: Session = Depends(get_db)
 ):
     """
-    Get candidate statements for the current round, enriched with per-agent context.
+    Get candidate statements enriched with per-agent context.
 
     Returns:
     - statements: each with is_new (added after your last ranking) and your_previous_rank
@@ -703,9 +429,10 @@ async def get_statements(
             detail="You must submit your opinion before viewing consensus statements"
         )
 
-    # Get statements for current round
-    service = DeliberationService(db)
-    statements = service.get_current_statements(deliberation)
+    # Get all statements
+    statements = db.query(StatementModel).filter(
+        StatementModel.deliberation_id == deliberation_id
+    ).all()
 
     # Get agent's latest ranking to determine is_new and previous ranks
     agent_ranking = db.query(Ranking).filter(
@@ -743,7 +470,7 @@ async def get_statements(
 
 @router.post(
     "/{deliberation_id}/rankings",
-    response_model=Union[ContinuousRankingResponse, RankingResponse],
+    response_model=ContinuousRankingResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Submit statement rankings"
 )
@@ -756,23 +483,13 @@ async def submit_ranking(
     agent: Agent = Depends(APIKeyAuth()),
     db: Session = Depends(get_db)
 ):
-    _ranking_start = time.time()
     """
     Submit rankings for candidate statements.
 
-    For continuous deliberations, returns enriched response with my_status
-    so agent knows what to do next (e.g. add_statement).
-
-    Args:
-        deliberation_id: UUID of the deliberation
-        request: Statement rankings
-        background_tasks: FastAPI background tasks
-        agent: Authenticated agent
-        db: Database session
-
-    Returns:
-        RankingResponse (staged) or ContinuousRankingResponse (continuous)
+    Returns enriched response with my_status so agent knows what to do next.
     """
+    _ranking_start = time.time()
+
     deliberation = db.query(Deliberation).filter(Deliberation.id == deliberation_id).first()
 
     if not deliberation:
@@ -781,96 +498,14 @@ async def submit_ranking(
             detail="Deliberation not found"
         )
 
-    # Handle continuous mechanism — return enriched response with my_status
-    if deliberation.mechanism_type == MechanismType.CONTINUOUS:
-        service = ContinuousDeliberationService(db)
-        try:
-            rankings_dicts = [r.model_dump(mode="json") for r in body.statement_rankings]
-            ranking = service.submit_ranking(deliberation, agent, rankings_dicts)
-        except ValueError as e:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-
-        status_dict = service.get_agent_status(deliberation, agent)
-        background_tasks.add_task(
-            log_agent_request,
-            agent_id=str(agent.id),
-            agent_name=agent.name,
-            method='POST',
-            endpoint='submit_ranking',
-            response_status=201,
-            latency_ms=int((time.time() - _ranking_start) * 1000),
-            deliberation_id=str(deliberation_id),
-            request_body={'statement_count': len(body.statement_rankings)},
-            response_body={'id': str(ranking.id)},
-        )
-        return ContinuousRankingResponse(
-            ranking=RankingResponse.from_orm(ranking),
-            my_status=AgentStatusResponse(**status_dict),
-        )
-
-    # --- Staged mechanism logic below ---
-
-    # Check if deliberation is in ranking stage
-    if deliberation.stage != DeliberationStage.RANKING:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Deliberation is in {deliberation.stage} stage, not accepting rankings"
-        )
-
-    # Check if agent already submitted for this round
-    existing = db.query(Ranking).filter(
-        Ranking.deliberation_id == deliberation_id,
-        Ranking.agent_id == agent.id,
-        Ranking.round_number == deliberation.current_critique_round
-    ).first()
-
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Agent has already submitted rankings for this round"
-        )
-
-    # Resolve short ID prefixes to full UUIDs
-    from app.services.id_resolution import resolve_statement_ids
+    service = ContinuousDeliberationService(db)
     try:
-        id_map = resolve_statement_ids(
-            db, deliberation_id,
-            [r.statement_id for r in body.statement_rankings],
-        )
+        rankings_dicts = [r.model_dump(mode="json") for r in body.statement_rankings]
+        ranking = service.submit_ranking(deliberation, agent, rankings_dicts)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
-    # Create ranking — convert to dicts with resolved full UUIDs
-    rankings_dicts = [
-        {"statement_id": id_map[r.statement_id], "rank": r.rank}
-        for r in body.statement_rankings
-    ]
-    ranking = Ranking(
-        deliberation_id=deliberation_id,
-        agent_id=agent.id,
-        round_number=deliberation.current_critique_round,
-        statement_rankings=rankings_dicts
-    )
-
-    db.add(ranking)
-    db.commit()
-    db.refresh(ranking)
-
-    # Check for state transition in background with fresh DB session
-    def check_transition():
-        from app.database import SessionLocal
-        fresh_db = SessionLocal()
-        try:
-            import asyncio
-            service = DeliberationService(fresh_db)
-            fresh_delib = fresh_db.query(Deliberation).filter(
-                Deliberation.id == deliberation_id
-            ).first()
-            asyncio.run(service.check_and_transition_state(fresh_delib))
-        finally:
-            fresh_db.close()
-
-    background_tasks.add_task(check_transition)
+    status_dict = service.get_agent_status(deliberation, agent)
     background_tasks.add_task(
         log_agent_request,
         agent_id=str(agent.id),
@@ -881,272 +516,12 @@ async def submit_ranking(
         latency_ms=int((time.time() - _ranking_start) * 1000),
         deliberation_id=str(deliberation_id),
         request_body={'statement_count': len(body.statement_rankings)},
-        response_body={'id': str(ranking.id), 'round_number': ranking.round_number},
+        response_body={'id': str(ranking.id)},
     )
-    return RankingResponse.from_orm(ranking)
-
-
-@router.post(
-    "/{deliberation_id}/critiques",
-    response_model=CritiqueResponse,
-    status_code=status.HTTP_201_CREATED,
-    summary="Submit a critique"
-)
-async def submit_critique(
-    deliberation_id: UUID,
-    request: CritiqueSubmitRequest,
-    background_tasks: BackgroundTasks,
-    agent: Agent = Depends(APIKeyAuth()),
-    db: Session = Depends(get_db)
-):
-    """
-    Submit a critique of the winning statement.
-
-    Only valid during CRITIQUE stage. Each agent submits one critique per round.
-
-    Args:
-        deliberation_id: UUID of the deliberation
-        request: Critique text
-        background_tasks: FastAPI background tasks
-        agent: Authenticated agent
-        db: Database session
-
-    Returns:
-        CritiqueResponse with submitted critique
-    """
-    deliberation = db.query(Deliberation).filter(Deliberation.id == deliberation_id).first()
-
-    if not deliberation:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Deliberation not found"
-        )
-
-    # Check if deliberation is in critique stage
-    if deliberation.stage != DeliberationStage.CRITIQUE:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Deliberation is in {deliberation.stage} stage, not accepting critiques"
-        )
-
-    # Get winning statement
-    service = DeliberationService(db)
-    winner = service.get_winning_statement(deliberation)
-
-    if not winner:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="No winning statement found for current round"
-        )
-
-    # Check if agent already submitted for this round
-    existing = db.query(Critique).filter(
-        Critique.deliberation_id == deliberation_id,
-        Critique.agent_id == agent.id,
-        Critique.round_number == deliberation.current_critique_round
-    ).first()
-
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Agent has already submitted a critique for this round"
-        )
-
-    # Create critique
-    critique = Critique(
-        deliberation_id=deliberation_id,
-        agent_id=agent.id,
-        winning_statement_id=winner.id,
-        round_number=deliberation.current_critique_round,
-        critique_text=request.critique_text
+    return ContinuousRankingResponse(
+        ranking=RankingResponse.from_orm(ranking),
+        my_status=AgentStatusResponse(**status_dict),
     )
-
-    db.add(critique)
-    db.commit()
-    db.refresh(critique)
-
-    # Check for state transition - this will block during Habermas Machine (30-60s)
-    db.refresh(deliberation)
-    print(f"[DEBUG] Checking critique transition: {len([c for c in deliberation.critiques if c.round_number == deliberation.current_critique_round])} critiques for round {deliberation.current_critique_round}")
-
-    try:
-        service = DeliberationService(db)
-        result = await service.check_and_transition_state(deliberation)
-        print(f"[DEBUG] Transition result: {result}, new stage: {deliberation.stage}")
-    except Exception as e:
-        print(f"[DEBUG] Transition error: {e}")
-        import traceback
-        traceback.print_exc()
-
-        # Check if it's an API quota/rate limit error
-        error_msg = str(e)
-        logger.error(f"Critique transition error: {error_msg}", exc_info=True)
-        if "429" in error_msg or "quota" in error_msg.lower() or "rate" in error_msg.lower():
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="LLM API rate limit exceeded. Please try again later."
-            )
-
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to process deliberation. Please try again later."
-        )
-
-    return CritiqueResponse.from_orm(critique)
-
-
-@router.post(
-    "/{deliberation_id}/feedback",
-    response_model=HumanFeedbackResponse,
-    status_code=status.HTTP_201_CREATED,
-    summary="Submit human feedback"
-)
-async def submit_feedback(
-    deliberation_id: UUID,
-    request: HumanFeedbackSubmitRequest,
-    background_tasks: BackgroundTasks,
-    agent: Agent = Depends(APIKeyAuth()),
-    db: Session = Depends(get_db)
-):
-    _feedback_start = time.time()
-    """
-    Submit human feedback on the final consensus.
-
-    Only valid during CONCLUDED stage. Each agent submits feedback once.
-
-    Args:
-        deliberation_id: UUID of the deliberation
-        request: Feedback details (agreement_level, feedback_text)
-        background_tasks: FastAPI background tasks
-        agent: Authenticated agent
-        db: Database session
-
-    Returns:
-        HumanFeedbackResponse with submitted feedback
-    """
-    deliberation = db.query(Deliberation).filter(Deliberation.id == deliberation_id).first()
-
-    if not deliberation:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Deliberation not found"
-        )
-
-    # Check if deliberation is concluded
-    if deliberation.stage != DeliberationStage.CONCLUDED:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Deliberation is in {deliberation.stage} stage, not accepting feedback"
-        )
-
-    # Get final statement
-    final_statement = deliberation.get_final_statement()
-
-    if not final_statement:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="No final statement found"
-        )
-
-    # Check if agent already submitted
-    existing = db.query(HumanFeedback).filter(
-        HumanFeedback.deliberation_id == deliberation_id,
-        HumanFeedback.agent_id == agent.id
-    ).first()
-
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Agent has already submitted feedback for this deliberation"
-        )
-
-    # Create feedback
-    feedback = HumanFeedback(
-        deliberation_id=deliberation_id,
-        agent_id=agent.id,
-        final_statement_id=final_statement.id,
-        agreement_level=request.agreement_level,
-        feedback_text=request.feedback_text
-    )
-
-    db.add(feedback)
-    db.commit()
-    db.refresh(feedback)
-
-    # Check for state transition in background with fresh DB session
-    def check_transition():
-        from app.database import SessionLocal
-        fresh_db = SessionLocal()
-        try:
-            service = DeliberationService(fresh_db)
-            fresh_delib = fresh_db.query(Deliberation).filter(
-                Deliberation.id == deliberation_id
-            ).first()
-            service._check_concluded_to_finalized_transition(fresh_delib)
-        finally:
-            fresh_db.close()
-
-    background_tasks.add_task(check_transition)
-    background_tasks.add_task(
-        log_agent_request,
-        agent_id=str(agent.id),
-        agent_name=agent.name,
-        method='POST',
-        endpoint='submit_feedback',
-        response_status=201,
-        latency_ms=int((time.time() - _feedback_start) * 1000),
-        deliberation_id=str(deliberation_id),
-        request_body={'agreement_level': request.agreement_level},
-        response_body={'id': str(feedback.id)},
-    )
-    return HumanFeedbackResponse.from_orm(feedback)
-
-
-@router.post(
-    "/{deliberation_id}/reprocess",
-    response_model=DeliberationResponse,
-    summary="Retry state transition for a stuck deliberation"
-)
-@limiter.limit("2/minute")
-async def reprocess_deliberation(
-    deliberation_id: UUID,
-    request: Request,
-    agent: Agent = Depends(APIKeyAuth()),
-    db: Session = Depends(get_db)
-):
-    """
-    Re-trigger the state transition for a deliberation that got stuck
-    (e.g. due to a failed Habermas Machine call).
-
-    Requires authentication. Only the deliberation creator can reprocess.
-    """
-    deliberation = db.query(Deliberation).filter(Deliberation.id == deliberation_id).first()
-
-    if not deliberation:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Deliberation not found"
-        )
-
-    # Authorization: only the creator can reprocess
-    if deliberation.created_by_agent_id != agent.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only the deliberation creator can reprocess"
-        )
-
-    try:
-        service = DeliberationService(db)
-        result = await service.check_and_transition_state(deliberation)
-        logger.info(f"[REPROCESS] Transition result: {result}, new stage: {deliberation.stage}")
-    except Exception as e:
-        logger.error(f"[REPROCESS] Error: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Reprocessing failed. Please try again later."
-        )
-
-    return DeliberationResponse.from_orm(deliberation)
 
 
 def _compute_pca_2d(matrix: np.ndarray) -> np.ndarray:
@@ -1171,9 +546,6 @@ async def get_cluster(
     Return 2D PCA coordinates for all statements in this deliberation.
 
     Embeddings are generated lazily on first call and persisted to the DB.
-    Subsequent calls skip re-embedding for statements that already have
-    embeddings stored, so only new statements incur API calls.
-
     No authentication required — this is a public read-only endpoint.
     """
     deliberation = db.query(Deliberation).filter(Deliberation.id == deliberation_id).first()
@@ -1203,7 +575,7 @@ async def get_cluster(
     if len(embedded) < 2:
         return ClusterResponse(points=[], total=0, deliberation_id=str(deliberation_id))
 
-    # PCA: reduce 1536-dim embeddings to 2D
+    # PCA: reduce embeddings to 2D
     matrix = np.array([list(s.statement_embedding) for s in embedded], dtype=np.float64)
     coords = _compute_pca_2d(matrix)
 
@@ -1221,66 +593,3 @@ async def get_cluster(
     ]
 
     return ClusterResponse(points=points, total=len(points), deliberation_id=str(deliberation_id))
-
-
-@router.get(
-    "/{deliberation_id}/result",
-    response_model=DeliberationDetailResponse,
-    summary="Get final deliberation results"
-)
-async def get_result(
-    deliberation_id: UUID,
-    agent: Optional[Agent] = Depends(OptionalAPIKeyAuth()),
-    db: Session = Depends(get_db)
-):
-    """
-    Get complete results of a finalized deliberation.
-
-    Only available for FINALIZED deliberations.
-    When called by an authenticated agent, only that agent's own opinion is returned.
-
-    Args:
-        deliberation_id: UUID of the deliberation
-        agent: Optional authenticated agent
-        db: Database session
-
-    Returns:
-        DeliberationDetailResponse with full results
-    """
-    deliberation = db.query(Deliberation).filter(Deliberation.id == deliberation_id).first()
-
-    if not deliberation:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Deliberation not found"
-        )
-
-    if deliberation.stage != DeliberationStage.FINALIZED:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Deliberation is not finalized yet (current stage: {deliberation.stage})"
-        )
-
-    # Fetch the creator agent
-    creator = db.query(Agent).filter(Agent.id == deliberation.created_by_agent_id).first()
-    if not creator:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Creator agent not found"
-        )
-
-    # If an agent is authenticated, only return their own opinion
-    if agent:
-        opinions = [o for o in deliberation.opinions if o.agent_id == agent.id]
-    else:
-        opinions = list(deliberation.opinions)
-
-    return DeliberationDetailResponse(
-        deliberation=DeliberationResponse.from_orm(deliberation),
-        created_by=creator,
-        opinions=[OpinionResponse.from_orm(o) for o in opinions],
-        statements=[StatementResponse.from_orm(s) for s in deliberation.statements],
-        rankings=[RankingResponse.from_orm(r) for r in deliberation.rankings],
-        critiques=[CritiqueResponse.from_orm(c) for c in deliberation.critiques],
-        human_feedback=[HumanFeedbackResponse.from_orm(f) for f in deliberation.human_feedback]
-    )

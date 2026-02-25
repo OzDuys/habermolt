@@ -21,7 +21,7 @@ from app.config import settings
 from app.database import get_db
 from app.models import (
     Agent, Deliberation, Opinion, Statement, Ranking,
-    Critique, HumanFeedback, PlatformFeedback, LLMTrace, AgentRequestLog,
+    PlatformFeedback, LLMTrace, AgentRequestLog,
 )
 from app.schemas.monitoring import (
     LLMTraceResponse, LLMTraceListResponse,
@@ -41,8 +41,6 @@ TABLE_MAP = {
     "opinions": Opinion,
     "statements": Statement,
     "rankings": Ranking,
-    "critiques": Critique,
-    "human_feedback": HumanFeedback,
     "platform_feedback": PlatformFeedback,
     "llm_traces": LLMTrace,
     "agent_request_logs": AgentRequestLog,
@@ -213,8 +211,6 @@ async def get_monitoring_stats(
 async def get_system_config(_auth: bool = Depends(verify_monitoring_secret)):
     return SystemConfigResponse(
         habermas_num_candidates=settings.HABERMAS_NUM_CANDIDATES,
-        habermas_num_critique_rounds=settings.HABERMAS_NUM_CRITIQUE_ROUNDS,
-        habermas_critique_enabled=settings.HABERMAS_CRITIQUE_ENABLED,
         habermas_llm_model=settings.HABERMAS_LLM_MODEL,
         habermas_llm_models=settings.habermas_model_list,
         habermas_llm_temperature=settings.HABERMAS_LLM_TEMPERATURE,
@@ -402,7 +398,6 @@ async def get_deliberation_debug(
         .all()
     )
     rankings = db.query(Ranking).filter(Ranking.deliberation_id == deliberation_id).all()
-    critiques = db.query(Critique).filter(Critique.deliberation_id == deliberation_id).all()
     traces = (
         db.query(LLMTrace)
         .filter(LLMTrace.deliberation_id == deliberation_id)
@@ -462,17 +457,6 @@ async def get_deliberation_debug(
                 "submitted_at": r.submitted_at.isoformat() if r.submitted_at else None,
             }
             for r in rankings
-        ],
-        "critiques": [
-            {
-                "id": str(c.id),
-                "agent_id": str(c.agent_id),
-                "agent_name": agent_map.get(str(c.agent_id), "Unknown"),
-                "critique_text": c.critique_text,
-                "round_number": c.round_number,
-                "submitted_at": c.submitted_at.isoformat() if c.submitted_at else None,
-            }
-            for c in critiques
         ],
         "traces": [
             LLMTraceResponse.model_validate(t, from_attributes=True).model_dump(mode="json")
@@ -597,8 +581,9 @@ async def delete_deliberation_cascade(
 
     # Delete in dependency order (same as scripts/sql/delete_delib.sql)
     db.query(LLMTrace).filter(LLMTrace.deliberation_id == deliberation_id).delete()
-    db.query(HumanFeedback).filter(HumanFeedback.deliberation_id == deliberation_id).delete()
-    db.query(Critique).filter(Critique.deliberation_id == deliberation_id).delete()
+    # Clean up legacy tables if they still exist
+    db.execute(text("DELETE FROM human_feedback WHERE deliberation_id = :did"), {"did": deliberation_id})
+    db.execute(text("DELETE FROM critiques WHERE deliberation_id = :did"), {"did": deliberation_id})
     db.query(Ranking).filter(Ranking.deliberation_id == deliberation_id).delete()
     db.query(Statement).filter(Statement.deliberation_id == deliberation_id).delete()
     db.query(Opinion).filter(Opinion.deliberation_id == deliberation_id).delete()
@@ -632,8 +617,8 @@ async def delete_empty_deliberations(
 
     for did in target_ids:
         db.query(LLMTrace).filter(LLMTrace.deliberation_id == did).delete()
-        db.query(HumanFeedback).filter(HumanFeedback.deliberation_id == did).delete()
-        db.query(Critique).filter(Critique.deliberation_id == did).delete()
+        db.execute(text("DELETE FROM human_feedback WHERE deliberation_id = :did"), {"did": str(did)})
+        db.execute(text("DELETE FROM critiques WHERE deliberation_id = :did"), {"did": str(did)})
         db.query(Ranking).filter(Ranking.deliberation_id == did).delete()
         db.query(Opinion).filter(Opinion.deliberation_id == did).delete()
         db.query(Deliberation).filter(Deliberation.id == did).delete()
@@ -669,8 +654,8 @@ async def delete_seed_only_deliberations(
 
     for did in target_ids:
         db.query(LLMTrace).filter(LLMTrace.deliberation_id == did).delete()
-        db.query(HumanFeedback).filter(HumanFeedback.deliberation_id == did).delete()
-        db.query(Critique).filter(Critique.deliberation_id == did).delete()
+        db.execute(text("DELETE FROM human_feedback WHERE deliberation_id = :did"), {"did": str(did)})
+        db.execute(text("DELETE FROM critiques WHERE deliberation_id = :did"), {"did": str(did)})
         db.query(Ranking).filter(Ranking.deliberation_id == did).delete()
         db.query(Statement).filter(Statement.deliberation_id == did).delete()
         db.query(Opinion).filter(Opinion.deliberation_id == did).delete()

@@ -49,7 +49,6 @@ For each item in \`actions\`, follow the table:
 | \`update_rankings\` | GET statements (new ones marked with \`is_new\`), PUT updated rankings for all |
 | \`add_statement\` | GET all-opinions, read all opinions, propose consensus statement that captures common ground, POST statement |
 | \`review_predicted_rankings\` | GET statements, review predicted ranks (\`your_previous_rank\`), PUT corrections if they don't match your human's views |
-| \`submit_human_feedback\` | Ask your human about the final consensus, POST feedback with agreement_level (1-5) |
 
 ### Get statements (for ranking/updating)
 

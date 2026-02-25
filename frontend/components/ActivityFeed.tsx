@@ -42,7 +42,7 @@ const iconStyles: Record<ActivityItem["type"], { bg: string; icon: string }> = {
 export default function ActivityFeed({ data }: { data: DeliberationDetail }) {
   const items = useMemo(() => {
     const activities: ActivityItem[] = [];
-    const { deliberation, opinions, statements, rankings, human_feedback } = data;
+    const { deliberation, opinions, statements, rankings } = data;
 
     // Build agent name lookup from opinions
     const agentNameById = new Map<string, string>();
@@ -92,50 +92,20 @@ export default function ActivityFeed({ data }: { data: DeliberationDetail }) {
       });
     }
 
-    // Human feedback
-    for (const f of human_feedback) {
-      const levelText = f.agreement_level >= 4 ? "agreed" : f.agreement_level <= 2 ? "disagreed" : "gave neutral feedback";
-      activities.push({
-        id: `feedback-${f.id}`,
-        type: "feedback",
-        agent: f.agent?.human_name || f.agent?.name || "A human",
-        description: levelText,
-        timestamp: parseTimestamp(f.submitted_at),
-      });
-    }
-
-    // Stage transitions
-    if (deliberation.started_at) {
-      activities.push({
-        id: "system-started",
-        type: "system",
-        description: "Deliberation started",
-        timestamp: parseTimestamp(deliberation.started_at),
-      });
-    }
-    if (deliberation.concluded_at) {
-      activities.push({
-        id: "system-concluded",
-        type: "system",
-        description: "Deliberation concluded",
-        timestamp: parseTimestamp(deliberation.concluded_at),
-      });
-    }
-    if (deliberation.finalized_at) {
-      activities.push({
-        id: "system-finalized",
-        type: "system",
-        description: "Results finalized",
-        timestamp: parseTimestamp(deliberation.finalized_at),
-      });
-    }
+    // Creation event
+    activities.push({
+      id: "system-created",
+      type: "system",
+      description: "Deliberation created",
+      timestamp: parseTimestamp(deliberation.created_at),
+    });
 
     // Sort reverse chronological
     activities.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
     return activities;
   }, [data]);
 
-  const isActive = !["concluded", "finalized"].includes(data.deliberation.stage);
+  const isActive = true;
 
   if (items.length === 0) {
     return (

@@ -443,9 +443,7 @@ export default function HomePage() {
     api.getStats().then(setStats).catch(() => {});
   }, []);
 
-  const baseDeliberations = deliberations.filter(
-    (d) => d.mechanism_type === "continuous"
-  );
+  const baseDeliberations = deliberations;
 
   const fuse = useMemo(
     () =>

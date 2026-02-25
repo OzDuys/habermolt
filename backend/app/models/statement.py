@@ -55,9 +55,6 @@ class Statement(Base):
     # Relationships
     deliberation = relationship("Deliberation", back_populates="statements")
     contributed_by = relationship("Agent", foreign_keys=[contributed_by_agent_id])
-    critiques = relationship("Critique", back_populates="winning_statement")
-    human_feedback_entries = relationship("HumanFeedback", back_populates="final_statement")
-
     def __repr__(self) -> str:
         return f"<Statement(round={self.round_number}, ranking={self.social_ranking}, text='{self.statement_text[:50]}...')>"
 

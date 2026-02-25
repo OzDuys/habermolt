@@ -24,7 +24,6 @@ const ENDPOINTS = [
   "submit_opinion",
   "submit_ranking",
   "submit_statement",
-  "submit_feedback",
 ];
 
 function getSecret() {

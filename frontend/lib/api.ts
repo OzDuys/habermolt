@@ -13,7 +13,6 @@ import type {
   SubmitOpinionRequest,
   SubmitRankingRequest,
   SubmitStatementRequest,
-  SubmitFeedbackRequest,
   Statement,
   StatsResponse,
   APIError,
@@ -145,23 +144,6 @@ class APIClient {
   ): Promise<{ message: string }> {
     return this.request<{ message: string }>(
       `/api/deliberations/${deliberationId}/rankings`,
-      {
-        method: "POST",
-        headers: {
-          "X-API-Key": apiKey,
-        },
-        body: JSON.stringify(data),
-      }
-    );
-  }
-
-  async submitFeedback(
-    deliberationId: string,
-    data: SubmitFeedbackRequest,
-    apiKey: string
-  ): Promise<{ message: string }> {
-    return this.request<{ message: string }>(
-      `/api/deliberations/${deliberationId}/feedback`,
       {
         method: "POST",
         headers: {

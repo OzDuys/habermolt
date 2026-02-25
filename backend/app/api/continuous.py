@@ -1,7 +1,7 @@
 """
-API routes specific to continuous deliberation mechanism.
+API routes for continuous deliberation endpoints.
 
-These endpoints only work with continuous deliberations (mechanism_type = "continuous").
+Includes statement submission, current-winner, all-opinions, and ranking updates.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from uuid import UUID
 
 from app.database import get_db
-from app.models import Agent, Deliberation, MechanismType, DeliberationStage, Opinion, Ranking, Statement
+from app.models import Agent, Deliberation, DeliberationStage, Opinion, Ranking, Statement
 from app.middleware.auth import APIKeyAuth
 from app.services.continuous_deliberation_service import ContinuousDeliberationService
 from app.schemas import (
@@ -28,13 +28,11 @@ from app.schemas import (
 router = APIRouter(prefix="/deliberations", tags=["continuous"])
 
 
-def _get_continuous_deliberation(deliberation_id: UUID, db: Session) -> Deliberation:
-    """Helper to fetch and validate a continuous deliberation."""
+def _get_active_deliberation(deliberation_id: UUID, db: Session) -> Deliberation:
+    """Helper to fetch and validate an active deliberation."""
     deliberation = db.query(Deliberation).filter(Deliberation.id == deliberation_id).first()
     if not deliberation:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Deliberation not found")
-    if deliberation.mechanism_type != MechanismType.CONTINUOUS:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This endpoint is only for continuous deliberations")
     if deliberation.stage != DeliberationStage.ACTIVE:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Deliberation is not active")
     return deliberation
@@ -44,7 +42,7 @@ def _get_continuous_deliberation(deliberation_id: UUID, db: Session) -> Delibera
     "/{deliberation_id}/statements",
     response_model=StatementResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Add a statement to the pool (continuous only)"
+    summary="Add a statement to the pool"
 )
 async def add_statement(
     deliberation_id: UUID,
@@ -53,7 +51,7 @@ async def add_statement(
     db: Session = Depends(get_db),
 ):
     """Add a new consensus statement to the pool. Triggers predicted rankings for past agents."""
-    deliberation = _get_continuous_deliberation(deliberation_id, db)
+    deliberation = _get_active_deliberation(deliberation_id, db)
     service = ContinuousDeliberationService(db)
 
     try:
@@ -69,7 +67,7 @@ async def add_statement(
 @router.get(
     "/{deliberation_id}/current-winner",
     response_model=CurrentWinnerResponse,
-    summary="Get current winning statement (continuous only)"
+    summary="Get current winning statement"
 )
 async def get_current_winner(
     deliberation_id: UUID,
@@ -79,13 +77,10 @@ async def get_current_winner(
     deliberation = db.query(Deliberation).filter(Deliberation.id == deliberation_id).first()
     if not deliberation:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Deliberation not found")
-    if deliberation.mechanism_type != MechanismType.CONTINUOUS:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This endpoint is only for continuous deliberations")
 
     service = ContinuousDeliberationService(db)
     winner = service.get_current_winner(deliberation)
 
-    from app.models import Ranking, Opinion
     total_rankings = db.query(Ranking).filter(
         Ranking.deliberation_id == deliberation_id,
         Ranking.round_number == 0,
@@ -104,7 +99,7 @@ async def get_current_winner(
 @router.get(
     "/{deliberation_id}/all-opinions",
     response_model=AllOpinionsResponse,
-    summary="Get all opinions + statements for proposing consensus (continuous only)",
+    summary="Get all opinions + statements for proposing consensus",
 )
 async def get_all_opinions(
     deliberation_id: UUID,
@@ -115,10 +110,8 @@ async def get_all_opinions(
     Returns all opinions and existing statements for a deliberation.
 
     Gated: agent must have submitted opinion AND ranking.
-    This endpoint is used when an agent wants to propose a consensus statement —
-    they need to see all opinions to find common ground.
     """
-    deliberation = _get_continuous_deliberation(deliberation_id, db)
+    deliberation = _get_active_deliberation(deliberation_id, db)
 
     # Gate: must have opinion
     has_opinion = db.query(Opinion).filter(
@@ -183,7 +176,7 @@ async def get_all_opinions(
 @router.put(
     "/{deliberation_id}/rankings",
     response_model=ContinuousRankingResponse,
-    summary="Update rankings (continuous only)"
+    summary="Update rankings"
 )
 async def update_ranking(
     deliberation_id: UUID,
@@ -191,8 +184,8 @@ async def update_ranking(
     agent: Agent = Depends(APIKeyAuth()),
     db: Session = Depends(get_db),
 ):
-    """Update/correct rankings for a continuous deliberation (e.g., fix predicted rankings)."""
-    deliberation = _get_continuous_deliberation(deliberation_id, db)
+    """Update/correct rankings (e.g., fix predicted rankings)."""
+    deliberation = _get_active_deliberation(deliberation_id, db)
     service = ContinuousDeliberationService(db)
 
     try:

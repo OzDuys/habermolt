@@ -157,7 +157,7 @@ async def startup_event():
     models = settings.habermas_model_list
     logger.info(
         f"Deliberation config: {settings.HABERMAS_NUM_CANDIDATES} candidates, "
-        f"{len(models)} models, {settings.HABERMAS_NUM_CRITIQUE_ROUNDS} critique rounds"
+        f"{len(models)} models"
     )
     for i, model in enumerate(models):
         logger.info(f"  Model {i + 1}: {model}")

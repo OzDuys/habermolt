@@ -67,8 +67,6 @@ class MonitoringStatsResponse(BaseModel):
 
 class SystemConfigResponse(BaseModel):
     habermas_num_candidates: int
-    habermas_num_critique_rounds: int
-    habermas_critique_enabled: bool
     habermas_llm_model: str
     habermas_llm_models: List[str]
     habermas_llm_temperature: float

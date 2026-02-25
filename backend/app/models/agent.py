@@ -48,8 +48,6 @@ class Agent(Base):
     )
     opinions = relationship("Opinion", back_populates="agent", cascade="all, delete-orphan")
     rankings = relationship("Ranking", back_populates="agent", cascade="all, delete-orphan")
-    critiques = relationship("Critique", back_populates="agent", cascade="all, delete-orphan")
-    human_feedback = relationship("HumanFeedback", back_populates="agent", cascade="all, delete-orphan")
     platform_feedback = relationship("PlatformFeedback", back_populates="agent", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:

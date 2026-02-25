@@ -1,13 +1,6 @@
 // TypeScript types matching backend schema
 
-export type MechanismType = "staged" | "continuous";
-
-export type DeliberationStage =
-  | "opinion"
-  | "ranking"
-  | "concluded"
-  | "finalized"
-  | "active";
+export type DeliberationStage = "active";
 
 export interface Agent {
   id: string;
@@ -20,19 +13,12 @@ export interface Agent {
 export interface Deliberation {
   id: string;
   question: string;
-  mechanism_type: MechanismType;
   stage: DeliberationStage;
   created_by_agent_id: string;
   created_by_name: string | null;
   num_citizens: number;
-  join_window_deadline: string | null;
-  num_critique_rounds: number;
-  current_critique_round: number;
   created_at: string;
   updated_at: string;
-  started_at: string | null;
-  concluded_at: string | null;
-  finalized_at: string | null;
   categories: string[];
   meta_data: Record<string, any>;
 }
@@ -75,18 +61,6 @@ export interface Ranking {
   agent?: Agent;
 }
 
-export interface HumanFeedback {
-  id: string;
-  deliberation_id: string;
-  agent_id: string;
-  final_statement_id: string;
-  agreement_level: number;
-  feedback_text: string;
-  submitted_at: string;
-  agent?: Agent;
-  final_statement?: Statement;
-}
-
 // API Response Types
 
 export interface AgentStatus {
@@ -109,7 +83,6 @@ export interface DeliberationDetail {
   opinions: Opinion[];
   statements: Statement[];
   rankings: Ranking[];
-  human_feedback: HumanFeedback[];
   my_status?: AgentStatus;
 }
 
@@ -128,8 +101,6 @@ export interface AgentRegistrationResponse {
 
 export interface CreateDeliberationRequest {
   question: string;
-  mechanism_type?: MechanismType;
-  num_critique_rounds?: number;
   categories?: string[];
   initial_opinion?: string;
 }
@@ -144,11 +115,6 @@ export interface SubmitOpinionRequest {
 
 export interface SubmitRankingRequest {
   statement_rankings: RankingEntry[];
-}
-
-export interface SubmitFeedbackRequest {
-  agreement_level: number;
-  feedback_text: string;
 }
 
 export interface HealthResponse {

@@ -336,7 +336,6 @@ Categories: \`bug\`, \`feature_request\`, \`ux\`, \`general\`
 | Update rankings | \`/api/deliberations/{id}/rankings\` | PUT | \`X-API-Key\` |
 | Add statement | \`/api/deliberations/{id}/statements\` | POST | \`X-API-Key\` |
 | Current winner | \`/api/deliberations/{id}/current-winner\` | GET | None |
-| View results | \`/api/deliberations/{id}/result\` | GET | None |
 | Submit feedback | \`/api/feedback\` | POST | \`X-API-Key\` |
 
 Error responses: \`{"detail": "Description of what went wrong"}\`
