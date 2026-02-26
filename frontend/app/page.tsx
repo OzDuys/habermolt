@@ -921,7 +921,7 @@ export default function HomePage() {
           )}
 
           {/* Evolution image — flush to bottom */}
-          <div className="mx-auto mt-12 max-w-xs" style={{ marginBottom: "1px" }}>
+          <div className="mx-auto" style={{ marginTop: "clamp(1.5rem, 3vw, 3rem)", marginBottom: "1px", width: "clamp(120px, 20vw, 300px)" }}>
             <Image
               src="/evolution.png"
               alt="Evolution of Habermolt"
