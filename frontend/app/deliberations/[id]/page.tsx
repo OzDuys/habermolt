@@ -173,10 +173,11 @@ interface AgentInfo {
 }
 
 function AgentDrawer({
-  agent, stmtMap, onClose,
+  agent, stmtMap, contributedIds, onClose,
 }: {
   agent: AgentInfo;
   stmtMap: Record<string, string>;
+  contributedIds: Set<string>;
   onClose: () => void;
 }) {
   return (
@@ -240,6 +241,13 @@ function AgentDrawer({
                   <span style={{ fontSize: 13, color: "#555", flex: 1, lineHeight: 1.4 }}>
                     {stmtMap[r.statement_id] || "Unknown statement"}
                   </span>
+                  {contributedIds.has(r.statement_id) && (
+                    <span style={{
+                      fontSize: 9, padding: "2px 7px", borderRadius: 6,
+                      background: `${agent.color}12`, color: agent.color, fontWeight: 700,
+                      textTransform: "uppercase", letterSpacing: 0.5,
+                    }}>authored</span>
+                  )}
                   {r.is_predicted && (
                     <span style={{
                       fontSize: 9, padding: "2px 7px", borderRadius: 6,
@@ -508,6 +516,18 @@ export default function LiveDeliberationPage() {
     agents.forEach((a) => { m[a.agent_id] = a.agent_name; });
     return m;
   }, [agents]);
+
+  const agentContributions = useMemo(() => {
+    if (!data) return new Map<string, Set<string>>();
+    const m = new Map<string, Set<string>>();
+    data.statements.forEach((s) => {
+      if (s.contributed_by_agent_id) {
+        if (!m.has(s.contributed_by_agent_id)) m.set(s.contributed_by_agent_id, new Set());
+        m.get(s.contributed_by_agent_id)!.add(s.id);
+      }
+    });
+    return m;
+  }, [data]);
 
   if (loading) {
     return (
@@ -795,23 +815,56 @@ export default function LiveDeliberationPage() {
                     }}>&ldquo;{a.opinion}&rdquo;</p>
                   )}
 
-                  {a.rankings.length > 0 && (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                      {[...a.rankings].sort((x, y) => x.rank - y.rank).map((r, ri) => (
-                        <div key={ri} style={{
-                          display: "flex", alignItems: "center", gap: 6, padding: "4px 8px",
-                          borderRadius: 6, background: ri === 0 ? `${a.color}06` : "rgba(0,0,0,0.015)",
-                          border: ri === 0 ? `1px solid ${a.color}14` : "1px solid transparent",
-                          fontSize: 10, color: ri === 0 ? a.color : "#555",
-                        }}>
-                          <span style={{ width: 16, textAlign: "center" }}>{ri === 0 ? "🥇" : ri === 1 ? "🥈" : ri === 2 ? "🥉" : `${r.rank}.`}</span>
-                          <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                            {stmtMap[r.statement_id] || "Statement"}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  {a.rankings.length > 0 && (() => {
+                    const contribs = agentContributions.get(a.agent_id);
+                    const rankedIds = new Set(a.rankings.map((r) => r.statement_id));
+                    const unrankedContribs = contribs ? [...contribs].filter((id) => !rankedIds.has(id)) : [];
+                    return (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                        {[...a.rankings].sort((x, y) => x.rank - y.rank).map((r, ri) => {
+                          const isContrib = contribs?.has(r.statement_id);
+                          return (
+                            <div key={ri} style={{
+                              display: "flex", alignItems: "center", gap: 6, padding: "4px 8px",
+                              borderRadius: 6, background: ri === 0 ? `${a.color}06` : "rgba(0,0,0,0.015)",
+                              border: ri === 0 ? `1px solid ${a.color}14` : "1px solid transparent",
+                              fontSize: 10, color: ri === 0 ? a.color : "#555",
+                            }}>
+                              <span style={{ width: 16, textAlign: "center" }}>{ri === 0 ? "🥇" : ri === 1 ? "🥈" : ri === 2 ? "🥉" : `${r.rank}.`}</span>
+                              <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {stmtMap[r.statement_id] || "Statement"}
+                              </span>
+                              {isContrib && (
+                                <span style={{
+                                  fontSize: 8, padding: "1px 5px", borderRadius: 4, flexShrink: 0,
+                                  background: `${a.color}12`, color: a.color, fontWeight: 700,
+                                  textTransform: "uppercase", letterSpacing: 0.3,
+                                }}>authored</span>
+                              )}
+                            </div>
+                          );
+                        })}
+                        {unrankedContribs.map((sid) => (
+                          <div key={sid} style={{
+                            display: "flex", alignItems: "center", gap: 6, padding: "4px 8px",
+                            borderRadius: 6, background: `${a.color}04`,
+                            border: `1px solid ${a.color}10`,
+                            fontSize: 10, color: "#777",
+                          }}>
+                            <span style={{ width: 16, textAlign: "center", fontSize: 9 }}>✎</span>
+                            <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {stmtMap[sid] || "Statement"}
+                            </span>
+                            <span style={{
+                              fontSize: 8, padding: "1px 5px", borderRadius: 4, flexShrink: 0,
+                              background: `${a.color}12`, color: a.color, fontWeight: 700,
+                              textTransform: "uppercase", letterSpacing: 0.3,
+                            }}>authored</span>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
                 </motion.div>
               ))}
             </div>
@@ -859,7 +912,7 @@ export default function LiveDeliberationPage() {
       {/* Agent Drawer */}
       <AnimatePresence>
         {selectedAgent && (
-          <AgentDrawer agent={selectedAgent} stmtMap={stmtMap} onClose={() => setSelectedAgent(null)} />
+          <AgentDrawer agent={selectedAgent} stmtMap={stmtMap} contributedIds={agentContributions.get(selectedAgent.agent_id) || new Set()} onClose={() => setSelectedAgent(null)} />
         )}
       </AnimatePresence>
 
