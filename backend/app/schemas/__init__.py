@@ -17,10 +17,22 @@ from app.schemas.stats import StatsResponse
 
 from app.schemas.feedback import PlatformFeedbackRequest, PlatformFeedbackResponse
 
+from app.schemas.agent_activity import (
+    AgentRatingRequest,
+    AgentRatingResponse,
+    ConsensusRatingRequest,
+    ConsensusRatingResponse,
+    AgentActivityResponse,
+    ActivityDeliberation,
+    ActivityRankingItem,
+    ActivityAction,
+)
+
 from app.schemas.agent_status import (
     AgentHeartbeatResponse,
     AgentActionItem,
     DiscoveredDeliberation,
+    PendingFeedback,
 )
 
 from app.schemas.deliberation import (
@@ -89,4 +101,14 @@ __all__ = [
     "AgentHeartbeatResponse",
     "AgentActionItem",
     "DiscoveredDeliberation",
+    "PendingFeedback",
+    # Agent activity schemas
+    "AgentRatingRequest",
+    "AgentRatingResponse",
+    "ConsensusRatingRequest",
+    "ConsensusRatingResponse",
+    "AgentActivityResponse",
+    "ActivityDeliberation",
+    "ActivityRankingItem",
+    "ActivityAction",
 ]

@@ -6,7 +6,12 @@ Returns a pre-computed action list so agents make one API call instead of N+1.
 
 import time
 
-from fastapi import APIRouter, BackgroundTasks, Depends
+from datetime import datetime
+from typing import List
+from uuid import UUID
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
 
@@ -19,12 +24,14 @@ from app.models import (
     Ranking,
     Statement,
 )
+from app.models.agent_rating import AgentRating
 from app.middleware.auth import APIKeyAuth, get_current_agent
 from app.config import settings
 from app.schemas.agent_status import (
     AgentHeartbeatResponse,
     AgentActionItem,
     DiscoveredDeliberation,
+    PendingFeedback,
 )
 from app.services.agent_request_log_service import log_agent_request
 
@@ -164,10 +171,35 @@ async def get_agent_status(
                     participant_count=delib.num_citizens,
                 ))
 
+    # Query unacknowledged human feedback for this agent
+    pending_ratings = (
+        db.query(AgentRating, Deliberation.question)
+        .join(Deliberation, Deliberation.id == AgentRating.deliberation_id)
+        .filter(
+            AgentRating.agent_id == agent.id,
+            AgentRating.acknowledged_at.is_(None),
+        )
+        .order_by(AgentRating.submitted_at.desc())
+        .all()
+    )
+
+    pending_feedback = [
+        PendingFeedback(
+            rating_id=ar.id,
+            deliberation_id=ar.deliberation_id,
+            question=q,
+            rating=ar.rating,
+            feedback=ar.feedback,
+            submitted_at=ar.submitted_at,
+        )
+        for ar, q in pending_ratings
+    ]
+
     response = AgentHeartbeatResponse(
         is_claimed=is_claimed,
         actions=actions,
         discovered=discovered,
+        pending_feedback=pending_feedback,
     )
     background_tasks.add_task(
         log_agent_request,
@@ -181,7 +213,48 @@ async def get_agent_status(
             'is_claimed': is_claimed,
             'action_count': len(actions),
             'discovered_count': len(discovered),
+            'pending_feedback_count': len(pending_feedback),
             'actions': [{'deliberation_id': str(a.deliberation_id), 'action': a.action} for a in actions],
         },
     )
     return response
+
+
+class AcknowledgeFeedbackRequest(BaseModel):
+    """Request body for acknowledging human feedback."""
+    rating_ids: List[UUID]
+
+
+@router.post(
+    "/acknowledge-feedback",
+    summary="Acknowledge human feedback — mark ratings as processed",
+    status_code=status.HTTP_200_OK,
+)
+async def acknowledge_feedback(
+    body: AcknowledgeFeedbackRequest,
+    agent: Agent = Depends(APIKeyAuth()),
+    db: Session = Depends(get_db),
+):
+    """
+    Called by the agent after it has read and processed human feedback.
+    Marks the specified ratings as acknowledged so they don't appear in
+    future heartbeat responses.
+    """
+    updated = 0
+    now = datetime.utcnow()
+    for rating_id in body.rating_ids:
+        rating = (
+            db.query(AgentRating)
+            .filter(
+                AgentRating.id == rating_id,
+                AgentRating.agent_id == agent.id,
+                AgentRating.acknowledged_at.is_(None),
+            )
+            .first()
+        )
+        if rating:
+            rating.acknowledged_at = now
+            updated += 1
+
+    db.commit()
+    return {"acknowledged": updated}

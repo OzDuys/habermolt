@@ -1,14 +1,11 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
-import { headers } from "next/headers";
+import { getDevOrRealSession } from "@/lib/dev-auth";
 
 const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:8000";
 const INTERNAL_API_SECRET = process.env.INTERNAL_API_SECRET || "";
 
 export async function POST() {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  });
+  const session = await getDevOrRealSession();
 
   if (!session?.user?.id) {
     return NextResponse.json(

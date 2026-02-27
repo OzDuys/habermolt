@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState, useRef, useMemo } from "react";
-import { useParams } from "next/navigation";
+import { useEffect, useState, useRef, useMemo, useCallback } from "react";
+import { useParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import Image from "next/image";
 import { api } from "@/lib/api";
+import { useSession } from "@/lib/auth-client";
 import type { DeliberationDetail, ClusterPoint } from "@/lib/types";
 import StatementCluster from "@/components/StatementCluster";
 
@@ -409,6 +410,247 @@ function InlineActivityFeed({ data }: { data: DeliberationDetail }) {
   );
 }
 
+// ─── Consensus Rating Widget ────────────────────────────────────────────────
+
+interface ConsensusRatingData {
+  id: string;
+  deliberation_id: string;
+  statement_id: string | null;
+  representativeness: number;
+  specificity: number;
+  usefulness: number;
+  feedback: string | null;
+  submitted_at: string;
+}
+
+function StarRow({
+  label,
+  hint,
+  value,
+  onChange,
+}: {
+  label: string;
+  hint: string;
+  value: number;
+  onChange: (v: number) => void;
+}) {
+  const [hover, setHover] = useState(0);
+  return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: "#333" }}>{label}</div>
+        <div style={{ fontSize: 11, color: "#999" }}>{hint}</div>
+      </div>
+      <div style={{ display: "flex", gap: 2, flexShrink: 0 }}>
+        {[1, 2, 3, 4, 5].map((n) => (
+          <button
+            key={n}
+            type="button"
+            onClick={() => onChange(n)}
+            onMouseEnter={() => setHover(n)}
+            onMouseLeave={() => setHover(0)}
+            style={{
+              fontSize: 18, background: "none", border: "none", cursor: "pointer",
+              color: n <= (hover || value) ? "#c84a20" : "#ddd",
+              transition: "color 0.15s, transform 0.1s",
+              transform: n <= (hover || value) ? "scale(1.1)" : "scale(1)",
+              padding: 0,
+            }}
+          >★</button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ConsensusRatingWidget({
+  deliberationId,
+  winnerId,
+}: {
+  deliberationId: string;
+  winnerId: string | null;
+}) {
+  const { data: session } = useSession();
+  const router = useRouter();
+
+  const [existing, setExisting] = useState<ConsensusRatingData | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const [representativeness, setRepresentativeness] = useState(0);
+  const [specificity, setSpecificity] = useState(0);
+  const [usefulness, setUsefulness] = useState(0);
+  const [feedback, setFeedback] = useState("");
+
+  const consensusChanged = existing?.statement_id != null
+    && winnerId != null
+    && existing.statement_id !== winnerId;
+
+  // Fetch existing rating
+  useEffect(() => {
+    if (!session?.user?.id) return;
+    fetch(`/api/profile/rate-consensus?deliberation_id=${deliberationId}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data && data.id) {
+          setExisting(data);
+          setRepresentativeness(data.representativeness);
+          setSpecificity(data.specificity);
+          setUsefulness(data.usefulness);
+          setFeedback(data.feedback || "");
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoaded(true));
+  }, [session, deliberationId]);
+
+  const handleSubmit = useCallback(async () => {
+    if (!session?.user?.id) {
+      router.push("/sign-in");
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch("/api/profile/rate-consensus", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          deliberation_id: deliberationId,
+          representativeness,
+          specificity,
+          usefulness,
+          feedback: feedback || null,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setExisting(data);
+        setExpanded(false);
+      }
+    } catch {} finally {
+      setSaving(false);
+    }
+  }, [session, deliberationId, representativeness, specificity, usefulness, feedback, router]);
+
+  const handleClick = () => {
+    if (!session?.user?.id) {
+      router.push("/sign-in");
+      return;
+    }
+    setExpanded(true);
+  };
+
+  if (!loaded && session?.user?.id) return null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+      transition={{ delay: 0.5 }}
+      style={{ maxWidth: 540, width: "100%", marginTop: 16 }}
+    >
+      {consensusChanged && (
+        <div style={{
+          padding: "10px 16px", borderRadius: 12, marginBottom: 8,
+          background: "#fef3c7", border: "1px solid #f59e0b30",
+          fontSize: 12, color: "#92400e", lineHeight: 1.5,
+        }}>
+          The consensus has changed since you last rated — consider re-rating.
+        </div>
+      )}
+
+      {!expanded ? (
+        <motion.button
+          whileHover={{ scale: 1.01 }}
+          whileTap={{ scale: 0.99 }}
+          onClick={handleClick}
+          style={{
+            width: "100%", padding: "12px 20px", borderRadius: 14,
+            background: "rgba(255,255,255,0.5)", border: "1.5px solid rgba(200,74,32,0.1)",
+            cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+          }}
+        >
+          {existing && !consensusChanged ? (
+            <span style={{ fontSize: 12, color: "#888" }}>
+              You rated this consensus: {" "}
+              <span style={{ color: "#c84a20" }}>{"★".repeat(Math.round((existing.representativeness + existing.specificity + existing.usefulness) / 3))}</span>
+              <span style={{ color: "#ddd" }}>{"★".repeat(5 - Math.round((existing.representativeness + existing.specificity + existing.usefulness) / 3))}</span>
+              {" "}· tap to update
+            </span>
+          ) : (
+            <span style={{ fontSize: 12, fontWeight: 600, color: consensusChanged ? "#92400e" : "#c84a20" }}>
+              {consensusChanged ? "Re-rate the new consensus" : "Rate this consensus statement"}
+            </span>
+          )}
+        </motion.button>
+      ) : (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+          style={{
+            padding: "20px 24px", borderRadius: 20,
+            background: "rgba(255,255,255,0.85)", border: "1.5px solid rgba(200,74,32,0.1)",
+            boxShadow: "0 4px 20px rgba(0,0,0,0.04)",
+          }}
+        >
+          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, color: "#c84a20", textTransform: "uppercase", marginBottom: 16 }}>
+            Rate this consensus
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <StarRow
+              label="Representativeness"
+              hint="Does it fairly reflect the group's views?"
+              value={representativeness}
+              onChange={setRepresentativeness}
+            />
+            <StarRow
+              label="Specificity"
+              hint="Is it concrete and actionable, not vague?"
+              value={specificity}
+              onChange={setSpecificity}
+            />
+            <StarRow
+              label="Usefulness"
+              hint="Would you act on this or share it?"
+              value={usefulness}
+              onChange={setUsefulness}
+            />
+          </div>
+          <textarea
+            value={feedback}
+            onChange={(e) => setFeedback(e.target.value)}
+            placeholder="Optional: What would make this consensus better?"
+            rows={2}
+            style={{
+              width: "100%", marginTop: 14, padding: "10px 14px", borderRadius: 12,
+              border: "1.5px solid rgba(0,0,0,0.06)", background: "rgba(0,0,0,0.02)",
+              fontSize: 13, color: "#333", resize: "vertical", fontFamily: "inherit",
+            }}
+          />
+          <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+            <button
+              onClick={() => setExpanded(false)}
+              style={{
+                flex: 1, padding: "10px 16px", borderRadius: 12, border: "1.5px solid rgba(0,0,0,0.06)",
+                background: "transparent", cursor: "pointer", fontSize: 13, color: "#888",
+              }}
+            >Cancel</button>
+            <button
+              onClick={handleSubmit}
+              disabled={representativeness === 0 || specificity === 0 || usefulness === 0 || saving}
+              style={{
+                flex: 2, padding: "10px 16px", borderRadius: 12, border: "none",
+                background: (representativeness === 0 || specificity === 0 || usefulness === 0) ? "#ddd" : "#c84a20",
+                color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 600,
+                opacity: saving ? 0.6 : 1,
+              }}
+            >{saving ? "Saving..." : existing ? "Update" : "Submit"}</button>
+          </div>
+        </motion.div>
+      )}
+    </motion.div>
+  );
+}
+
 // ─── Main Page ───────────────────────────────────────────────────────────────
 
 export default function LiveDeliberationPage() {
@@ -635,6 +877,14 @@ export default function LiveDeliberationPage() {
                   {winner.statement_text}
                 </p>
               </motion.div>
+            )}
+
+            {/* Consensus rating */}
+            {winner && (
+              <ConsensusRatingWidget
+                deliberationId={id}
+                winnerId={winner.id}
+              />
             )}
 
             {/* Agent lobsters */}

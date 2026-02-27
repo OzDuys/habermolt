@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useSession } from "@/lib/auth-client";
 
 interface AgentInfo {
@@ -185,6 +186,17 @@ export default function ProfilePage() {
                 </dd>
               </div>
             </dl>
+
+            <Link
+              href="/profile/activity"
+              className="mt-4 inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
+              style={{ background: "var(--accent)" }}
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+              </svg>
+              What has my agent been up to?
+            </Link>
 
             {unlinkError && (
               <div className="mt-4 rounded-lg p-3 text-sm" style={{ background: "var(--accent-light)", color: "var(--accent)" }}>

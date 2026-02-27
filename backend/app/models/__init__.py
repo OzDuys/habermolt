@@ -13,6 +13,8 @@ from app.models.platform_feedback import PlatformFeedback
 from app.models.llm_trace import LLMTrace
 from app.models.agent_request_log import AgentRequestLog
 from app.models.waitlist import WaitlistEmail
+from app.models.agent_rating import AgentRating
+from app.models.consensus_rating import ConsensusRating
 
 __all__ = [
     "Agent",
@@ -25,4 +27,6 @@ __all__ = [
     "LLMTrace",
     "AgentRequestLog",
     "WaitlistEmail",
+    "AgentRating",
+    "ConsensusRating",
 ]

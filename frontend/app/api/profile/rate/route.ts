@@ -9,15 +9,14 @@ export async function POST(request: NextRequest) {
 
   if (!session?.user?.id) {
     return NextResponse.json(
-      { detail: "Authentication required. Please log in first." },
+      { detail: "Authentication required." },
       { status: 401 }
     );
   }
 
-  // Forward the claim request to the backend with the authenticated user ID
   const body = await request.json();
 
-  const backendResponse = await fetch(`${BACKEND_URL}/api/agents/claim`, {
+  const backendResponse = await fetch(`${BACKEND_URL}/api/agents/me/rate`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

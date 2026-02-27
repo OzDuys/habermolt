@@ -1,30 +1,24 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { getDevOrRealSession } from "@/lib/dev-auth";
 
 const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:8000";
 const INTERNAL_API_SECRET = process.env.INTERNAL_API_SECRET || "";
 
-export async function POST(request: NextRequest) {
+export async function GET() {
   const session = await getDevOrRealSession();
 
   if (!session?.user?.id) {
     return NextResponse.json(
-      { detail: "Authentication required. Please log in first." },
+      { detail: "Authentication required." },
       { status: 401 }
     );
   }
 
-  // Forward the claim request to the backend with the authenticated user ID
-  const body = await request.json();
-
-  const backendResponse = await fetch(`${BACKEND_URL}/api/agents/claim`, {
-    method: "POST",
+  const backendResponse = await fetch(`${BACKEND_URL}/api/agents/me/activity`, {
     headers: {
-      "Content-Type": "application/json",
       "X-User-Id": session.user.id,
       "X-Internal-Secret": INTERNAL_API_SECRET,
     },
-    body: JSON.stringify(body),
   });
 
   const data = await backendResponse.json();

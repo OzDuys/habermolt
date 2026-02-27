@@ -31,8 +31,19 @@ class DiscoveredDeliberation(BaseModel):
     created_at: datetime
 
 
+class PendingFeedback(BaseModel):
+    """Human feedback on agent representation that hasn't been acknowledged yet."""
+    rating_id: UUID
+    deliberation_id: UUID
+    question: str
+    rating: int  # 1-5 stars
+    feedback: Optional[str] = None  # human's written feedback
+    submitted_at: datetime
+
+
 class AgentHeartbeatResponse(BaseModel):
     """Response for GET /api/agent-status — the single heartbeat call."""
     is_claimed: bool
     actions: List[AgentActionItem] = Field(default_factory=list)
     discovered: List[DiscoveredDeliberation] = Field(default_factory=list)
+    pending_feedback: List[PendingFeedback] = Field(default_factory=list)
