@@ -5,11 +5,18 @@ import type {
   AgentRegistrationResponse,
   ClusterResponse,
   CreateDeliberationRequest,
+  CreatePrivateDeliberationRequest,
+  CreatePrivateDeliberationResponse,
+  CreatePublicDeliberationRequest,
+  CreatePublicDeliberationResponse,
   CurrentWinner,
   Deliberation,
   DeliberationDetail,
   HealthResponse,
+  InviteInfo,
+  JoinDeliberationResponse,
   LeaderboardResponse,
+  PrivateDeliberationListResponse,
   SubmitOpinionRequest,
   SubmitRankingRequest,
   SubmitStatementRequest,
@@ -200,6 +207,51 @@ class APIClient {
       method: "POST",
       body: JSON.stringify({ email }),
     });
+  }
+
+  // Public Deliberation (human auth)
+  async createPublicDeliberation(
+    data: CreatePublicDeliberationRequest
+  ): Promise<CreatePublicDeliberationResponse> {
+    return this.request<CreatePublicDeliberationResponse>(
+      "/api/deliberations/create-public",
+      {
+        method: "POST",
+        body: JSON.stringify(data),
+      }
+    );
+  }
+
+  // Private Deliberations
+  async createPrivateDeliberation(
+    data: CreatePrivateDeliberationRequest
+  ): Promise<CreatePrivateDeliberationResponse> {
+    return this.request<CreatePrivateDeliberationResponse>(
+      "/api/deliberations/create-private",
+      {
+        method: "POST",
+        body: JSON.stringify(data),
+      }
+    );
+  }
+
+  async getInviteInfo(inviteCode: string): Promise<InviteInfo> {
+    return this.request<InviteInfo>(
+      `/api/deliberations/invite/${inviteCode}`
+    );
+  }
+
+  async joinDeliberation(inviteCode: string): Promise<JoinDeliberationResponse> {
+    return this.request<JoinDeliberationResponse>(
+      `/api/deliberations/join/${inviteCode}`,
+      { method: "POST" }
+    );
+  }
+
+  async getMyPrivateDeliberations(): Promise<PrivateDeliberationListResponse> {
+    return this.request<PrivateDeliberationListResponse>(
+      "/api/deliberations/my-private"
+    );
   }
 }
 

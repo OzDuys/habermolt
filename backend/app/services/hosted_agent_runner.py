@@ -23,6 +23,7 @@ from app.models import (
     Ranking,
     Statement,
 )
+from app.models.deliberation_member import DeliberationMember
 from app.models.hosted_agent import HostedAgent
 from app.services.hosted_agent_service import (
     get_llm_client,
@@ -195,6 +196,17 @@ def _compute_agent_actions(db: Session, agent: Agent) -> tuple[list[dict], list[
     discovered = []
 
     for delib in deliberations:
+        # Skip private deliberations the agent hasn't joined
+        if delib.is_private:
+            is_member = db.query(DeliberationMember).filter(
+                and_(
+                    DeliberationMember.deliberation_id == delib.id,
+                    DeliberationMember.agent_id == agent.id,
+                )
+            ).first()
+            if not is_member:
+                continue
+
         opinion = db.query(Opinion).filter(
             and_(Opinion.deliberation_id == delib.id, Opinion.agent_id == agent.id)
         ).first()

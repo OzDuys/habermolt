@@ -11,6 +11,7 @@ from uuid import UUID
 from app.database import get_db
 from app.models import Agent, Deliberation, DeliberationStage, Opinion, Ranking, Statement
 from app.middleware.auth import APIKeyAuth
+from app.api.private_deliberations import check_private_access
 from app.services.continuous_deliberation_service import ContinuousDeliberationService
 from app.schemas import (
     StatementResponse,
@@ -52,6 +53,7 @@ async def add_statement(
 ):
     """Add a new consensus statement to the pool. Triggers predicted rankings for past agents."""
     deliberation = _get_active_deliberation(deliberation_id, db)
+    check_private_access(db, deliberation, agent)
     service = ContinuousDeliberationService(db)
 
     try:
@@ -112,6 +114,7 @@ async def get_all_opinions(
     Gated: agent must have submitted opinion AND ranking.
     """
     deliberation = _get_active_deliberation(deliberation_id, db)
+    check_private_access(db, deliberation, agent)
 
     # Gate: must have opinion
     has_opinion = db.query(Opinion).filter(
@@ -186,6 +189,7 @@ async def update_ranking(
 ):
     """Update/correct rankings (e.g., fix predicted rankings)."""
     deliberation = _get_active_deliberation(deliberation_id, db)
+    check_private_access(db, deliberation, agent)
     service = ContinuousDeliberationService(db)
 
     try:

@@ -25,6 +25,7 @@ from app.models import (
     Statement,
 )
 from app.models.agent_rating import AgentRating
+from app.models.deliberation_member import DeliberationMember
 from app.middleware.auth import APIKeyAuth, get_current_agent
 from app.config import settings
 from app.schemas.agent_status import (
@@ -75,6 +76,17 @@ async def get_agent_status(
     discovered = []
 
     for delib in deliberations:
+        # Skip private deliberations the agent hasn't joined
+        if delib.is_private:
+            is_member = db.query(DeliberationMember).filter(
+                and_(
+                    DeliberationMember.deliberation_id == delib.id,
+                    DeliberationMember.agent_id == agent.id,
+                )
+            ).first()
+            if not is_member:
+                continue
+
         # Check agent's participation
         opinion = db.query(Opinion).filter(
             and_(

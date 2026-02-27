@@ -33,7 +33,7 @@ VALID_CATEGORIES = {
 
 class DeliberationCreateRequest(BaseModel):
     """Request schema for creating a deliberation."""
-    question: str = Field(..., min_length=10, max_length=1000, description="The question to deliberate on")
+    question: str = Field(..., min_length=10, max_length=280, description="The question to deliberate on")
     initial_opinion: Optional[str] = Field(None, min_length=1, max_length=5000, description="Creator's initial opinion (required)")
     categories: Optional[List[str]] = Field(default_factory=list, description="Topic categories (1-3): 'south-africa', 'ai', 'current-affairs', 'geopolitics', 'societal', 'sport', 'culture', 'memes', 'economy', 'tech'")
     meta_data: Optional[dict] = Field(default_factory=dict, description="Additional metadata")
@@ -59,6 +59,9 @@ class DeliberationResponse(BaseModel):
     updated_at: datetime
     categories: List[str] = []
     meta_data: dict
+    is_private: bool = False
+    invite_code: Optional[str] = None
+    complexity_tier: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -120,7 +123,7 @@ class StatementResponse(BaseModel):
 class StatementSubmitRequest(BaseModel):
     """Request schema for submitting a statement."""
     title: str = Field(..., min_length=3, max_length=200, description="Short title for this statement (5-10 words)")
-    statement_text: str = Field(..., min_length=10, max_length=5000, description="Proposed consensus statement")
+    statement_text: str = Field(..., min_length=10, max_length=280, description="Proposed consensus statement")
 
 
 class RankingSubmitRequest(BaseModel):
@@ -260,3 +263,80 @@ class ClusterResponse(BaseModel):
     points: List[ClusterPoint]
     total: int
     deliberation_id: str
+
+
+# --- Human-auth deliberation creation schemas ---
+
+class CreatePublicDeliberationRequest(BaseModel):
+    """Request schema for creating a public deliberation via human auth."""
+    question: str = Field(..., min_length=10, max_length=280, description="The question to deliberate on")
+    initial_opinion: Optional[str] = Field(None, min_length=1, max_length=5000, description="Creator's initial opinion to seed the deliberation. Required if user has no agent.")
+    categories: Optional[List[str]] = Field(default_factory=list, description="Topic categories (1-3)")
+
+    @validator("categories")
+    def validate_categories(cls, v):
+        if v:
+            for cat in v:
+                if cat not in VALID_CATEGORIES:
+                    raise ValueError(f"Invalid category '{cat}'. Must be one of: {', '.join(sorted(VALID_CATEGORIES))}")
+        return v or []
+
+
+# --- Private deliberation schemas ---
+
+class CreatePrivateDeliberationRequest(BaseModel):
+    """Request schema for creating a private deliberation."""
+    question: str = Field(..., min_length=10, max_length=280, description="The question to deliberate on")
+    complexity_tier: str = Field(default="standard", description="Interview depth: 'quick', 'standard', or 'deep'")
+    max_participants: Optional[int] = Field(None, ge=2, le=100, description="Optional participant limit")
+    categories: Optional[List[str]] = Field(default_factory=list, description="Topic categories")
+
+    @validator("complexity_tier")
+    def validate_complexity_tier(cls, v):
+        if v not in ("quick", "standard", "deep"):
+            raise ValueError("Must be 'quick', 'standard', or 'deep'")
+        return v
+
+    @validator("categories")
+    def validate_categories(cls, v):
+        if v:
+            for cat in v:
+                if cat not in VALID_CATEGORIES:
+                    raise ValueError(f"Invalid category '{cat}'. Must be one of: {', '.join(sorted(VALID_CATEGORIES))}")
+        return v or []
+
+
+class InviteInfoResponse(BaseModel):
+    """Response for public invite link — shows deliberation info without revealing statements."""
+    deliberation_id: str
+    question: str
+    complexity_tier: Optional[str] = None
+    participant_count: int
+    max_participants: Optional[int] = None
+    created_by_name: Optional[str] = None
+    created_at: datetime
+
+
+class JoinDeliberationResponse(BaseModel):
+    """Response after successfully joining a private deliberation."""
+    deliberation_id: str
+    agent_id: str
+    agent_name: str
+    message: str
+
+
+class PrivateDeliberationListItem(BaseModel):
+    """Item in the user's private deliberations list."""
+    id: UUID
+    question: str
+    invite_code: str
+    complexity_tier: Optional[str] = None
+    participant_count: int
+    max_participants: Optional[int] = None
+    created_at: datetime
+    is_creator: bool = False
+
+
+class PrivateDeliberationListResponse(BaseModel):
+    """Response for GET /deliberations/my-private."""
+    deliberations: List[PrivateDeliberationListItem]

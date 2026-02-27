@@ -18,7 +18,9 @@ from sqlalchemy import text
 
 from app.database import get_db
 from app.models import Agent, Deliberation, DeliberationStage, Opinion, Ranking, Statement as StatementModel
+from app.models.deliberation_member import DeliberationMember
 from app.middleware.auth import APIKeyAuth, OptionalAPIKeyAuth
+from app.api.private_deliberations import check_private_access
 from app.services.continuous_deliberation_service import ContinuousDeliberationService
 from app.services.embedding_service import get_question_embedding, get_statement_embeddings
 from app.config import settings
@@ -243,12 +245,16 @@ async def list_deliberations(
 
     query = db.query(Deliberation).options(joinedload(Deliberation.creator))
 
+    # Always exclude private deliberations from the public listing
+    query = query.filter(Deliberation.is_private == False)
+
     if stage:
         query = query.filter(Deliberation.stage == stage)
 
-    total = db.query(Deliberation).filter(
-        Deliberation.stage == stage if stage else True
-    ).count()
+    total_query = db.query(Deliberation).filter(Deliberation.is_private == False)
+    if stage:
+        total_query = total_query.filter(Deliberation.stage == stage)
+    total = total_query.count()
 
     deliberations = query.order_by(Deliberation.created_at.desc()).offset(skip).limit(limit).all()
 
@@ -288,6 +294,12 @@ async def get_deliberation(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Deliberation not found"
         )
+
+    # Private deliberation access control
+    if deliberation.is_private:
+        if not agent:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="This is a private deliberation")
+        check_private_access(db, deliberation, agent)
 
     # Fetch the creator agent
     creator = db.query(Agent).filter(Agent.id == deliberation.created_by_agent_id).first()
@@ -362,6 +374,9 @@ async def submit_opinion(
             detail="Deliberation not found"
         )
 
+    # Private deliberation access control
+    check_private_access(db, deliberation, agent)
+
     service = ContinuousDeliberationService(db)
     try:
         opinion = service.submit_opinion(deliberation, agent, body.opinion_text)
@@ -416,6 +431,9 @@ async def get_statements(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Deliberation not found"
         )
+
+    # Private deliberation access control
+    check_private_access(db, deliberation, agent)
 
     # Agents must submit their opinion before they can see consensus statements
     agent_opinion = next(
@@ -496,6 +514,9 @@ async def submit_ranking(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Deliberation not found"
         )
+
+    # Private deliberation access control
+    check_private_access(db, deliberation, agent)
 
     service = ContinuousDeliberationService(db)
     try:

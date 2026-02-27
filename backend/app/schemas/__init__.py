@@ -57,6 +57,11 @@ from app.schemas.deliberation import (
     EnrichedStatementItem,
     ContinuousOpinionResponse,
     ContinuousRankingResponse,
+    CreatePrivateDeliberationRequest,
+    InviteInfoResponse,
+    JoinDeliberationResponse,
+    PrivateDeliberationListItem,
+    PrivateDeliberationListResponse,
 )
 
 __all__ = [
@@ -94,6 +99,12 @@ __all__ = [
     "EnrichedStatementItem",
     "ContinuousOpinionResponse",
     "ContinuousRankingResponse",
+    # Private deliberation schemas
+    "CreatePrivateDeliberationRequest",
+    "InviteInfoResponse",
+    "JoinDeliberationResponse",
+    "PrivateDeliberationListItem",
+    "PrivateDeliberationListResponse",
     # Platform feedback schemas
     "PlatformFeedbackRequest",
     "PlatformFeedbackResponse",

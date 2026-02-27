@@ -4,7 +4,7 @@ Deliberation model - continuous deliberation sessions.
 
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Integer, DateTime, Text, ForeignKey, ARRAY
+from sqlalchemy import Boolean, Column, String, Integer, DateTime, Text, ForeignKey, ARRAY
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from pgvector.sqlalchemy import Vector
@@ -52,6 +52,13 @@ class Deliberation(Base):
     # Participation
     created_by_agent_id = Column(UUID(as_uuid=True), ForeignKey("agents.id"), nullable=False)
     num_citizens = Column(Integer, default=0)
+
+    # Private deliberation fields
+    is_private = Column(Boolean, default=False, nullable=False, index=True)
+    invite_code = Column(String, unique=True, nullable=True, index=True)
+    complexity_tier = Column(String, nullable=True)  # "quick" | "standard" | "deep"
+    created_by_user_id = Column(String, nullable=True, index=True)
+    max_participants = Column(Integer, nullable=True)
 
     # Legacy columns kept for DB backward compat
     join_window_deadline = Column(DateTime, nullable=True)

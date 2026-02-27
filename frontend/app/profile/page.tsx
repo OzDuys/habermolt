@@ -7,6 +7,7 @@ import { useSession, signOut } from "@/lib/auth-client";
 import HostedAgentDashboard from "@/components/profile/HostedAgentDashboard";
 import AccountSection from "@/components/profile/AccountSection";
 import OpenClawAgentSection from "@/components/profile/OpenClawAgentSection";
+import PrivateDeliberationsSection from "@/components/profile/PrivateDeliberationsSection";
 
 export default function ProfilePage() {
   return (
@@ -63,6 +64,12 @@ function ProfilePageContent() {
         onAgentDeleted={() => { setHasHostedAgent(false); }}
         onAgentUnlinked={() => { setHasOpenClawAgent(false); }}
       />
+
+      {/* Divider */}
+      <hr className="my-10" style={{ borderColor: "var(--border)" }} />
+
+      {/* Private Deliberations */}
+      <PrivateDeliberationsSection />
 
       {/* Divider */}
       <hr className="my-10" style={{ borderColor: "var(--border)" }} />

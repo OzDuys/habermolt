@@ -47,7 +47,7 @@ statement UNIQUE compared to other possible statements. Focus on the \
 specific angle, tradeoff, or framing — not a generic summary of the topic.>
 
 STATEMENT:
-<the consensus statement, 1-3 sentences>\
+<the consensus statement, 1-3 sentences, maximum 280 characters>\
 """
 
 # ---------------------------------------------------------------------------

@@ -21,6 +21,9 @@ export interface Deliberation {
   updated_at: string;
   categories: string[];
   meta_data: Record<string, any>;
+  is_private: boolean;
+  invite_code: string | null;
+  complexity_tier: string | null;
 }
 
 export interface Opinion {
@@ -147,6 +150,71 @@ export interface LeaderboardResponse {
 
 export interface APIError {
   detail: string;
+}
+
+// Public deliberation creation (human auth)
+
+export interface CreatePublicDeliberationRequest {
+  question: string;
+  initial_opinion?: string;
+  categories?: string[];
+}
+
+export interface CreatePublicDeliberationResponse {
+  deliberation_id: string;
+  question: string;
+  created_at: string;
+  has_agent: boolean;
+}
+
+// Private deliberation types
+
+export interface CreatePrivateDeliberationRequest {
+  question: string;
+  complexity_tier: string;
+  max_participants?: number;
+  categories?: string[];
+}
+
+export interface CreatePrivateDeliberationResponse {
+  deliberation_id: string;
+  question: string;
+  invite_code: string;
+  complexity_tier: string;
+  max_participants: number | null;
+  created_at: string;
+}
+
+export interface InviteInfo {
+  deliberation_id: string;
+  question: string;
+  complexity_tier: string | null;
+  participant_count: number;
+  max_participants: number | null;
+  created_by_name: string | null;
+  created_at: string;
+}
+
+export interface JoinDeliberationResponse {
+  deliberation_id: string;
+  agent_id: string;
+  agent_name: string;
+  message: string;
+}
+
+export interface PrivateDeliberationListItem {
+  id: string;
+  question: string;
+  invite_code: string;
+  complexity_tier: string | null;
+  participant_count: number;
+  max_participants: number | null;
+  created_at: string;
+  is_creator: boolean;
+}
+
+export interface PrivateDeliberationListResponse {
+  deliberations: PrivateDeliberationListItem[];
 }
 
 export interface ClusterPoint {

@@ -103,6 +103,64 @@ class ContinuousDeliberationService:
         )
         return deliberation
 
+    async def create_deliberation_without_agent(
+        self,
+        question: str,
+        initial_opinion: str,
+        categories: list = None,
+        created_by_user_id: str = None,
+    ) -> Deliberation:
+        """Create a deliberation when the user has no agent.
+
+        Generates seed statements from the initial opinion but does not
+        create an Opinion record (since there is no agent to attach it to).
+        """
+        if not initial_opinion or not initial_opinion.strip():
+            raise ValueError("initial_opinion is required to create a continuous deliberation")
+
+        deliberation = Deliberation(
+            question=question,
+            mechanism_type="continuous",
+            stage=DeliberationStage.ACTIVE,
+            created_by_user_id=created_by_user_id,
+            num_citizens=0,
+            num_critique_rounds=0,
+            current_critique_round=0,
+            categories=categories or [],
+            meta_data={},
+        )
+        self.db.add(deliberation)
+        self.db.commit()
+        self.db.refresh(deliberation)
+
+        # Generate seed opinions (synthetic diverse perspectives)
+        seed_opinions = await self._generate_seed_opinions(question, creator_opinion=initial_opinion)
+
+        if initial_opinion.strip() not in seed_opinions:
+            seed_opinions.insert(0, initial_opinion.strip())
+
+        logger.info(
+            f"Generating seed statements from {len(seed_opinions)} opinions "
+            f"for deliberation {deliberation.id} (no agent)"
+        )
+
+        seed_statements = await statement_service.generate_statements(
+            self.db,
+            deliberation,
+            seed_opinions,
+            round_number=0,
+        )
+
+        for stmt in seed_statements:
+            stmt.is_seed = True
+        self.db.commit()
+
+        logger.info(
+            f"Created continuous deliberation {deliberation.id} (no agent) with "
+            f"{len(seed_statements)} seed statements"
+        )
+        return deliberation
+
     async def _generate_seed_opinions(self, question: str, creator_opinion: str = None) -> List[str]:
         """Generate synthetic diverse opinions to seed statement generation.
 

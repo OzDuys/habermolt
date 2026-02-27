@@ -18,6 +18,7 @@ from app.models.consensus_rating import ConsensusRating
 from app.models.hosted_agent import HostedAgent
 from app.models.interview_session import HostedAgentChatSession
 from app.models.notification import Notification
+from app.models.deliberation_member import DeliberationMember
 
 __all__ = [
     "Agent",
@@ -35,4 +36,5 @@ __all__ = [
     "HostedAgent",
     "HostedAgentChatSession",
     "Notification",
+    "DeliberationMember",
 ]
