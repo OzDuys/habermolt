@@ -15,7 +15,7 @@ from app.database import get_db
 from app.models import Deliberation
 from app.services import hosted_agent_service, notification_service
 from app.services import chat_service
-from app.services.hosted_agent_runner import run_all_hosted_agents
+from app.services.hosted_agent_runner import run_all_hosted_agents, run_single_hosted_agent
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/hosted-agents", tags=["hosted-agents"])
@@ -329,6 +329,18 @@ async def list_chat_sessions(req: Request, db: Session = Depends(get_db)):
         )
         for s in sessions
     ]
+
+
+# --- Manual heartbeat ---
+
+@router.post("/me/heartbeat")
+async def manual_heartbeat(req: Request, db: Session = Depends(get_db)):
+    user_id = _require_user_id(req)
+    ha = hosted_agent_service.get_hosted_agent_by_user(db, user_id)
+    if not ha:
+        raise HTTPException(status_code=404, detail="No hosted agent found")
+    result = run_single_hosted_agent(db, ha)
+    return result
 
 
 # --- Cron heartbeat ---

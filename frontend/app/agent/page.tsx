@@ -105,6 +105,9 @@ function AgentPageContent() {
         </div>
       )}
 
+      {/* Run agent button — only for hosted agents */}
+      {hasHostedAgent && <RunAgentButton />}
+
       {/* Activity section — for both agent types */}
       <div>
         <h2 className="mb-4 text-xl font-bold" style={{ color: "var(--foreground)" }}>
@@ -112,6 +115,73 @@ function AgentPageContent() {
         </h2>
         <AgentActivitySection />
       </div>
+    </div>
+  );
+}
+
+// --- Run agent button ---
+
+function RunAgentButton() {
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleRun = async () => {
+    setLoading(true);
+    setResult(null);
+    setError(null);
+    try {
+      const res = await fetch("/api/hosted-agent/heartbeat", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.detail || "Something went wrong");
+        return;
+      }
+      if (data.status === "token_limit") {
+        setResult("Token limit reached — upgrade or wait for the next period.");
+      } else {
+        const count = data.actions_taken?.length ?? 0;
+        setResult(count > 0
+          ? `Participated in ${count} deliberation${count === 1 ? "" : "s"}`
+          : "No deliberations needed attention right now"
+        );
+      }
+    } catch {
+      setError("Failed to reach the server");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div
+      className="mb-8 rounded-xl border p-5"
+      style={{ borderColor: "var(--border)", background: "var(--surface)" }}
+    >
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>
+            Run agent now
+          </h3>
+          <p className="text-xs mt-0.5" style={{ color: "var(--muted)" }}>
+            Manually trigger your agent to check deliberations and participate
+          </p>
+        </div>
+        <button
+          onClick={handleRun}
+          disabled={loading}
+          className="rounded-lg px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+          style={{ background: "var(--accent)" }}
+        >
+          {loading ? "Running…" : "Run now"}
+        </button>
+      </div>
+      {result && (
+        <p className="mt-3 text-sm" style={{ color: "var(--foreground)" }}>{result}</p>
+      )}
+      {error && (
+        <p className="mt-3 text-sm" style={{ color: "#e55" }}>{error}</p>
+      )}
     </div>
   );
 }
