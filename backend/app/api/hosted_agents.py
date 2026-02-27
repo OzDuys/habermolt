@@ -11,7 +11,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.database import get_db
+from app.database import get_db, SessionLocal
 from app.models import Deliberation
 from app.services import hosted_agent_service, notification_service
 from app.services import chat_service
@@ -262,18 +262,30 @@ async def stream_chat_message(
     if not ha:
         raise HTTPException(status_code=404, detail="No hosted agent found")
 
-    session = chat_service.get_or_create_session(db, ha)
+    # Capture IDs before the request-scoped db closes
+    hosted_agent_id = ha.id
 
     def event_stream():
-        for chunk in chat_service.stream_user_message(db, ha, session, body.content):
-            # Don't stream the PROFILE_UPDATE section to the client
-            if "PROFILE_UPDATE:" in chunk:
-                clean_part = chunk[:chunk.index("PROFILE_UPDATE:")].rstrip()
-                if clean_part:
-                    yield f"data: {json.dumps({'type': 'chunk', 'content': clean_part})}\n\n"
-                break
-            yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
-        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+        # Use our own DB session so it stays open for the full stream duration
+        stream_db = SessionLocal()
+        try:
+            from app.models.hosted_agent import HostedAgent
+            stream_ha = stream_db.query(HostedAgent).get(hosted_agent_id)
+            session = chat_service.get_or_create_session(stream_db, stream_ha)
+
+            stream = chat_service.stream_user_message(stream_db, stream_ha, session, body.content)
+            for chunk in stream:
+                if "PROFILE_UPDATE:" in chunk:
+                    clean_part = chunk[:chunk.index("PROFILE_UPDATE:")].rstrip()
+                    if clean_part:
+                        yield f"data: {json.dumps({'type': 'chunk', 'content': clean_part})}\n\n"
+                    for _ in stream:
+                        pass
+                    break
+                yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+        finally:
+            stream_db.close()
 
     return StreamingResponse(
         event_stream(),
@@ -329,6 +341,23 @@ async def list_chat_sessions(req: Request, db: Session = Depends(get_db)):
         )
         for s in sessions
     ]
+
+
+@router.get("/me/chat/{session_id}")
+async def get_chat_session(session_id: str, req: Request, db: Session = Depends(get_db)):
+    user_id = _require_user_id(req)
+    ha = hosted_agent_service.get_hosted_agent_by_user(db, user_id)
+    if not ha:
+        raise HTTPException(status_code=404, detail="No hosted agent found")
+    session = chat_service.get_session_by_id(db, ha, session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Chat session not found")
+    return ChatSessionResponse(
+        id=str(session.id),
+        topic=session.topic,
+        messages=session.messages or [],
+        created_at=session.created_at.isoformat(),
+    )
 
 
 # --- Manual heartbeat ---

@@ -96,6 +96,18 @@ def get_current_session(db: Session, hosted_agent: HostedAgent) -> Optional[Host
     )
 
 
+def get_session_by_id(db: Session, hosted_agent: HostedAgent, session_id: str) -> Optional[HostedAgentChatSession]:
+    """Get a specific chat session by ID, scoped to the hosted agent."""
+    return (
+        db.query(HostedAgentChatSession)
+        .filter(
+            HostedAgentChatSession.id == session_id,
+            HostedAgentChatSession.hosted_agent_id == hosted_agent.id,
+        )
+        .first()
+    )
+
+
 def get_all_sessions(db: Session, hosted_agent: HostedAgent) -> list[HostedAgentChatSession]:
     """Get all chat sessions for a hosted agent."""
     return (
@@ -217,32 +229,32 @@ def stream_user_message(
     )
 
     accumulated = []
-    for chunk in client.chat_stream(messages=llm_messages, temperature=0.7):
-        accumulated.append(chunk)
-        yield chunk
+    try:
+        for chunk in client.chat_stream(messages=llm_messages, temperature=0.7):
+            accumulated.append(chunk)
+            yield chunk
+    finally:
+        # Always persist, even if the stream is interrupted or generator closed early
+        response_text = "".join(accumulated)
+        if not response_text:
+            response_text = "I'm sorry, I had trouble processing that. Could you try again?"
 
-    response_text = "".join(accumulated)
-    if not response_text:
-        fallback = "I'm sorry, I had trouble processing that. Could you try again?"
-        yield fallback
-        response_text = fallback
+        # Extract and apply profile updates if present
+        if "PROFILE_UPDATE:" in response_text:
+            _, profile_text = _extract_profile_update(response_text)
+            if profile_text:
+                if hosted_agent.user_profile:
+                    hosted_agent.user_profile = hosted_agent.user_profile.rstrip() + "\n\n" + profile_text
+                else:
+                    hosted_agent.user_profile = profile_text
+                hosted_agent.profile_version += 1
+                hosted_agent.last_chatted_at = datetime.utcnow()
+                logger.info(f"Updated user profile for hosted agent {hosted_agent.id}")
 
-    # Extract and apply profile updates if present
-    if "PROFILE_UPDATE:" in response_text:
-        _, profile_text = _extract_profile_update(response_text)
-        if profile_text:
-            if hosted_agent.user_profile:
-                hosted_agent.user_profile = hosted_agent.user_profile.rstrip() + "\n\n" + profile_text
-            else:
-                hosted_agent.user_profile = profile_text
-            hosted_agent.profile_version += 1
-            hosted_agent.last_chatted_at = datetime.utcnow()
-            logger.info(f"Updated user profile for hosted agent {hosted_agent.id}")
-
-    # Store the full response in messages for LLM context continuity
-    messages.append({"role": "assistant", "content": response_text})
-    session.messages = messages
-    db.commit()
+        # Store the full response in messages for LLM context continuity
+        messages.append({"role": "assistant", "content": response_text})
+        session.messages = messages
+        db.commit()
 
 
 def _extract_profile_update(text: str) -> tuple[str, Optional[str]]:
