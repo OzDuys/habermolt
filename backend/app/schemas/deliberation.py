@@ -123,7 +123,7 @@ class StatementResponse(BaseModel):
 class StatementSubmitRequest(BaseModel):
     """Request schema for submitting a statement."""
     title: str = Field(..., min_length=3, max_length=200, description="Short title for this statement (5-10 words)")
-    statement_text: str = Field(..., min_length=10, max_length=280, description="Proposed consensus statement")
+    statement_text: str = Field(..., min_length=10, max_length=5000, description="Proposed consensus statement")
 
 
 class RankingSubmitRequest(BaseModel):
