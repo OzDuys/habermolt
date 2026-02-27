@@ -1,10 +1,23 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
+import { useEffect, useState, useRef } from "react";
+
+interface Notification {
+  id: string;
+  type: string;
+  title: string;
+  body: string;
+  read: boolean;
+  metadata: Record<string, string> | null;
+  created_at: string;
+}
 
 export default function NotificationBell() {
   const [count, setCount] = useState(0);
+  const [open, setOpen] = useState(false);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [loading, setLoading] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const fetchCount = () => {
@@ -18,24 +31,155 @@ export default function NotificationBell() {
     return () => clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+    if (!open) return;
+    const handleClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [open]);
+
+  const fetchNotifications = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/notifications?limit=20");
+      const data = await res.json();
+      setNotifications(data.notifications || []);
+    } catch {}
+    finally { setLoading(false); }
+  };
+
+  const toggle = () => {
+    const next = !open;
+    setOpen(next);
+    if (next) fetchNotifications();
+  };
+
+  const markAllRead = async () => {
+    await fetch("/api/notifications/mark-all-read", { method: "POST" });
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    setCount(0);
+  };
+
+  const markRead = async (id: string) => {
+    await fetch("/api/notifications/mark-read", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ notification_ids: [id] }),
+    });
+    setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, read: true } : n));
+    setCount((c) => Math.max(0, c - 1));
+  };
+
+  const unreadCount = notifications.filter((n) => !n.read).length;
+
   return (
-    <Link
-      href="/notifications"
-      className="relative flex h-9 w-9 items-center justify-center rounded-lg transition-colors hover:opacity-80"
-      style={{ color: "var(--muted)" }}
-      aria-label={`Notifications${count > 0 ? ` (${count} unread)` : ""}`}
-    >
-      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-      </svg>
-      {count > 0 && (
-        <span
-          className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white"
-          style={{ background: "var(--accent)" }}
-        >
-          {count > 99 ? "99+" : count}
-        </span>
-      )}
-    </Link>
+    <div className="relative" ref={ref}>
+      <button
+        onClick={toggle}
+        className="relative flex h-9 w-9 items-center justify-center rounded-lg transition-colors hover:opacity-80"
+        style={{ color: "var(--muted)" }}
+        aria-label={`Notifications${count > 0 ? ` (${count} unread)` : ""}`}
+      >
+        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+        </svg>
+        {count > 0 && (
+          <span
+            className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white"
+            style={{ background: "var(--accent)" }}
+          >
+            {count > 99 ? "99+" : count}
+          </span>
+        )}
+      </button>
+
+      {/* Dropdown */}
+      <div
+        className="absolute right-0 top-full z-[200] mt-2 w-80 origin-top-right overflow-hidden rounded-xl border shadow-xl transition-all duration-200 sm:w-96"
+        style={{
+          background: "var(--surface)",
+          borderColor: "var(--border)",
+          opacity: open ? 1 : 0,
+          transform: open ? "scale(1) translateY(0)" : "scale(0.95) translateY(-4px)",
+          pointerEvents: open ? "auto" : "none",
+        }}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between border-b px-4 py-3" style={{ borderColor: "var(--border)" }}>
+          <span className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>Notifications</span>
+          {unreadCount > 0 && (
+            <button
+              onClick={markAllRead}
+              className="text-xs font-medium transition-opacity hover:opacity-80"
+              style={{ color: "var(--accent)" }}
+            >
+              Mark all read
+            </button>
+          )}
+        </div>
+
+        {/* Body */}
+        <div className="max-h-80 overflow-y-auto">
+          {loading ? (
+            <div className="py-8 text-center text-sm" style={{ color: "var(--muted)" }}>Loading...</div>
+          ) : notifications.length === 0 ? (
+            <div className="py-8 text-center text-sm" style={{ color: "var(--muted)" }}>
+              No notifications yet.
+            </div>
+          ) : (
+            <div>
+              {notifications.map((n) => (
+                <div
+                  key={n.id}
+                  className={`border-b px-4 py-3 transition-colors last:border-b-0 ${!n.read ? "cursor-pointer" : ""}`}
+                  style={{
+                    borderColor: "var(--border)",
+                    background: !n.read ? "var(--surface)" : "transparent",
+                    borderLeft: !n.read ? "3px solid var(--accent)" : "3px solid transparent",
+                  }}
+                  onClick={() => !n.read && markRead(n.id)}
+                >
+                  <div className="mb-0.5 flex items-center gap-2">
+                    <TypeIcon type={n.type} />
+                    <span className="text-sm font-medium" style={{ color: "var(--foreground)" }}>{n.title}</span>
+                    <span className="ml-auto shrink-0 text-xs" style={{ color: "var(--muted)" }}>
+                      {timeAgo(n.created_at)}
+                    </span>
+                  </div>
+                  <p className="text-xs" style={{ color: "var(--muted)" }}>{n.body}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
+}
+
+function TypeIcon({ type }: { type: string }) {
+  const color = type === "interview_needed" ? "var(--accent)" : type === "limit_approaching" ? "#ef4444" : "var(--muted)";
+  return (
+    <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke={color} strokeWidth={2}>
+      {type === "agent_action" && <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />}
+      {type === "interview_needed" && <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />}
+      {type === "limit_approaching" && <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />}
+      {type === "consensus_shifted" && <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />}
+    </svg>
+  );
+}
+
+function timeAgo(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d ago`;
 }

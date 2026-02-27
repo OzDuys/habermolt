@@ -1,20 +1,11 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useSession } from "@/lib/auth-client";
 import HostedAgentDashboard from "@/components/profile/HostedAgentDashboard";
-import NotificationsSection from "@/components/profile/NotificationsSection";
 import AccountSection from "@/components/profile/AccountSection";
 import OpenClawAgentSection from "@/components/profile/OpenClawAgentSection";
-
-type Tab = "agent" | "notifications" | "account";
-
-const TABS: { key: Tab; label: string }[] = [
-  { key: "agent", label: "My Agent" },
-  { key: "notifications", label: "Notifications" },
-  { key: "account", label: "Account" },
-];
 
 export default function ProfilePage() {
   return (
@@ -39,10 +30,6 @@ function LoadingSkeleton() {
 function ProfilePageContent() {
   const { data: session, isPending } = useSession();
   const router = useRouter();
-  const searchParams = useSearchParams();
-
-  const tabParam = searchParams.get("tab") as Tab | null;
-  const [activeTab, setActiveTab] = useState<Tab>(tabParam && TABS.some((t) => t.key === tabParam) ? tabParam : "agent");
 
   const [hasHostedAgent, setHasHostedAgent] = useState<boolean | null>(null);
   const [hasOpenClawAgent, setHasOpenClawAgent] = useState<boolean | null>(null);
@@ -61,50 +48,27 @@ function ProfilePageContent() {
       .catch(() => setHasOpenClawAgent(false));
   }, [session, isPending, router]);
 
-  const switchTab = (tab: Tab) => {
-    setActiveTab(tab);
-    const url = new URL(window.location.href);
-    url.searchParams.set("tab", tab);
-    window.history.replaceState({}, "", url.toString());
-  };
-
   if (isPending) return <LoadingSkeleton />;
   if (!session) return null;
 
   return (
     <div className="mx-auto max-w-3xl py-8 px-4">
-      <h1 className="mb-6 font-serif text-3xl" style={{ color: "var(--foreground)" }}>Settings</h1>
+      <h1 className="mb-8 font-serif text-3xl" style={{ color: "var(--foreground)" }}>Settings</h1>
 
-      {/* Tabs */}
-      <div className="mb-8 flex gap-1 rounded-lg p-1" style={{ background: "var(--surface-dim)" }}>
-        {TABS.map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => switchTab(tab.key)}
-            className={`flex-1 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
-              activeTab === tab.key ? "shadow-sm" : ""
-            }`}
-            style={{
-              background: activeTab === tab.key ? "var(--surface)" : "transparent",
-              color: activeTab === tab.key ? "var(--foreground)" : "var(--muted)",
-            }}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      {/* Agent Settings */}
+      <AgentTab
+        hasHostedAgent={hasHostedAgent}
+        hasOpenClawAgent={hasOpenClawAgent}
+        onAgentDeleted={() => { setHasHostedAgent(false); }}
+        onAgentUnlinked={() => { setHasOpenClawAgent(false); }}
+      />
 
-      {/* Tab content */}
-      {activeTab === "agent" && (
-        <AgentTab
-          hasHostedAgent={hasHostedAgent}
-          hasOpenClawAgent={hasOpenClawAgent}
-          onAgentDeleted={() => { setHasHostedAgent(false); }}
-          onAgentUnlinked={() => { setHasOpenClawAgent(false); }}
-        />
-      )}
-      {activeTab === "notifications" && <NotificationsSection />}
-      {activeTab === "account" && <AccountSection session={session} />}
+      {/* Divider */}
+      <hr className="my-10" style={{ borderColor: "var(--border)" }} />
+
+      {/* Account */}
+      <h2 className="mb-4 text-lg font-semibold" style={{ color: "var(--foreground)" }}>Account</h2>
+      <AccountSection session={session} />
     </div>
   );
 }
@@ -124,17 +88,14 @@ function AgentTab({
     return <div className="py-8 text-center text-sm" style={{ color: "var(--muted)" }}>Loading...</div>;
   }
 
-  // Has a hosted agent — show config only (activity + chat are on /agent)
   if (hasHostedAgent) {
     return <HostedAgentDashboard onDeleted={onAgentDeleted} />;
   }
 
-  // Has an OpenClaw agent — show agent info + management here
   if (hasOpenClawAgent) {
     return <OpenClawAgentSection onUnlinked={onAgentUnlinked} />;
   }
 
-  // No agent — show choice
   return <NoAgentChoice />;
 }
 
