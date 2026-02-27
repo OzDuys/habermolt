@@ -2,8 +2,6 @@
 
 import { useEffect, useState } from "react";
 import TokenUsageBar from "@/components/TokenUsageBar";
-import { api } from "@/lib/api";
-import type { Deliberation } from "@/lib/types";
 
 interface HostedAgent {
   id: string;
@@ -41,16 +39,6 @@ export default function HostedAgentDashboard({ onDeleted }: { onDeleted?: () => 
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState("");
 
-  // Setup wizard state
-  const [wizardStep, setWizardStep] = useState(1);
-  const [deliberations, setDeliberations] = useState<Deliberation[]>([]);
-  const [selectedDelibIds, setSelectedDelibIds] = useState<string[]>([]);
-  const [creating, setCreating] = useState(false);
-  const [setupName, setSetupName] = useState("");
-  const [setupTier, setSetupTier] = useState("free");
-  const [setupByokKey, setSetupByokKey] = useState("");
-  const [delibSearch, setDelibSearch] = useState("");
-
   // Dashboard state
   const [saving, setSaving] = useState(false);
   const [profileMarkdown, setProfileMarkdown] = useState("");
@@ -82,51 +70,6 @@ export default function HostedAgentDashboard({ onDeleted }: { onDeleted?: () => 
         setProfileMarkdown(data.profile_markdown || "");
       }
     } catch {}
-  };
-
-  const fetchDeliberations = async () => {
-    try {
-      const delibs = await api.listDeliberations();
-      setDeliberations(delibs);
-    } catch {}
-  };
-
-  useEffect(() => {
-    if (notFound && deliberations.length === 0) {
-      fetchDeliberations();
-    }
-  }, [notFound]);
-
-  const toggleDelib = (id: string) => {
-    setSelectedDelibIds((prev) =>
-      prev.includes(id) ? prev.filter((d) => d !== id) : prev.length < 3 ? [...prev, id] : prev
-    );
-  };
-
-  const handleCreate = async () => {
-    if (!setupName.trim()) return;
-    setCreating(true);
-    setError("");
-    try {
-      const body: Record<string, unknown> = {
-        display_name: setupName,
-        pricing_tier: setupTier,
-        selected_deliberation_ids: selectedDelibIds,
-      };
-      if (setupTier === "byok" && setupByokKey) body.byok_api_key = setupByokKey;
-      const res = await fetch("/api/hosted-agent", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json();
-      if (!res.ok) { setError(data.detail || "Failed to create agent"); return; }
-      setAgent(data);
-      setNotFound(false);
-      // Navigate to agent chat
-      window.location.href = "/agent";
-    } catch { setError("Failed to create agent."); }
-    finally { setCreating(false); }
   };
 
   const handleUpdate = async (field: string, value: string | boolean) => {
@@ -180,160 +123,8 @@ export default function HostedAgentDashboard({ onDeleted }: { onDeleted?: () => 
     return <div className="py-8 text-center text-sm" style={{ color: "var(--muted)" }}>Loading...</div>;
   }
 
-  // === SETUP WIZARD ===
-  if (notFound) {
-    return (
-      <div>
-        <h2 className="mb-2 text-xl font-bold">Create Your HaberAgent</h2>
-        <p className="mb-6 text-sm" style={{ color: "var(--muted)" }}>
-          Your agent will represent you in democratic deliberations. Let&apos;s start by picking topics you care about.
-        </p>
-
-        {error && <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/20 dark:text-red-400">{error}</div>}
-
-        {/* Step indicators */}
-        <div className="mb-8 flex items-center gap-2">
-          {[1, 2].map((s) => (
-            <div key={s} className="flex items-center gap-2">
-              <div
-                className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-medium ${wizardStep >= s ? "text-white" : ""}`}
-                style={{
-                  background: wizardStep >= s ? "var(--accent)" : "var(--surface-dim, var(--border))",
-                  color: wizardStep >= s ? "white" : "var(--muted)",
-                }}
-              >
-                {s}
-              </div>
-              <span className="text-xs" style={{ color: wizardStep >= s ? "var(--foreground)" : "var(--muted)" }}>
-                {s === 1 ? "Pick topics" : "Set up agent"}
-              </span>
-              {s < 2 && <div className="mx-2 h-px w-8" style={{ background: "var(--border)" }} />}
-            </div>
-          ))}
-        </div>
-
-        {/* Step 1: Select deliberations */}
-        {wizardStep === 1 && (
-          <div>
-            <p className="mb-3 text-sm" style={{ color: "var(--muted)" }}>
-              Choose 2-3 deliberations that interest you. Your first chat will be grounded in these topics.
-            </p>
-            <input
-              type="text"
-              value={delibSearch}
-              onChange={(e) => setDelibSearch(e.target.value)}
-              placeholder="Search deliberations..."
-              className="mb-4 w-full rounded-lg border px-3 py-2 text-sm"
-              style={{ borderColor: "var(--border)", background: "var(--background)" }}
-            />
-            <div className="mb-4 max-h-[400px] space-y-2 overflow-y-auto">
-              {deliberations
-                .filter((d) => d.question.toLowerCase().includes(delibSearch.toLowerCase()))
-                .slice(0, 20)
-                .map((d) => {
-                  const selected = selectedDelibIds.includes(d.id);
-                  return (
-                    <button
-                      key={d.id}
-                      onClick={() => toggleDelib(d.id)}
-                      className={`w-full rounded-lg border p-3 text-left text-sm transition-colors ${selected ? "ring-2 ring-[var(--accent)]" : ""}`}
-                      style={{ borderColor: "var(--border)", background: selected ? "var(--surface)" : "transparent" }}
-                    >
-                      <div className="font-medium">{d.question}</div>
-                      <div className="mt-1 flex gap-2">
-                        {d.categories?.slice(0, 3).map((c) => (
-                          <span key={c} className="rounded-full px-2 py-0.5 text-xs" style={{ background: "var(--surface-dim, var(--border))" }}>{c}</span>
-                        ))}
-                        <span className="text-xs" style={{ color: "var(--muted)" }}>
-                          {d.num_citizens} participant{d.num_citizens !== 1 ? "s" : ""}
-                        </span>
-                      </div>
-                    </button>
-                  );
-                })}
-              {deliberations.length === 0 && (
-                <div className="py-8 text-center text-sm" style={{ color: "var(--muted)" }}>Loading deliberations...</div>
-              )}
-            </div>
-            <button
-              onClick={() => setWizardStep(2)}
-              className="w-full rounded-lg px-4 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-              style={{ background: "var(--accent)" }}
-            >
-              {selectedDelibIds.length > 0 ? `Continue with ${selectedDelibIds.length} topic${selectedDelibIds.length > 1 ? "s" : ""}` : "Skip — I\u2019ll pick later"}
-            </button>
-          </div>
-        )}
-
-        {/* Step 2: Name + Tier */}
-        {wizardStep === 2 && (
-          <div className="space-y-4">
-            <div>
-              <label className="mb-1 block text-sm font-medium">Your name</label>
-              <input
-                type="text"
-                value={setupName}
-                onChange={(e) => setSetupName(e.target.value)}
-                placeholder="How your agent will refer to you"
-                className="w-full rounded-lg border px-3 py-2 text-sm"
-                style={{ borderColor: "var(--border)", background: "var(--background)" }}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium">Plan</label>
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { value: "free", label: "Free", desc: "50K tokens/mo" },
-                  { value: "byok", label: "Bring Your Key", desc: "Unlimited" },
-                  { value: "subscription", label: "Pro", desc: "500K tokens/mo" },
-                ].map((t) => (
-                  <button
-                    key={t.value}
-                    onClick={() => setSetupTier(t.value)}
-                    className={`rounded-lg border p-3 text-left text-sm transition-colors ${setupTier === t.value ? "ring-2 ring-[var(--accent)]" : ""}`}
-                    style={{ borderColor: "var(--border)", background: setupTier === t.value ? "var(--surface)" : "transparent" }}
-                  >
-                    <div className="font-medium">{t.label}</div>
-                    <div className="text-xs" style={{ color: "var(--muted)" }}>{t.desc}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
-            {setupTier === "byok" && (
-              <div>
-                <label className="mb-1 block text-sm font-medium">OpenRouter API Key</label>
-                <input
-                  type="password"
-                  value={setupByokKey}
-                  onChange={(e) => setSetupByokKey(e.target.value)}
-                  placeholder="sk-or-..."
-                  className="w-full rounded-lg border px-3 py-2 text-sm"
-                  style={{ borderColor: "var(--border)", background: "var(--background)" }}
-                />
-              </div>
-            )}
-            <div className="flex gap-2">
-              <button
-                onClick={() => setWizardStep(1)}
-                className="rounded-lg border px-4 py-2.5 text-sm font-medium transition-opacity hover:opacity-80"
-                style={{ borderColor: "var(--border)" }}
-              >
-                Back
-              </button>
-              <button
-                onClick={handleCreate}
-                disabled={creating || !setupName.trim()}
-                className="flex-1 rounded-lg px-4 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-                style={{ background: "var(--accent)" }}
-              >
-                {creating ? "Creating..." : "Create Agent & Start Chatting"}
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  }
+  // Agent creation now happens at /create-agent
+  if (notFound) return null;
 
   if (!agent) return null;
 

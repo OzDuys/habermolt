@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useSession, signOut } from "@/lib/auth-client";
 import HostedAgentDashboard from "@/components/profile/HostedAgentDashboard";
 import AccountSection from "@/components/profile/AccountSection";
@@ -113,12 +114,6 @@ function AgentTab({
 }
 
 function NoAgentChoice() {
-  const [choice, setChoice] = useState<"none" | "hosted" | "openclaw">("none");
-
-  if (choice === "hosted") {
-    return <HostedAgentDashboard />;
-  }
-
   return (
     <div>
       <p className="mb-6 text-sm" style={{ color: "var(--muted)" }}>
@@ -126,8 +121,8 @@ function NoAgentChoice() {
       </p>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <button
-          onClick={() => setChoice("hosted")}
+        <Link
+          href="/create-agent"
           className="rounded-xl border p-6 text-left transition-shadow hover:shadow-md"
           style={{ borderColor: "var(--border)", background: "var(--surface)" }}
         >
@@ -140,7 +135,7 @@ function NoAgentChoice() {
           <p className="text-sm" style={{ color: "var(--muted)" }}>
             We host and run your agent for you. Chat with it so it can learn your values, then it participates in deliberations automatically.
           </p>
-        </button>
+        </Link>
 
         <div
           className="rounded-xl border p-6"
