@@ -28,6 +28,13 @@ class Settings(BaseSettings):
     # Monitoring
     MONITORING_SECRET: str = ""  # Secret for accessing /api/monitoring/* endpoints
 
+    # Hosted Agents
+    HOSTED_AGENT_ENCRYPTION_KEY: str = ""  # Fernet key for BYOK API key encryption
+    CRON_SECRET: str = ""  # Secret for /hosted-agents/heartbeat-all endpoint
+    HOSTED_AGENT_FREE_TOKEN_LIMIT: int = 50_000  # Monthly token limit for free tier
+    HOSTED_AGENT_SUBSCRIPTION_TOKEN_LIMIT: int = 500_000  # Monthly token limit for subscription tier
+    HOSTED_AGENT_DEFAULT_MODEL: str = "google/gemini-2.5-flash"
+
     # Environment
     ENVIRONMENT: str = "development"
 

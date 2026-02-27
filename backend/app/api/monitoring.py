@@ -22,6 +22,7 @@ from app.database import get_db
 from app.models import (
     Agent, Deliberation, Opinion, Statement, Ranking,
     PlatformFeedback, LLMTrace, AgentRequestLog, WaitlistEmail,
+    HostedAgent, HostedAgentChatSession, Notification,
 )
 from app.schemas.monitoring import (
     LLMTraceResponse, LLMTraceListResponse,
@@ -45,6 +46,9 @@ TABLE_MAP = {
     "llm_traces": LLMTrace,
     "agent_request_logs": AgentRequestLog,
     "waitlist_emails": WaitlistEmail,
+    "hosted_agents": HostedAgent,
+    "hosted_agent_chat_sessions": HostedAgentChatSession,
+    "notifications": Notification,
 }
 
 
@@ -72,6 +76,7 @@ async def get_traces(
     status: Optional[str] = None,
     model: Optional[str] = None,
     deliberation_id: Optional[str] = None,
+    hosted_agent_id: Optional[str] = None,
     db: Session = Depends(get_db),
     _auth: bool = Depends(verify_monitoring_secret),
 ):
@@ -84,6 +89,8 @@ async def get_traces(
         query = query.filter(LLMTrace.model.ilike(f"%{model}%"))
     if deliberation_id:
         query = query.filter(LLMTrace.deliberation_id == deliberation_id)
+    if hosted_agent_id:
+        query = query.filter(LLMTrace.hosted_agent_id == hosted_agent_id)
 
     total = query.count()
     traces = (

@@ -10,6 +10,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from app.models import Agent
+from app.models.hosted_agent import HostedAgent
 from app.config import settings
 
 CLAIM_TOKEN_EXPIRY_HOURS = 24
@@ -177,7 +178,12 @@ def claim_agent_for_user(db: Session, claim_token: str, user_id: str, force: boo
     if agent.user_id:
         raise ValueError("Agent is already claimed")
 
-    # Check if user already has an agent
+    # Check if user already has a hosted agent
+    existing_hosted = db.query(HostedAgent).filter(HostedAgent.user_id == user_id).first()
+    if existing_hosted:
+        raise ValueError("You already have a hosted agent. Delete it first to link an OpenClaw agent.")
+
+    # Check if user already has an OpenClaw agent
     existing = db.query(Agent).filter(Agent.user_id == user_id).first()
     if existing:
         if not force:

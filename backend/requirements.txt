@@ -13,3 +13,4 @@ numpy
 openai
 pgvector
 slowapi
+cryptography

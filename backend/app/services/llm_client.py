@@ -48,22 +48,26 @@ class LLMClient:
         self._trace_type: Optional[str] = None
         self._trace_deliberation_id: Optional[UUID] = None
         self._trace_agent_id: Optional[UUID] = None
+        self._trace_hosted_agent_id: Optional[UUID] = None
 
     def set_trace_context(
         self,
         trace_type: str,
         deliberation_id: UUID = None,
         agent_id: UUID = None,
+        hosted_agent_id: UUID = None,
     ):
         """Set trace context for the next sample_text call."""
         self._trace_type = trace_type
         self._trace_deliberation_id = deliberation_id
         self._trace_agent_id = agent_id
+        self._trace_hosted_agent_id = hosted_agent_id
 
     def _clear_trace_context(self):
         self._trace_type = None
         self._trace_deliberation_id = None
         self._trace_agent_id = None
+        self._trace_hosted_agent_id = None
 
     def sample_text(
         self,
@@ -140,6 +144,130 @@ class LLMClient:
             logger.error(f"LLM API error: {e}")
             return ""
 
+    def chat(
+        self,
+        messages: list[dict],
+        temperature: float = None,
+        max_tokens: int = 8192,
+    ) -> str:
+        """Generate text from a full message history (system + user/assistant turns)."""
+        if temperature is None:
+            temperature = settings.HABERMAS_LLM_TEMPERATURE
+
+        kwargs = dict(
+            model=self._model_name,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+
+        start_time = time.time()
+
+        try:
+            response = self._client.chat.completions.create(**kwargs)
+            latency_ms = int((time.time() - start_time) * 1000)
+            output_text = response.choices[0].message.content or ""
+
+            usage = getattr(response, 'usage', None)
+            tokens_in = usage.prompt_tokens if usage else None
+            tokens_out = usage.completion_tokens if usage else None
+            cost_total = self._extract_cost(usage, tokens_in, tokens_out)
+
+            self._log_trace(
+                messages=messages,
+                output_text=output_text,
+                temperature=temperature,
+                tokens_in=tokens_in,
+                tokens_out=tokens_out,
+                latency_ms=latency_ms,
+                status="success",
+                cost_total=cost_total,
+            )
+
+            self._clear_trace_context()
+            return output_text
+        except Exception as e:
+            latency_ms = int((time.time() - start_time) * 1000)
+            self._log_trace(
+                messages=messages,
+                temperature=temperature,
+                latency_ms=latency_ms,
+                status="error",
+                error_message=str(e),
+            )
+            self._clear_trace_context()
+            logger.error(f"LLM API error: {e}")
+            return ""
+
+    def chat_stream(
+        self,
+        messages: list[dict],
+        temperature: float = None,
+        max_tokens: int = 8192,
+    ):
+        """Stream text from a full message history. Yields chunks as they arrive.
+
+        Yields str chunks. After iteration completes, call finalize_stream_trace()
+        with the accumulated text to log the trace.
+        """
+        if temperature is None:
+            temperature = settings.HABERMAS_LLM_TEMPERATURE
+
+        kwargs = dict(
+            model=self._model_name,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            stream=True,
+            stream_options={"include_usage": True},
+        )
+
+        start_time = time.time()
+        accumulated = []
+        usage_data = None
+
+        try:
+            stream = self._client.chat.completions.create(**kwargs)
+            for chunk in stream:
+                if chunk.choices and chunk.choices[0].delta.content:
+                    text = chunk.choices[0].delta.content
+                    accumulated.append(text)
+                    yield text
+                # Final chunk often has usage
+                if hasattr(chunk, 'usage') and chunk.usage:
+                    usage_data = chunk.usage
+
+            latency_ms = int((time.time() - start_time) * 1000)
+            output_text = "".join(accumulated)
+            tokens_in = usage_data.prompt_tokens if usage_data else None
+            tokens_out = usage_data.completion_tokens if usage_data else None
+            cost_total = self._extract_cost(usage_data, tokens_in, tokens_out)
+
+            self._log_trace(
+                messages=messages,
+                output_text=output_text,
+                temperature=temperature,
+                tokens_in=tokens_in,
+                tokens_out=tokens_out,
+                latency_ms=latency_ms,
+                status="success",
+                cost_total=cost_total,
+            )
+            self._clear_trace_context()
+
+        except Exception as e:
+            latency_ms = int((time.time() - start_time) * 1000)
+            self._log_trace(
+                messages=messages,
+                temperature=temperature,
+                latency_ms=latency_ms,
+                status="error",
+                error_message=str(e),
+            )
+            self._clear_trace_context()
+            logger.error(f"LLM streaming error: {e}")
+            return
+
     def _extract_cost(self, usage, tokens_in: int = None, tokens_out: int = None) -> Optional[float]:
         """Extract cost from OpenRouter response, or estimate from pricing table."""
         if usage is not None:
@@ -213,6 +341,7 @@ class LLMClient:
                     error_message=error_message,
                     deliberation_id=self._trace_deliberation_id,
                     agent_id=self._trace_agent_id,
+                    hosted_agent_id=self._trace_hosted_agent_id,
                 )
                 db.add(trace)
                 db.commit()

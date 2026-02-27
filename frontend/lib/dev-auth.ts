@@ -7,9 +7,9 @@
  */
 
 const DEV_USER = {
-  id: "q9sc7nWLhRTv3Mif5zmfgoUhvmKFceeB",
-  name: "Pieter Oscar Duys",
-  email: "oscarduys@gmail.com",
+  id: "q9sc7nWLhRTv3Mif5zmfgoUhvmKFceeB",  // TODO: replace with your user ID
+  name: "Dev User",
+  email: "dev@localhost",
   createdAt: new Date("2025-02-18T00:00:00Z"),
 };
 

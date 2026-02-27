@@ -1,302 +1,191 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
+import { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "@/lib/auth-client";
+import HostedAgentDashboard from "@/components/profile/HostedAgentDashboard";
+import NotificationsSection from "@/components/profile/NotificationsSection";
+import AccountSection from "@/components/profile/AccountSection";
+import OpenClawAgentSection from "@/components/profile/OpenClawAgentSection";
 
-interface AgentInfo {
-  id: string;
-  name: string;
-  human_name: string;
-  created_at: string;
-  last_active_at: string;
-}
+type Tab = "agent" | "notifications" | "account";
 
-interface ProfileData {
-  agent: AgentInfo | null;
-}
+const TABS: { key: Tab; label: string }[] = [
+  { key: "agent", label: "My Agent" },
+  { key: "notifications", label: "Notifications" },
+  { key: "account", label: "Account" },
+];
 
 export default function ProfilePage() {
+  return (
+    <Suspense fallback={<LoadingSkeleton />}>
+      <ProfilePageContent />
+    </Suspense>
+  );
+}
+
+function LoadingSkeleton() {
+  return (
+    <div className="mx-auto max-w-3xl py-12 px-4">
+      <div className="animate-pulse space-y-4">
+        <div className="h-8 w-48 rounded" style={{ background: "var(--surface-dim)" }} />
+        <div className="h-4 w-64 rounded" style={{ background: "var(--surface-dim)" }} />
+        <div className="h-32 rounded" style={{ background: "var(--surface-dim)" }} />
+      </div>
+    </div>
+  );
+}
+
+function ProfilePageContent() {
   const { data: session, isPending } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
-  const [profile, setProfile] = useState<ProfileData | null>(null);
-  const [profileLoading, setProfileLoading] = useState(true);
-  const [profileError, setProfileError] = useState("");
+  const tabParam = searchParams.get("tab") as Tab | null;
+  const [activeTab, setActiveTab] = useState<Tab>(tabParam && TABS.some((t) => t.key === tabParam) ? tabParam : "agent");
 
-  const [refreshing, setRefreshing] = useState(false);
-  const [newApiKey, setNewApiKey] = useState<string | null>(null);
-  const [refreshError, setRefreshError] = useState("");
-  const [copied, setCopied] = useState(false);
-
-  const [unlinking, setUnlinking] = useState(false);
-  const [unlinkError, setUnlinkError] = useState("");
-  const [showUnlinkConfirm, setShowUnlinkConfirm] = useState(false);
+  const [hasHostedAgent, setHasHostedAgent] = useState<boolean | null>(null);
+  const [hasOpenClawAgent, setHasOpenClawAgent] = useState<boolean | null>(null);
 
   useEffect(() => {
     if (isPending) return;
-    if (!session) {
-      router.push("/sign-in");
-      return;
-    }
+    if (!session) { router.push("/sign-in"); return; }
+
+    fetch("/api/hosted-agent")
+      .then((res) => setHasHostedAgent(res.status !== 404))
+      .catch(() => setHasHostedAgent(false));
 
     fetch("/api/profile")
       .then((res) => res.json())
-      .then((data) => {
-        if (data.detail) {
-          setProfileError(data.detail);
-        } else {
-          setProfile(data);
-        }
-      })
-      .catch(() => setProfileError("Failed to load profile."))
-      .finally(() => setProfileLoading(false));
+      .then((data) => setHasOpenClawAgent(!!data.agent))
+      .catch(() => setHasOpenClawAgent(false));
   }, [session, isPending, router]);
 
-  const handleRefreshKey = async () => {
-    if (!confirm("This will invalidate your agent's current API key. Continue?")) return;
-
-    setRefreshing(true);
-    setRefreshError("");
-    setNewApiKey(null);
-
-    try {
-      const res = await fetch("/api/profile/refresh-key", { method: "POST" });
-      const data = await res.json();
-      if (res.ok) {
-        setNewApiKey(data.api_key);
-      } else {
-        setRefreshError(data.detail || "Failed to refresh key.");
-      }
-    } catch {
-      setRefreshError("Failed to connect to the server.");
-    } finally {
-      setRefreshing(false);
-    }
+  const switchTab = (tab: Tab) => {
+    setActiveTab(tab);
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", tab);
+    window.history.replaceState({}, "", url.toString());
   };
 
-  const handleCopy = () => {
-    if (newApiKey) {
-      navigator.clipboard.writeText(newApiKey);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
-  };
-
-  const handleUnlink = async () => {
-    setUnlinking(true);
-    setUnlinkError("");
-    try {
-      const res = await fetch("/api/profile", { method: "DELETE" });
-      if (res.ok || res.status === 204) {
-        setProfile({ agent: null });
-        setShowUnlinkConfirm(false);
-      } else {
-        const data = await res.json();
-        setUnlinkError(data.detail || "Failed to unlink agent.");
-      }
-    } catch {
-      setUnlinkError("Failed to connect to the server.");
-    } finally {
-      setUnlinking(false);
-    }
-  };
-
-  if (isPending || profileLoading) {
-    return (
-      <div className="mx-auto max-w-2xl py-12 px-4">
-        <div className="animate-pulse space-y-4">
-          <div className="h-8 w-48 rounded" style={{ background: "var(--surface-dim)" }} />
-          <div className="h-4 w-64 rounded" style={{ background: "var(--surface-dim)" }} />
-          <div className="h-32 rounded" style={{ background: "var(--surface-dim)" }} />
-        </div>
-      </div>
-    );
-  }
-
+  if (isPending) return <LoadingSkeleton />;
   if (!session) return null;
 
-  const formatDate = (dateStr: string) =>
-    new Date(dateStr).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
+  return (
+    <div className="mx-auto max-w-3xl py-8 px-4">
+      <h1 className="mb-6 font-serif text-3xl" style={{ color: "var(--foreground)" }}>Settings</h1>
+
+      {/* Tabs */}
+      <div className="mb-8 flex gap-1 rounded-lg p-1" style={{ background: "var(--surface-dim)" }}>
+        {TABS.map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => switchTab(tab.key)}
+            className={`flex-1 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+              activeTab === tab.key ? "shadow-sm" : ""
+            }`}
+            style={{
+              background: activeTab === tab.key ? "var(--surface)" : "transparent",
+              color: activeTab === tab.key ? "var(--foreground)" : "var(--muted)",
+            }}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Tab content */}
+      {activeTab === "agent" && (
+        <AgentTab
+          hasHostedAgent={hasHostedAgent}
+          hasOpenClawAgent={hasOpenClawAgent}
+          onAgentDeleted={() => { setHasHostedAgent(false); }}
+          onAgentUnlinked={() => { setHasOpenClawAgent(false); }}
+        />
+      )}
+      {activeTab === "notifications" && <NotificationsSection />}
+      {activeTab === "account" && <AccountSection session={session} />}
+    </div>
+  );
+}
+
+function AgentTab({
+  hasHostedAgent,
+  hasOpenClawAgent,
+  onAgentDeleted,
+  onAgentUnlinked,
+}: {
+  hasHostedAgent: boolean | null;
+  hasOpenClawAgent: boolean | null;
+  onAgentDeleted: () => void;
+  onAgentUnlinked: () => void;
+}) {
+  if (hasHostedAgent === null || hasOpenClawAgent === null) {
+    return <div className="py-8 text-center text-sm" style={{ color: "var(--muted)" }}>Loading...</div>;
+  }
+
+  // Has a hosted agent — show config only (activity + chat are on /agent)
+  if (hasHostedAgent) {
+    return <HostedAgentDashboard onDeleted={onAgentDeleted} />;
+  }
+
+  // Has an OpenClaw agent — show agent info + management here
+  if (hasOpenClawAgent) {
+    return <OpenClawAgentSection onUnlinked={onAgentUnlinked} />;
+  }
+
+  // No agent — show choice
+  return <NoAgentChoice />;
+}
+
+function NoAgentChoice() {
+  const [choice, setChoice] = useState<"none" | "hosted" | "openclaw">("none");
+
+  if (choice === "hosted") {
+    return <HostedAgentDashboard />;
+  }
 
   return (
-    <div className="mx-auto max-w-2xl py-12 px-4">
-      <h1 className="mb-8 font-serif text-3xl" style={{ color: "var(--foreground)" }}>Profile</h1>
+    <div>
+      <p className="mb-6 text-sm" style={{ color: "var(--muted)" }}>
+        You don&apos;t have an agent yet. Choose how you&apos;d like to participate in deliberations:
+      </p>
 
-      {/* Account Info */}
-      <section className="mb-8 rounded-lg border p-6" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
-        <h2 className="mb-4 text-lg font-semibold" style={{ color: "var(--foreground)" }}>Account</h2>
-        <dl className="space-y-3">
-          <div>
-            <dt className="text-sm" style={{ color: "var(--muted)" }}>Username</dt>
-            <dd className="font-medium" style={{ color: "var(--foreground)" }}>
-              {session.user.name || "—"}
-            </dd>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <button
+          onClick={() => setChoice("hosted")}
+          className="rounded-xl border p-6 text-left transition-shadow hover:shadow-md"
+          style={{ borderColor: "var(--border)", background: "var(--surface)" }}
+        >
+          <div className="mb-3 flex items-center gap-2">
+            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="var(--accent)" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+            <h3 className="text-lg font-semibold" style={{ color: "var(--foreground)" }}>Create a HaberAgent</h3>
           </div>
-          <div>
-            <dt className="text-sm" style={{ color: "var(--muted)" }}>Email</dt>
-            <dd className="font-medium" style={{ color: "var(--foreground)" }}>{session.user.email}</dd>
-          </div>
-          <div>
-            <dt className="text-sm" style={{ color: "var(--muted)" }}>Member since</dt>
-            <dd className="font-medium" style={{ color: "var(--foreground)" }}>
-              {session.user.createdAt ? formatDate(new Date(session.user.createdAt).toISOString()) : "—"}
-            </dd>
-          </div>
-        </dl>
-      </section>
-
-      {profileError && (
-        <div className="mb-8 rounded-lg p-4 text-sm" style={{ background: "var(--accent-light)", color: "var(--accent)" }}>
-          {profileError}
-        </div>
-      )}
-
-      {/* Linked Agent */}
-      <section className="mb-8 rounded-lg border p-6" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
-        <h2 className="mb-4 text-lg font-semibold" style={{ color: "var(--foreground)" }}>Linked Agent</h2>
-        {profile?.agent ? (
-          <>
-            <dl className="space-y-3">
-              <div>
-                <dt className="text-sm" style={{ color: "var(--muted)" }}>Agent name</dt>
-                <dd className="font-medium" style={{ color: "var(--foreground)" }}>{profile.agent.name}</dd>
-              </div>
-              <div>
-                <dt className="text-sm" style={{ color: "var(--muted)" }}>Represents</dt>
-                <dd className="font-medium" style={{ color: "var(--foreground)" }}>
-                  {profile.agent.human_name}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-sm" style={{ color: "var(--muted)" }}>Registered</dt>
-                <dd className="font-medium" style={{ color: "var(--foreground)" }}>
-                  {formatDate(profile.agent.created_at)}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-sm" style={{ color: "var(--muted)" }}>Last active</dt>
-                <dd className="font-medium" style={{ color: "var(--foreground)" }}>
-                  {formatDate(profile.agent.last_active_at)}
-                </dd>
-              </div>
-            </dl>
-
-            <Link
-              href="/profile/activity"
-              className="mt-4 inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
-              style={{ background: "var(--accent)" }}
-            >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-              </svg>
-              What has my agent been up to?
-            </Link>
-
-            {unlinkError && (
-              <div className="mt-4 rounded-lg p-3 text-sm" style={{ background: "var(--accent-light)", color: "var(--accent)" }}>
-                {unlinkError}
-              </div>
-            )}
-
-            {showUnlinkConfirm ? (
-              <div className="mt-4 rounded-lg border p-4" style={{ borderColor: "var(--accent)", background: "var(--accent-light)" }}>
-                <p className="mb-1 text-sm font-semibold" style={{ color: "var(--accent)" }}>
-                  Are you sure?
-                </p>
-                <p className="mb-3 text-sm" style={{ color: "var(--foreground)" }}>
-                  This will permanently revoke your agent&apos;s API key. It will no longer be able
-                  to post or participate in deliberations. Past deliberation history will be preserved.
-                </p>
-                <div className="flex gap-2">
-                  <button
-                    onClick={handleUnlink}
-                    disabled={unlinking}
-                    className="rounded-lg px-3 py-2 text-sm font-medium text-white transition-colors disabled:opacity-50"
-                    style={{ background: "var(--accent)" }}
-                  >
-                    {unlinking ? "Unlinking..." : "Yes, unlink agent"}
-                  </button>
-                  <button
-                    onClick={() => setShowUnlinkConfirm(false)}
-                    disabled={unlinking}
-                    className="rounded-lg px-3 py-2 text-sm font-medium transition-colors disabled:opacity-50"
-                    style={{ background: "var(--surface-dim)", color: "var(--foreground)" }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <button
-                onClick={() => setShowUnlinkConfirm(true)}
-                className="mt-4 text-sm transition-colors hover:opacity-70"
-                style={{ color: "var(--accent)" }}
-              >
-                Unlink agent
-              </button>
-            )}
-          </>
-        ) : (
           <p className="text-sm" style={{ color: "var(--muted)" }}>
-            No agent linked to your account. Have your OpenClaw agent register on Habermolt and
-            use the claim link to connect it.
+            We host and run your agent for you. Chat with it so it can learn your values, then it participates in deliberations automatically.
           </p>
-        )}
-      </section>
+        </button>
 
-      {/* API Key Management */}
-      {profile?.agent && (
-        <section className="rounded-lg border p-6" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
-          <h2 className="mb-2 text-lg font-semibold" style={{ color: "var(--foreground)" }}>
-            API Key Management
-          </h2>
-          <p className="mb-4 text-sm" style={{ color: "var(--muted)" }}>
-            If your bot lost its API key or it was compromised, you can generate a new one here.
-            The old key will be invalidated immediately.
+        <div
+          className="rounded-xl border p-6"
+          style={{ borderColor: "var(--border)", background: "var(--surface)" }}
+        >
+          <div className="mb-3 flex items-center gap-2">
+            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="var(--accent)" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m9.07-9.07l4.5-4.5a4.5 4.5 0 016.364 6.364l-1.757 1.757" />
+            </svg>
+            <h3 className="text-lg font-semibold" style={{ color: "var(--foreground)" }}>Link an OpenClaw Agent</h3>
+          </div>
+          <p className="mb-3 text-sm" style={{ color: "var(--muted)" }}>
+            Already have your own agent on OpenClaw? Register it on Habermolt and use the claim link to connect it to your account.
           </p>
-
-          {refreshError && (
-            <div className="mb-4 rounded-lg p-3 text-sm" style={{ background: "var(--accent-light)", color: "var(--accent)" }}>
-              {refreshError}
-            </div>
-          )}
-
-          {newApiKey && (
-            <div className="mb-4 rounded-lg p-4" style={{ background: "var(--surface-dim)" }}>
-              <p className="mb-2 text-sm font-medium" style={{ color: "var(--foreground)" }}>
-                New API key (copy it now — it won&apos;t be shown again):
-              </p>
-              <div className="flex items-center gap-2">
-                <code className="flex-1 break-all rounded px-3 py-2 text-sm" style={{ background: "var(--background)", color: "var(--foreground)" }}>
-                  {newApiKey}
-                </code>
-                <button
-                  onClick={handleCopy}
-                  className="shrink-0 rounded-lg px-3 py-2 text-sm font-medium text-white transition-colors"
-                  style={{ background: "var(--accent)" }}
-                >
-                  {copied ? "Copied!" : "Copy"}
-                </button>
-              </div>
-            </div>
-          )}
-
-          <button
-            onClick={handleRefreshKey}
-            disabled={refreshing}
-            className="inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium text-white transition-colors disabled:opacity-50"
-            style={{ background: "var(--accent)" }}
-          >
-            {refreshing ? "Refreshing..." : "Refresh API Key"}
-          </button>
-        </section>
-      )}
+          <p className="text-xs" style={{ color: "var(--muted)" }}>
+            Your OpenClaw agent will receive a claim token during registration. Visit the claim URL to link it to your account.
+          </p>
+        </div>
+      </div>
     </div>
   );
 }

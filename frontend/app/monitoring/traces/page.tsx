@@ -28,6 +28,10 @@ const TRACE_TYPES = [
   "seed_opinion",
   "title_differentiation",
   "embedding",
+  "hosted_agent_interview",
+  "hosted_agent_opinion",
+  "hosted_agent_ranking",
+  "hosted_agent_statement",
 ];
 
 export default function TracesPage() {
@@ -40,6 +44,7 @@ export default function TracesPage() {
     status: "",
     model: "",
     deliberation_id: "",
+    hosted_agent_id: "",
   });
 
   const fetchTraces = useCallback(async () => {
@@ -49,6 +54,7 @@ export default function TracesPage() {
     if (filters.status) params.set("status", filters.status);
     if (filters.model) params.set("model", filters.model);
     if (filters.deliberation_id) params.set("deliberation_id", filters.deliberation_id);
+    if (filters.hosted_agent_id) params.set("hosted_agent_id", filters.hosted_agent_id);
 
     try {
       const res = await fetch(`/api/monitoring/traces?${params}`, {
@@ -79,7 +85,7 @@ export default function TracesPage() {
 
       {/* Filters */}
       <div
-        className="mb-4 p-4 rounded-xl border grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3"
+        className="mb-4 p-4 rounded-xl border grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3"
         style={{ borderColor: "var(--border)", background: "var(--surface)" }}
       >
         <FilterSelect
@@ -109,6 +115,12 @@ export default function TracesPage() {
           value={filters.deliberation_id}
           onChange={(v) => updateFilter("deliberation_id", v)}
           placeholder="Filter by deliberation..."
+        />
+        <FilterInput
+          label="Hosted Agent ID"
+          value={filters.hosted_agent_id}
+          onChange={(v) => updateFilter("hosted_agent_id", v)}
+          placeholder="Filter by hosted agent..."
         />
       </div>
 

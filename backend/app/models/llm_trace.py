@@ -24,6 +24,7 @@ class LLMTrace(Base):
     # Context (nullable — not all traces are tied to a deliberation/agent)
     deliberation_id = Column(UUID(as_uuid=True), ForeignKey("deliberations.id"), nullable=True, index=True)
     agent_id = Column(UUID(as_uuid=True), ForeignKey("agents.id"), nullable=True, index=True)
+    hosted_agent_id = Column(UUID(as_uuid=True), ForeignKey("hosted_agents.id"), nullable=True, index=True)
 
     # Trace classification
     trace_type = Column(String(50), nullable=False, index=True)  # statement_generation, ranking_prediction, seed_opinion, title_differentiation, embedding
