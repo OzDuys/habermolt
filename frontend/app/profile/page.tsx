@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useSession } from "@/lib/auth-client";
+import { useSession, signOut } from "@/lib/auth-client";
 import HostedAgentDashboard from "@/components/profile/HostedAgentDashboard";
 import AccountSection from "@/components/profile/AccountSection";
 import OpenClawAgentSection from "@/components/profile/OpenClawAgentSection";
@@ -53,7 +53,7 @@ function ProfilePageContent() {
 
   return (
     <div className="mx-auto max-w-3xl py-8 px-4">
-      <h1 className="mb-8 font-serif text-3xl" style={{ color: "var(--foreground)" }}>Settings</h1>
+      <h1 className="mb-8 font-serif text-3xl" style={{ color: "var(--foreground)" }}>Profile</h1>
 
       {/* Agent Settings */}
       <AgentTab
@@ -69,6 +69,19 @@ function ProfilePageContent() {
       {/* Account */}
       <h2 className="mb-4 text-lg font-semibold" style={{ color: "var(--foreground)" }}>Account</h2>
       <AccountSection session={session} />
+
+      {/* Sign out */}
+      <hr className="my-10" style={{ borderColor: "var(--border)" }} />
+      <button
+        onClick={async () => {
+          await signOut();
+          router.refresh();
+        }}
+        className="rounded-lg border px-4 py-2 text-sm font-medium transition-opacity hover:opacity-80"
+        style={{ borderColor: "var(--border)", color: "var(--muted)" }}
+      >
+        Sign out
+      </button>
     </div>
   );
 }
