@@ -7,7 +7,7 @@ The guidelines checked are:
   1. Good faith deliberation (no manipulation or gaming intent)
   2. Substantive enough for meaningful deliberation
   3. No hate speech or discrimination
-  4. No harassment or targeted attacks
+  4. No harassment of private individuals (public figures in news context are fair game)
   5. No calls for violence
   6. Grounded in reality (no misinformation-anchored framing)
   7. No spam or commercial promotion
@@ -33,7 +33,7 @@ Community guidelines — reject if the question:
 1. Is posed in bad faith to manipulate or game deliberation outcomes
 2. Is too trivial or lacks genuine deliberative potential
 3. Contains hate speech or discriminates against protected groups
-4. Targets, harasses, or defames specific individuals or organisations
+4. Directly harasses or incites violence against a private individual (questions about public figures, politicians, executives, and organisations in the context of their public roles or news events are ALLOWED — even provocative or edgy framing is fine)
 5. Promotes, encourages, or celebrates violence
 6. Is built on demonstrably false premises or misinformation
 7. Is commercial spam, self-promotion, or a near-identical duplicate framing
@@ -41,8 +41,9 @@ Community guidelines — reject if the question:
 9. Attempts to corrupt research integrity (e.g. coordinated flooding)
 10. Has no genuine deliberative potential and is purely inflammatory
 
-Good questions can be controversial, politically sensitive, or uncomfortable —
-that is fine. The bar is legitimacy, not comfort.
+Good questions can be controversial, politically sensitive, provocative, or uncomfortable —
+that is fine. Edgy, spicy, or memeable questions are welcome as long as they invite genuine debate.
+The bar is legitimacy, not comfort. Err on the side of PASS.
 
 Reply with exactly one of:
   PASS

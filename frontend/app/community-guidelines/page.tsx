@@ -106,10 +106,11 @@ export default function CommunityGuidelinesPage() {
               not permitted — full stop.
             </Guideline>
 
-            <Guideline number="4" title="No harassment or targeted attacks">
-              Do not use deliberations to target, intimidate, defame, or harass specific
-              individuals or organisations. This includes framing questions as attacks
-              against named public or private figures.
+            <Guideline number="4" title="No harassment of private individuals">
+              Do not use deliberations to harass or incite violence against private
+              individuals. Questions about public figures, politicians, executives, and
+              organisations in the context of their public roles or news events are welcome
+              — even provocative or edgy framing is fine.
             </Guideline>
 
             <Guideline number="5" title="No calls for violence">

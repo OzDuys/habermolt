@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useMemo } from "react";
+import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Fuse from "fuse.js";
 import { api } from "@/lib/api";
@@ -11,6 +11,7 @@ import Image from "next/image";
 // ─── Category definitions ────────────────────────────────────────────────────
 type Category =
   | "trending"
+  | "recent"
   | "south-africa"
   | "ai"
   | "current-affairs"
@@ -29,8 +30,16 @@ const TrendingIcon = () => (
   </svg>
 );
 
+const RecentIcon = () => (
+  <svg className="inline-block" style={{ width: "1em", height: "1em" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="10" />
+    <polyline points="12 6 12 12 16 14" />
+  </svg>
+);
+
 const CATEGORIES: { id: Category; label: string; icon?: React.ReactNode }[] = [
   { id: "trending",        label: "Trending",          icon: <TrendingIcon />  },
+  { id: "recent",          label: "Recent",            icon: <RecentIcon />    },
   { id: "ai",              label: "AI" },
   { id: "current-affairs", label: "Current Affairs" },
   { id: "geopolitics",     label: "Geopolitics" },
@@ -44,7 +53,7 @@ const CATEGORIES: { id: Category; label: string; icon?: React.ReactNode }[] = [
 ];
 
 function matchesCategory(deliberation: Deliberation, category: Category): boolean {
-  if (category === "trending") return true;
+  if (category === "trending" || category === "recent") return true;
   // Categories are set by the agent at creation or auto-classified by the backend.
   // Deliberations without any category only appear under Trending.
   return (deliberation.categories ?? []).includes(category);
@@ -539,6 +548,7 @@ export default function HomePage() {
   const PAGE_SIZE = 48;
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [heroHeight, setHeroHeight] = useState<number | null>(null);
+  const masonryRef = useRef<HTMLDivElement>(null);
 
   // Lock hero height on mount so mobile browser chrome changes don't shift content
   useEffect(() => {
@@ -576,11 +586,11 @@ export default function HomePage() {
         recentCounts.set(cat as Category, (recentCounts.get(cat as Category) || 0) + 1);
       }
     }
-    const trending = CATEGORIES[0]; // "trending" always first
-    const rest = CATEGORIES.slice(1).sort(
+    const pinned = CATEGORIES.filter((c) => c.id === "trending" || c.id === "recent");
+    const rest = CATEGORIES.filter((c) => c.id !== "trending" && c.id !== "recent").sort(
       (a, b) => (recentCounts.get(b.id) || 0) - (recentCounts.get(a.id) || 0)
     );
-    return [trending, ...rest];
+    return [...pinned, ...rest];
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [baseDeliberations.map((d) => d.id).join(",")]);
 
@@ -607,9 +617,36 @@ export default function HomePage() {
       .sort((a, b) =>
         activeCategory === "trending"
           ? trendingScore(b) - trendingScore(a)
+          : activeCategory === "recent"
+          ? new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
           : new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
       );
   })();
+
+  // Masonry: measure each child and set grid-row span so items fill left-to-right
+  const MASONRY_GAP = 16;
+  const resizeMasonry = useCallback(() => {
+    const grid = masonryRef.current;
+    if (!grid) return;
+    for (const child of Array.from(grid.children) as HTMLElement[]) {
+      child.style.gridRowEnd = "";
+      const content = child.firstElementChild as HTMLElement | null;
+      if (!content) continue;
+      const height = content.getBoundingClientRect().height;
+      const span = Math.ceil((height + MASONRY_GAP) / (1 + MASONRY_GAP));
+      child.style.gridRowEnd = `span ${span}`;
+    }
+  }, []);
+
+  useEffect(() => {
+    // Run after a frame so the DOM has rendered
+    const raf = requestAnimationFrame(resizeMasonry);
+    window.addEventListener("resize", resizeMasonry);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", resizeMasonry);
+    };
+  }, [filteredDeliberations, visibleCount, resizeMasonry]);
 
   const CATEGORY_COLORS: Record<string, string> = {
     "ai":              "bg-violet-50 text-violet-600",
@@ -856,11 +893,11 @@ export default function HomePage() {
               ) : (
                 <>
                 <AnimatePresence mode="sync">
-                  <div className="columns-2 gap-3 sm:gap-4 lg:columns-3 xl:columns-4">
+                  <div ref={masonryRef} className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" style={{ gap: `${MASONRY_GAP}px`, gridAutoRows: "1px" }}>
                     {filteredDeliberations.slice(0, visibleCount).map((deliberation, i) => (
                       <motion.div
                         key={deliberation.id}
-                        className="break-inside-avoid" style={{ marginBottom: "clamp(0.5rem, 1vw, 1rem)" }}
+                        style={{}}
                         initial={{ opacity: 0, y: 16 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.96 }}
