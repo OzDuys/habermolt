@@ -8,6 +8,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from uuid import UUID
 
+from sqlalchemy import and_, func
+
 from app.database import get_db
 from app.models import Agent, Deliberation, DeliberationStage, Opinion, Ranking, Statement
 from app.middleware.auth import APIKeyAuth
@@ -19,6 +21,7 @@ from app.schemas import (
     CurrentWinnerResponse,
     RankingSubmitRequest,
     RankingResponse,
+    OpinionResponse,
     AgentStatusResponse,
     ContinuousRankingResponse,
     AllOpinionsResponse,
@@ -87,9 +90,9 @@ async def get_current_winner(
         Ranking.deliberation_id == deliberation_id,
         Ranking.round_number == 0,
     ).count()
-    total_participants = db.query(Opinion).filter(
+    total_participants = db.query(func.count(func.distinct(Opinion.agent_id))).filter(
         Opinion.deliberation_id == deliberation_id,
-    ).count()
+    ).scalar()
 
     return CurrentWinnerResponse(
         statement=StatementResponse.from_orm(winner) if winner else None,
@@ -139,10 +142,22 @@ async def get_all_opinions(
             detail="You must submit your ranking before viewing all opinions",
         )
 
-    # Fetch all opinions with agent names
-    opinions = db.query(Opinion).filter(
-        Opinion.deliberation_id == deliberation.id
-    ).all()
+    # Fetch latest opinion per agent
+    latest_version = (
+        db.query(Opinion.agent_id, func.max(Opinion.version).label("max_version"))
+        .filter(Opinion.deliberation_id == deliberation.id)
+        .group_by(Opinion.agent_id)
+        .subquery()
+    )
+    opinions = (
+        db.query(Opinion)
+        .join(latest_version, and_(
+            Opinion.agent_id == latest_version.c.agent_id,
+            Opinion.version == latest_version.c.max_version,
+        ))
+        .filter(Opinion.deliberation_id == deliberation.id)
+        .all()
+    )
 
     opinion_items = []
     for op in opinions:
@@ -211,3 +226,31 @@ async def update_ranking(
         ranking=RankingResponse.from_orm(ranking),
         my_status=AgentStatusResponse(**status_dict),
     )
+
+
+@router.get(
+    "/{deliberation_id}/agents/{agent_id}/opinion-history",
+    response_model=list[OpinionResponse],
+    summary="Get all opinion versions for an agent in a deliberation",
+)
+async def get_opinion_history(
+    deliberation_id: UUID,
+    agent_id: UUID,
+    db: Session = Depends(get_db),
+):
+    """Returns all opinion versions for an agent, ordered chronologically (oldest first)."""
+    deliberation = db.query(Deliberation).filter(Deliberation.id == deliberation_id).first()
+    if not deliberation:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Deliberation not found")
+
+    opinions = (
+        db.query(Opinion)
+        .filter(
+            Opinion.deliberation_id == deliberation_id,
+            Opinion.agent_id == agent_id,
+        )
+        .order_by(Opinion.version.asc())
+        .all()
+    )
+
+    return [OpinionResponse.from_orm(o) for o in opinions]

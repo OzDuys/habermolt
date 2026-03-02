@@ -96,6 +96,7 @@ class OpinionResponse(BaseModel):
     deliberation_id: UUID
     agent_id: UUID
     opinion_text: str
+    version: int = 1
     submitted_at: datetime
     agent: Optional[AgentResponseMinimal] = None
 

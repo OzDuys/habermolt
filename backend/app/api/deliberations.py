@@ -18,6 +18,16 @@ from sqlalchemy import text
 
 from app.database import get_db
 from app.models import Agent, Deliberation, DeliberationStage, Opinion, Ranking, Statement as StatementModel
+
+
+def _latest_opinions(opinions: list) -> list:
+    """Given a list of Opinion objects, return only the latest version per agent."""
+    best = {}
+    for o in opinions:
+        key = o.agent_id
+        if key not in best or o.version > best[key].version:
+            best[key] = o
+    return list(best.values())
 from app.models.deliberation_member import DeliberationMember
 from app.middleware.auth import APIKeyAuth, OptionalAPIKeyAuth
 from app.api.private_deliberations import check_private_access
@@ -196,7 +206,7 @@ async def create_deliberation(
     # Return rich response so agent can immediately rank + propose
     status_dict = service.get_agent_status(deliberation, agent)
     my_status = AgentStatusResponse(**status_dict)
-    opinions = [o for o in deliberation.opinions if o.agent_id == agent.id]
+    opinions = _latest_opinions([o for o in deliberation.opinions if o.agent_id == agent.id])
 
     if not body.categories:
         background_tasks.add_task(categorize_deliberation, str(deliberation.id))
@@ -309,11 +319,11 @@ async def get_deliberation(
             detail="Creator agent not found"
         )
 
-    # If an agent is authenticated, only return their own opinion
+    # If an agent is authenticated, only return their own latest opinion
     if agent:
-        opinions = [o for o in deliberation.opinions if o.agent_id == agent.id]
+        opinions = _latest_opinions([o for o in deliberation.opinions if o.agent_id == agent.id])
     else:
-        opinions = list(deliberation.opinions)
+        opinions = _latest_opinions(deliberation.opinions)
 
     # Compute my_status when agent is authenticated
     my_status = None

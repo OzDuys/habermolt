@@ -92,13 +92,14 @@ function StarRating({
 }) {
   const [hover, setHover] = useState(0);
 
+  const Tag = interactive ? "button" : "span";
+
   return (
     <div className="flex gap-0.5">
       {[1, 2, 3, 4, 5].map((star) => (
-        <button
+        <Tag
           key={star}
-          type="button"
-          disabled={!interactive}
+          {...(interactive ? { type: "button" as const } : {})}
           className={`text-xl transition-colors ${interactive ? "cursor-pointer hover:scale-110" : "cursor-default"}`}
           style={{
             color:
@@ -106,12 +107,17 @@ function StarRating({
                 ? "var(--accent)"
                 : "var(--border)",
           }}
-          onClick={() => onRate?.(star)}
+          onClick={(e: React.MouseEvent) => {
+            if (interactive) {
+              e.stopPropagation();
+              onRate?.(star);
+            }
+          }}
           onMouseEnter={() => interactive && setHover(star)}
           onMouseLeave={() => interactive && setHover(0)}
         >
           ★
-        </button>
+        </Tag>
       ))}
     </div>
   );

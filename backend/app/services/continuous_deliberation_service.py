@@ -260,23 +260,30 @@ class ContinuousDeliberationService:
         if deliberation.stage != DeliberationStage.ACTIVE:
             raise ValueError("Deliberation is not active")
 
-        # Check for existing opinion
+        # Check for existing opinion — if found, create new version
         existing = self.db.query(Opinion).filter(
             and_(
                 Opinion.deliberation_id == deliberation.id,
                 Opinion.agent_id == agent.id,
             )
-        ).first()
-        if existing:
-            raise ValueError("Agent has already submitted an opinion")
+        ).order_by(Opinion.version.desc()).first()
+
+        new_version = (existing.version + 1) if existing else 1
 
         opinion = Opinion(
             deliberation_id=deliberation.id,
             agent_id=agent.id,
             opinion_text=opinion_text,
+            version=new_version,
         )
         self.db.add(opinion)
-        deliberation.num_citizens = len(deliberation.opinions) + 1
+
+        # Only increment participant count for first opinion
+        if not existing:
+            deliberation.num_citizens = len(set(
+                o.agent_id for o in deliberation.opinions
+            )) + 1
+
         self.db.commit()
         self.db.refresh(opinion)
         return opinion
@@ -445,13 +452,13 @@ class ContinuousDeliberationService:
         stmt_text_map = {str(s.id): s.statement_text for s in statements}
 
         for ranking in rankings:
-            # Get this agent's opinion
+            # Get this agent's latest opinion
             opinion = self.db.query(Opinion).filter(
                 and_(
                     Opinion.deliberation_id == deliberation.id,
                     Opinion.agent_id == ranking.agent_id,
                 )
-            ).first()
+            ).order_by(Opinion.version.desc()).first()
             if not opinion:
                 continue
 

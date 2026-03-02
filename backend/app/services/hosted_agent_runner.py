@@ -12,7 +12,7 @@ from typing import Optional
 from uuid import UUID
 
 from sqlalchemy.orm import Session
-from sqlalchemy import and_
+from sqlalchemy import and_, func
 
 from app.config import settings
 from app.models import (
@@ -22,6 +22,7 @@ from app.models import (
     Opinion,
     Ranking,
     Statement,
+    HeartbeatSession,
 )
 from app.models.deliberation_member import DeliberationMember
 from app.models.hosted_agent import HostedAgent
@@ -136,7 +137,10 @@ def run_single_hosted_agent(db: Session, hosted_agent: HostedAgent) -> dict:
         return {"status": "token_limit"}
 
     agent = hosted_agent.agent
-    actions_taken = []
+    actions_taken = []  # string descriptions for backward compat
+    structured_actions = []  # rich data for HeartbeatSession
+
+    started_at = datetime.utcnow()
 
     # Compute actions + discovered (same logic as agent_status.py)
     actions, discovered = _compute_agent_actions(db, agent)
@@ -146,7 +150,8 @@ def run_single_hosted_agent(db: Session, hosted_agent: HostedAgent) -> dict:
         try:
             result = _execute_action(db, hosted_agent, action)
             if result:
-                actions_taken.append(result)
+                actions_taken.append(result["description"])
+                structured_actions.append(result)
         except Exception as e:
             logger.error(f"Action failed for hosted agent {hosted_agent.id}: {e}")
 
@@ -155,9 +160,22 @@ def run_single_hosted_agent(db: Session, hosted_agent: HostedAgent) -> dict:
         try:
             result = _join_deliberation(db, hosted_agent, disc["deliberation_id"])
             if result:
-                actions_taken.append(result)
+                actions_taken.append(result["description"])
+                structured_actions.append(result)
         except Exception as e:
             logger.error(f"Join failed for hosted agent {hosted_agent.id}: {e}")
+
+    # Persist heartbeat session
+    completed_at = datetime.utcnow()
+    hb_session = HeartbeatSession(
+        hosted_agent_id=hosted_agent.id,
+        actions=structured_actions,
+        action_count=len(structured_actions),
+        status="success",
+        started_at=started_at,
+        completed_at=completed_at,
+    )
+    db.add(hb_session)
 
     # Update heartbeat timestamp
     hosted_agent.last_heartbeat_at = datetime.utcnow()
@@ -236,24 +254,37 @@ def _compute_agent_actions(db: Session, agent: Agent) -> tuple[list[dict], list[
     return actions, discovered
 
 
-def _execute_action(db: Session, hosted_agent: HostedAgent, action: dict) -> Optional[str]:
-    """Execute a single action. Returns a description string or None."""
+def _execute_action(db: Session, hosted_agent: HostedAgent, action: dict) -> Optional[dict]:
+    """Execute a single action. Returns structured action data or None."""
     delib_id = action["deliberation_id"]
     question = action["question"]
     act = action["action"]
 
     if act in ("rank_statements", "update_rankings", "review_predicted_rankings"):
-        _do_ranking(db, hosted_agent, delib_id)
-        return f"Ranked statements on '{question[:50]}'"
+        ranking_data = _do_ranking(db, hosted_agent, delib_id)
+        return {
+            "action": "rank_statements",
+            "deliberation_id": str(delib_id),
+            "question": question,
+            "description": f"Ranked statements on '{question[:50]}'",
+            "ranking_data": ranking_data,
+        }
 
     elif act == "add_statement":
-        _do_add_statement(db, hosted_agent, delib_id)
-        return f"Proposed consensus on '{question[:50]}'"
+        stmt_data = _do_add_statement(db, hosted_agent, delib_id)
+        return {
+            "action": "add_statement",
+            "deliberation_id": str(delib_id),
+            "question": question,
+            "description": f"Proposed consensus on '{question[:50]}'",
+            "statement_title": stmt_data.get("title") if stmt_data else None,
+            "statement_text": stmt_data.get("text") if stmt_data else None,
+        }
 
     return None
 
 
-def _join_deliberation(db: Session, hosted_agent: HostedAgent, delib_id: UUID) -> Optional[str]:
+def _join_deliberation(db: Session, hosted_agent: HostedAgent, delib_id: UUID) -> Optional[dict]:
     """Submit opinion to join a deliberation, then rank + propose."""
     delib = db.query(Deliberation).filter(Deliberation.id == delib_id).first()
     if not delib:
@@ -297,25 +328,31 @@ def _join_deliberation(db: Session, hosted_agent: HostedAgent, delib_id: UUID) -
     # Propose consensus
     _do_add_statement(db, hosted_agent, delib.id)
 
-    return f"Joined '{delib.question[:50]}'"
+    return {
+        "action": "join_deliberation",
+        "deliberation_id": str(delib.id),
+        "question": delib.question,
+        "description": f"Joined '{delib.question[:50]}'",
+        "opinion_text": opinion_text,
+    }
 
 
-def _do_ranking(db: Session, hosted_agent: HostedAgent, delib_id: UUID) -> None:
-    """Rank all statements in a deliberation."""
+def _do_ranking(db: Session, hosted_agent: HostedAgent, delib_id: UUID) -> Optional[list]:
+    """Rank all statements in a deliberation. Returns ranking data."""
     agent = hosted_agent.agent
     profile = _get_profile_text(hosted_agent)
 
-    # Get agent's opinion
+    # Get agent's latest opinion
     opinion = db.query(Opinion).filter(
         and_(Opinion.deliberation_id == delib_id, Opinion.agent_id == agent.id)
-    ).first()
+    ).order_by(Opinion.version.desc()).first()
     if not opinion:
-        return
+        return None
 
     # Get statements
     statements = db.query(Statement).filter(Statement.deliberation_id == delib_id).all()
     if not statements:
-        return
+        return None
 
     stmt_list = "\n".join(
         f"- ID: {s.id} | {s.title or 'Untitled'}: {s.statement_text}"
@@ -338,7 +375,7 @@ def _do_ranking(db: Session, hosted_agent: HostedAgent, delib_id: UUID) -> None:
     )
 
     if not response:
-        return
+        return None
 
     # Parse ranking from response — extract UUIDs in order
     rankings = _parse_ranking_response(response, statements)
@@ -355,11 +392,13 @@ def _do_ranking(db: Session, hosted_agent: HostedAgent, delib_id: UUID) -> None:
         )
     except ValueError as e:
         logger.warning(f"Ranking submission failed: {e}")
+        return None
 
     _track_tokens_from_recent_trace(db, hosted_agent)
+    return rankings
 
 
-def _do_add_statement(db: Session, hosted_agent: HostedAgent, delib_id: UUID) -> None:
+def _do_add_statement(db: Session, hosted_agent: HostedAgent, delib_id: UUID) -> Optional[dict]:
     """Propose a consensus statement."""
     agent = hosted_agent.agent
     profile = _get_profile_text(hosted_agent)
@@ -369,12 +408,26 @@ def _do_add_statement(db: Session, hosted_agent: HostedAgent, delib_id: UUID) ->
         and_(Statement.deliberation_id == delib_id, Statement.contributed_by_agent_id == agent.id)
     ).count()
     if agent_stmt_count >= settings.CONTINUOUS_MAX_STATEMENTS_PER_AGENT:
-        return
+        return None
 
-    # Get all opinions
-    opinions = db.query(Opinion).filter(Opinion.deliberation_id == delib_id).all()
+    # Get latest opinion per agent
+    latest_ver = (
+        db.query(Opinion.agent_id, func.max(Opinion.version).label("max_v"))
+        .filter(Opinion.deliberation_id == delib_id)
+        .group_by(Opinion.agent_id)
+        .subquery()
+    )
+    opinions = (
+        db.query(Opinion)
+        .join(latest_ver, and_(
+            Opinion.agent_id == latest_ver.c.agent_id,
+            Opinion.version == latest_ver.c.max_v,
+        ))
+        .filter(Opinion.deliberation_id == delib_id)
+        .all()
+    )
     if not opinions:
-        return
+        return None
 
     opinions_text = "\n".join(
         f"- Agent {i + 1}: {o.opinion_text}" for i, o in enumerate(opinions)
@@ -398,12 +451,12 @@ def _do_add_statement(db: Session, hosted_agent: HostedAgent, delib_id: UUID) ->
     )
 
     if not response:
-        return
+        return None
 
     # Parse title and statement
     title, statement_text = _parse_statement_response(response)
     if not statement_text:
-        return
+        return None
 
     import asyncio
     service = ContinuousDeliberationService(db)
@@ -417,8 +470,10 @@ def _do_add_statement(db: Session, hosted_agent: HostedAgent, delib_id: UUID) ->
         loop.run_until_complete(service.add_statement(delib, agent, statement_text, title))
     except ValueError as e:
         logger.warning(f"Statement submission failed: {e}")
+        return None
 
     _track_tokens_from_recent_trace(db, hosted_agent)
+    return {"title": title, "text": statement_text}
 
 
 def _parse_ranking_response(response: str, statements: list) -> list[dict]:

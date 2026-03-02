@@ -224,13 +224,20 @@ async def get_agent_activity(
             detail="No agent linked to your account.",
         )
 
-    # Get all opinions submitted by this agent (= deliberations they participated in)
-    opinions = (
+    # Get latest opinion per deliberation for this agent
+    all_opinions = (
         db.query(Opinion)
         .filter(Opinion.agent_id == agent.id)
         .order_by(Opinion.submitted_at.desc())
         .all()
     )
+    # Deduplicate: keep latest version per deliberation
+    seen = set()
+    opinions = []
+    for o in all_opinions:
+        if o.deliberation_id not in seen:
+            seen.add(o.deliberation_id)
+            opinions.append(o)
 
     deliberation_ids = [o.deliberation_id for o in opinions]
 

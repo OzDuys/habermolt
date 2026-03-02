@@ -3,6 +3,9 @@
 import { Suspense, useEffect, useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "@/lib/auth-client";
+import SessionCarousel from "@/components/agent/SessionCarousel";
+import HeartbeatActionViewer from "@/components/agent/HeartbeatActionViewer";
+import { type UnifiedSession } from "@/components/agent/SessionCard";
 import AgentActivitySection from "@/components/profile/AgentActivitySection";
 
 interface ActionItem {
@@ -22,6 +25,26 @@ interface ChatSessionSummary {
   topic: string | null;
   message_count: number;
   created_at: string;
+}
+
+interface HeartbeatSessionData {
+  id: string;
+  action_count: number;
+  actions: HeartbeatAction[];
+  status: string;
+  started_at: string;
+  completed_at: string | null;
+}
+
+interface HeartbeatAction {
+  action: string;
+  deliberation_id: string;
+  question: string;
+  description: string;
+  opinion_text?: string;
+  ranking_data?: { statement_id: string; rank: number }[];
+  statement_title?: string;
+  statement_text?: string;
 }
 
 export default function AgentPage() {
@@ -49,8 +72,9 @@ function AgentPageContent() {
   const [hasHostedAgent, setHasHostedAgent] = useState<boolean | null>(null);
   const [hasOpenClawAgent, setHasOpenClawAgent] = useState<boolean | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [chatSessions, setChatSessions] = useState<ChatSessionSummary[]>([]);
+  const [unifiedSessions, setUnifiedSessions] = useState<UnifiedSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [viewingHeartbeat, setViewingHeartbeat] = useState<HeartbeatSessionData | null>(null);
   const [chatReady, setChatReady] = useState(false);
 
   useEffect(() => {
@@ -62,11 +86,12 @@ function AgentPageContent() {
         if (res.status === 404) { setHasHostedAgent(false); return; }
         setHasHostedAgent(true);
 
-        // Load current chat + history in parallel
+        // Load current chat + chat history + heartbeat history in parallel
         Promise.all([
           fetch("/api/hosted-agent/chat").then((r) => r.json()),
           fetch("/api/hosted-agent/chat/history").then((r) => r.json()),
-        ]).then(([chatData, historyData]) => {
+          fetch("/api/hosted-agent/heartbeat/history").then((r) => r.json()).catch(() => []),
+        ]).then(([chatData, chatHistory, heartbeatHistory]) => {
           if (chatData.messages?.length) {
             setMessages(chatData.messages.map((m: ChatMessage) => ({
               role: m.role,
@@ -74,7 +99,37 @@ function AgentPageContent() {
             })));
           }
           setActiveSessionId(chatData.id || null);
-          if (Array.isArray(historyData)) setChatSessions(historyData);
+
+          // Build unified session list
+          const chatSessions: UnifiedSession[] = (Array.isArray(chatHistory) ? chatHistory : []).map(
+            (s: ChatSessionSummary) => ({
+              id: s.id,
+              type: "chat" as const,
+              topic: s.topic,
+              messageCount: s.message_count,
+              actionSummary: [],
+              createdAt: s.created_at,
+              snippet: null,
+            })
+          );
+
+          const hbSessions: UnifiedSession[] = (Array.isArray(heartbeatHistory) ? heartbeatHistory : []).map(
+            (s: HeartbeatSessionData) => ({
+              id: `hb-${s.id}`,
+              type: "heartbeat" as const,
+              topic: null,
+              messageCount: 0,
+              actionSummary: s.actions.map((a) => a.description),
+              createdAt: s.started_at,
+              snippet: s.actions[0]?.description || null,
+            })
+          );
+
+          // Merge and sort by date, oldest first (newest on right)
+          const merged = [...chatSessions, ...hbSessions].sort(
+            (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+          );
+          setUnifiedSessions(merged);
           setChatReady(true);
         });
       })
@@ -86,7 +141,7 @@ function AgentPageContent() {
       .catch(() => setHasOpenClawAgent(false));
   }, [session, isPending, router]);
 
-  const loadSession = useCallback(async (sessionId: string) => {
+  const loadChatSession = useCallback(async (sessionId: string) => {
     if (sessionId === activeSessionId) return;
     try {
       const res = await fetch(`/api/hosted-agent/chat/${sessionId}`);
@@ -97,9 +152,36 @@ function AgentPageContent() {
           content: cleanMessage(m.content),
         })));
         setActiveSessionId(sessionId);
+        setViewingHeartbeat(null);
       }
     } catch {}
   }, [activeSessionId]);
+
+  const loadHeartbeatSession = useCallback(async (hbId: string) => {
+    // hbId is prefixed with "hb-"
+    const realId = hbId.replace("hb-", "");
+    try {
+      const res = await fetch(`/api/hosted-agent/heartbeat/${realId}`);
+      const data: HeartbeatSessionData = await res.json();
+      setViewingHeartbeat(data);
+      setActiveSessionId(hbId);
+    } catch {}
+  }, []);
+
+  const handleSelectSession = useCallback((session: UnifiedSession) => {
+    if (session.type === "heartbeat") {
+      loadHeartbeatSession(session.id);
+    } else {
+      loadChatSession(session.id);
+    }
+  }, [loadChatSession, loadHeartbeatSession]);
+
+  const handleNewChat = useCallback(() => {
+    // Reset to fresh state — new messages will create a new session
+    setMessages([]);
+    setActiveSessionId(null);
+    setViewingHeartbeat(null);
+  }, []);
 
   if (isPending || hasHostedAgent === null || hasOpenClawAgent === null) {
     return <LoadingSkeleton />;
@@ -117,66 +199,74 @@ function AgentPageContent() {
       </h1>
 
       {hasHostedAgent && chatReady && (
-        <div className="mb-8">
-          <h2 className="mb-3 text-lg font-semibold" style={{ color: "var(--foreground)" }}>
-            Chat
-          </h2>
-          <p className="mb-4 text-xs" style={{ color: "var(--muted)" }}>
-            Talk to your agent to help it understand your values. It will update your profile as it learns.
-          </p>
+        <>
+          <div className="mb-4">
+            <div className="mb-3 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold" style={{ color: "var(--foreground)" }}>
+                  Chat
+                </h2>
+                <p className="text-xs" style={{ color: "var(--muted)" }}>
+                  Talk to your agent to help it understand your values.
+                </p>
+              </div>
+              {activeSessionId && (
+                <button
+                  onClick={handleNewChat}
+                  className="rounded-lg border px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-80"
+                  style={{ borderColor: "var(--border)", color: "var(--foreground)" }}
+                >
+                  + New Chat
+                </button>
+              )}
+            </div>
 
-          {chatSessions.length > 0 && (
-            <ChatSessionList
-              sessions={chatSessions}
-              activeSessionId={activeSessionId}
-              onSelect={loadSession}
-            />
+            {viewingHeartbeat ? (
+              <div
+                className="flex flex-col rounded-xl border"
+                style={{ borderColor: "var(--border)", background: "var(--surface)", height: "28rem" }}
+              >
+                <div className="flex-1 overflow-y-auto">
+                  <HeartbeatActionViewer
+                    actions={viewingHeartbeat.actions}
+                    startedAt={viewingHeartbeat.started_at}
+                  />
+                </div>
+                <div className="border-t p-3" style={{ borderColor: "var(--border)" }}>
+                  <button
+                    onClick={handleNewChat}
+                    className="w-full rounded-lg px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
+                    style={{ background: "var(--accent)" }}
+                  >
+                    Start New Conversation
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <AgentChat messages={messages} setMessages={setMessages} />
+            )}
+          </div>
+
+          {/* Session Timeline Carousel */}
+          {unifiedSessions.length > 0 && (
+            <div className="mb-8">
+              <SessionCarousel
+                sessions={unifiedSessions}
+                activeSessionId={activeSessionId}
+                onSelect={handleSelectSession}
+              />
+            </div>
           )}
-
-          <AgentChat messages={messages} setMessages={setMessages} />
-        </div>
+        </>
       )}
 
+      {/* Activity — shown for both hosted and OpenClaw agents */}
       <div>
         <h2 className="mb-4 text-xl font-bold" style={{ color: "var(--foreground)" }}>
           Activity
         </h2>
         <AgentActivitySection />
       </div>
-    </div>
-  );
-}
-
-// --- Chat session list ---
-
-function ChatSessionList({
-  sessions,
-  activeSessionId,
-  onSelect,
-}: {
-  sessions: ChatSessionSummary[];
-  activeSessionId: string | null;
-  onSelect: (id: string) => void;
-}) {
-  return (
-    <div className="mb-3 flex gap-2 overflow-x-auto pb-1">
-      {sessions.map((s) => (
-        <button
-          key={s.id}
-          onClick={() => onSelect(s.id)}
-          className="shrink-0 rounded-lg border px-3 py-1.5 text-xs transition-opacity hover:opacity-80"
-          style={{
-            borderColor: s.id === activeSessionId ? "var(--accent)" : "var(--border)",
-            background: s.id === activeSessionId ? "var(--accent)" : "var(--surface)",
-            color: s.id === activeSessionId ? "white" : "var(--foreground)",
-          }}
-        >
-          {s.topic
-            ? s.topic.length > 40 ? s.topic.slice(0, 40) + "..." : s.topic
-            : new Date(s.created_at).toLocaleDateString()}
-          {" "}({s.message_count})
-        </button>
-      ))}
     </div>
   );
 }
@@ -401,7 +491,7 @@ function AgentChat({
             className={`rounded-lg border px-3 py-2 text-lg transition-opacity hover:opacity-80 disabled:opacity-50 ${runningHeartbeat ? "animate-pulse" : ""}`}
             style={{ borderColor: "var(--border)" }}
           >
-            ❤️
+            &#x2764;&#xFE0F;
           </button>
         </div>
       </div>
@@ -423,11 +513,11 @@ function parseActionString(action: string): ActionItem {
 }
 
 const ACTION_ICONS: Record<string, string> = {
-  join_deliberation: "💬",
-  rank_statements: "🗳️",
-  add_statement: "📝",
-  checking: "🔍",
-  unknown: "⚡",
+  join_deliberation: "\uD83D\uDCAC",
+  rank_statements: "\uD83D\uDDF3\uFE0F",
+  add_statement: "\uD83D\uDCDD",
+  checking: "\uD83D\uDD0D",
+  unknown: "\u26A1",
 };
 
 const ACTION_LABELS: Record<string, string> = {
@@ -448,7 +538,7 @@ function ActionGroup({ actions }: { actions: ActionItem[] }) {
         <div className="space-y-2">
           {actions.map((action, i) => (
             <div key={i} className="flex items-center gap-2.5">
-              <span className="text-base shrink-0">{ACTION_ICONS[action.type] || "⚡"}</span>
+              <span className="text-base shrink-0">{ACTION_ICONS[action.type] || "\u26A1"}</span>
               <div className="flex-1 min-w-0">
                 <span className="text-xs font-medium" style={{ color: "var(--muted)" }}>
                   {ACTION_LABELS[action.type] || action.type}
@@ -461,11 +551,11 @@ function ActionGroup({ actions }: { actions: ActionItem[] }) {
               </div>
               <span className="shrink-0 text-xs">
                 {action.status === "running" ? (
-                  <span className="inline-block animate-spin">⏳</span>
+                  <span className="inline-block animate-spin">&#x23F3;</span>
                 ) : action.status === "error" ? (
-                  <span style={{ color: "var(--error, red)" }}>✕</span>
+                  <span style={{ color: "var(--error, red)" }}>&#x2715;</span>
                 ) : (
-                  <span style={{ color: "var(--accent)" }}>✓</span>
+                  <span style={{ color: "var(--accent)" }}>&#x2713;</span>
                 )}
               </span>
             </div>
