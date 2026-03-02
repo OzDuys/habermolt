@@ -6,7 +6,7 @@ what it learns during conversation. No explicit completion state.
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Optional
 
 from sqlalchemy.orm import Session
@@ -60,26 +60,24 @@ specific moment. Do it naturally as the conversation progresses.
 FIRST_TURN_PROMPT = "You are now connected with the participant. Start the conversation."
 
 
-SESSION_GAP = timedelta(hours=1)
-
-
 def get_or_create_session(
     db: Session,
     hosted_agent: HostedAgent,
     topic: str = None,
 ) -> HostedAgentChatSession:
-    """Get the most recent session, or create a new one if stale (>1h since last chat)."""
+    """Get the most recent session if it has no messages yet, otherwise create a new one.
+
+    Every user interaction starts a fresh session (like ChatGPT). Empty sessions
+    are reused to avoid creating orphans when the page loads without chatting.
+    """
     session = (
         db.query(HostedAgentChatSession)
         .filter(HostedAgentChatSession.hosted_agent_id == hosted_agent.id)
         .order_by(HostedAgentChatSession.created_at.desc())
         .first()
     )
-    if session:
-        # Start a new session if the last interaction was over SESSION_GAP ago
-        last_active = hosted_agent.last_chatted_at or session.created_at
-        if session.messages and datetime.utcnow() - last_active > SESSION_GAP:
-            return _create_session(db, hosted_agent, topic)
+    # Reuse the latest session only if it's still empty (no messages yet)
+    if session and not session.messages:
         return session
 
     return _create_session(db, hosted_agent, topic)
