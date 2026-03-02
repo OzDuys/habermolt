@@ -443,7 +443,7 @@ async def manual_heartbeat_stream(req: Request, db: Session = Depends(get_db)):
             from app.models.hosted_agent import HostedAgent
             stream_ha = stream_db.query(HostedAgent).get(hosted_agent_id)
             for event in run_single_hosted_agent_stream(stream_db, stream_ha):
-                yield f"data: {json.dumps(event)}\n\n"
+                yield f"data: {json.dumps(event, default=str)}\n\n"
         except Exception as e:
             logger.error(f"Heartbeat stream error: {e}")
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
