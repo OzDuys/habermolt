@@ -311,6 +311,117 @@ def run_single_hosted_agent(db: Session, hosted_agent: HostedAgent) -> dict:
     return result
 
 
+def run_single_hosted_agent_stream(db: Session, hosted_agent: HostedAgent):
+    """Streaming version of run_single_hosted_agent. Yields SSE event dicts."""
+    logger.info(
+        f"Heartbeat (stream) for {hosted_agent.id}: "
+        f"profile={'yes' if hosted_agent.user_profile else 'NO'}, "
+        f"model={hosted_agent.model}, tier={hosted_agent.pricing_tier}"
+    )
+
+    if not check_token_limit(hosted_agent):
+        yield {"type": "error", "message": "Token limit reached for this period."}
+        return
+
+    agent = hosted_agent.agent
+    structured_actions = []
+    started_at = datetime.utcnow()
+
+    actions, discovered = _compute_agent_actions(db, agent)
+    logger.info(f"Heartbeat (stream) {hosted_agent.id}: actions={len(actions)}, discovered={len(discovered)}")
+
+    # Execute queued actions
+    for action in actions:
+        yield {"type": "action_start", "action": action["action"], "question": action.get("question", "")}
+        try:
+            result = _execute_action(db, hosted_agent, action)
+            if result:
+                structured_actions.append(result)
+                yield {"type": "action_done", "action": action["action"], "question": action.get("question", ""), "description": result["description"]}
+            else:
+                yield {"type": "action_error", "action": action["action"], "question": action.get("question", ""), "message": "No result returned"}
+        except Exception as e:
+            logger.error(f"Heartbeat (stream) {hosted_agent.id}: action failed: {e}")
+            yield {"type": "action_error", "action": action["action"], "question": action.get("question", ""), "message": str(e)}
+
+    # Join discovered deliberations
+    validation_candidates = []
+    for disc in discovered[:3]:
+        try:
+            delib = db.query(Deliberation).filter(Deliberation.id == disc["deliberation_id"]).first()
+            if not delib:
+                continue
+
+            confidence = _assess_confidence(hosted_agent, disc["question"])
+            logger.info(
+                f"Heartbeat (stream) {hosted_agent.id}: confidence for '{disc['question'][:40]}': "
+                f"score={confidence['confidence']}, sim={confidence['similarity']:.2f}"
+            )
+
+            if confidence["should_ask"]:
+                result = _ask_before_acting(db, hosted_agent, delib, confidence)
+                structured_actions.append(result)
+                yield {
+                    "type": "ask_input",
+                    "action": "ask_before_acting",
+                    "question": delib.question,
+                    "deliberation_id": str(delib.id),
+                    "message": (
+                        f"There's a new deliberation: **{delib.question}**\n\n"
+                        f"I'm not confident I know your position on this (confidence: {confidence['confidence']}/5). "
+                        f"What's your take?"
+                    ),
+                    "confidence": confidence["confidence"],
+                }
+            else:
+                yield {"type": "action_start", "action": "join_deliberation", "question": disc["question"]}
+                result = _join_deliberation(db, hosted_agent, disc["deliberation_id"])
+                if result:
+                    structured_actions.append(result)
+                    if confidence["should_validate"]:
+                        validation_candidates.append(result)
+                    yield {"type": "action_done", "action": "join_deliberation", "question": disc["question"], "description": result["description"]}
+                else:
+                    yield {"type": "action_error", "action": "join_deliberation", "question": disc["question"], "message": "Join returned no result"}
+        except Exception as e:
+            logger.error(f"Heartbeat (stream) {hosted_agent.id}: join failed: {e}")
+            yield {"type": "action_error", "action": "join_deliberation", "question": disc.get("question", ""), "message": str(e)}
+
+    # Request validation
+    if validation_candidates:
+        try:
+            val_result = _request_validation(db, hosted_agent, validation_candidates[0])
+            structured_actions.append(val_result)
+        except Exception as e:
+            logger.error(f"Heartbeat (stream) {hosted_agent.id}: validation request failed: {e}")
+
+    # Fallback
+    if not structured_actions:
+        try:
+            fallback = _do_fallback(db, hosted_agent)
+            if fallback:
+                structured_actions.append(fallback)
+                yield {"type": "action_done", "action": fallback.get("action", "fallback"), "question": "", "description": fallback["description"]}
+        except Exception as e:
+            logger.error(f"Heartbeat (stream) {hosted_agent.id}: fallback failed: {e}")
+
+    # Persist
+    completed_at = datetime.utcnow()
+    hb_session = HeartbeatSession(
+        hosted_agent_id=hosted_agent.id,
+        actions=structured_actions,
+        action_count=len(structured_actions),
+        status="success",
+        started_at=started_at,
+        completed_at=completed_at,
+    )
+    db.add(hb_session)
+    hosted_agent.last_heartbeat_at = datetime.utcnow()
+    db.commit()
+
+    yield {"type": "done", "session_id": str(hb_session.id)}
+
+
 def _should_run_now(hosted_agent: HostedAgent) -> bool:
     if not hosted_agent.last_heartbeat_at:
         return True

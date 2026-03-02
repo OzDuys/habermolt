@@ -371,43 +371,95 @@ function AgentChat({
     if (streaming || runningHeartbeat) return;
     setRunningHeartbeat(true);
 
-    // Add a loading action-group message
+    // Add initial loading action-group
     setMessages((prev) => [
       ...prev,
       { role: "action-group", content: "", actions: [{ type: "checking", deliberation: "Checking deliberations...", status: "running" }] },
     ]);
 
     try {
-      const res = await fetch("/api/hosted-agent/heartbeat", { method: "POST" });
-      const data = await res.json();
+      const res = await fetch("/api/hosted-agent/heartbeat/stream", { method: "POST" });
 
       if (!res.ok) {
+        const data = await res.json();
         setMessages((prev) => {
           const updated = [...prev];
           updated[updated.length - 1] = { role: "assistant", content: data.detail || "Something went wrong while running the heartbeat." };
           return updated;
         });
-      } else if (data.status === "token_limit") {
+        return;
+      }
+
+      const reader = res.body?.getReader();
+      if (!reader) return;
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+      const currentActions: ActionItem[] = [];
+
+      // Helper to update the action-group message (last message before any trailing assistant messages)
+      const updateActionGroup = (actions: ActionItem[]) => {
         setMessages((prev) => {
+          // Find the last action-group message
+          const lastActionIdx = prev.map((m) => m.role).lastIndexOf("action-group");
+          if (lastActionIdx === -1) return prev;
           const updated = [...prev];
-          updated[updated.length - 1] = { role: "assistant", content: "Token limit reached for this period." };
+          updated[lastActionIdx] = { role: "action-group", content: "", actions: [...actions] };
           return updated;
         });
-      } else {
-        const actionStrings: string[] = data.actions_taken || [];
-        if (actionStrings.length > 0) {
-          const parsedActions: ActionItem[] = actionStrings.map((a: string) => parseActionString(a));
-          setMessages((prev) => {
-            const updated = [...prev];
-            updated[updated.length - 1] = { role: "action-group", content: "", actions: parsedActions };
-            return updated;
-          });
-        } else {
-          setMessages((prev) => {
-            const updated = [...prev];
-            updated[updated.length - 1] = { role: "assistant", content: "Everything is up to date — no actions needed." };
-            return updated;
-          });
+      };
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const event = JSON.parse(line.slice(6));
+
+            if (event.type === "action_start") {
+              currentActions.push({ type: event.action, deliberation: event.question, status: "running" });
+              // Remove the initial "checking" placeholder on first real action
+              const display = currentActions.filter((a) => a.type !== "checking");
+              updateActionGroup(display.length > 0 ? display : currentActions);
+            } else if (event.type === "action_done") {
+              const idx = currentActions.findIndex((a) => a.type === event.action && a.status === "running");
+              if (idx !== -1) currentActions[idx] = { ...currentActions[idx], status: "done" };
+              updateActionGroup(currentActions.filter((a) => a.type !== "checking"));
+            } else if (event.type === "action_error") {
+              const idx = currentActions.findIndex((a) => a.type === event.action && a.status === "running");
+              if (idx !== -1) currentActions[idx] = { ...currentActions[idx], status: "error" };
+              updateActionGroup(currentActions.filter((a) => a.type !== "checking"));
+            } else if (event.type === "ask_input") {
+              // Show as action card
+              currentActions.push({ type: "ask_before_acting", deliberation: event.question, status: "done" });
+              updateActionGroup(currentActions.filter((a) => a.type !== "checking"));
+              // Also add an assistant chat message so user can reply
+              setMessages((prev) => [...prev, { role: "assistant", content: event.message }]);
+            } else if (event.type === "error") {
+              setMessages((prev) => {
+                const updated = [...prev];
+                updated[updated.length - 1] = { role: "assistant", content: event.message };
+                return updated;
+              });
+            } else if (event.type === "done") {
+              // Stream complete — if no actions were taken, show "up to date"
+              if (currentActions.filter((a) => a.type !== "checking").length === 0) {
+                setMessages((prev) => {
+                  const updated = [...prev];
+                  updated[updated.length - 1] = { role: "assistant", content: "Everything is up to date — no actions needed." };
+                  return updated;
+                });
+              }
+            }
+          } catch {
+            // ignore malformed SSE lines
+          }
         }
       }
     } catch {
@@ -501,23 +553,11 @@ function AgentChat({
   );
 }
 
-function parseActionString(action: string): ActionItem {
-  if (action.startsWith("Joined '")) {
-    return { type: "join_deliberation", deliberation: action.slice(8, -1), status: "done" };
-  }
-  if (action.startsWith("Ranked statements on '")) {
-    return { type: "rank_statements", deliberation: action.slice(22, -1), status: "done" };
-  }
-  if (action.startsWith("Proposed consensus on '")) {
-    return { type: "add_statement", deliberation: action.slice(22, -1), status: "done" };
-  }
-  return { type: "unknown", deliberation: action, status: "done" };
-}
-
 const ACTION_ICONS: Record<string, string> = {
   join_deliberation: "\uD83D\uDCAC",
   rank_statements: "\uD83D\uDDF3\uFE0F",
   add_statement: "\uD83D\uDCDD",
+  ask_before_acting: "\uD83D\uDCAC",
   checking: "\uD83D\uDD0D",
   unknown: "\u26A1",
 };
@@ -526,6 +566,7 @@ const ACTION_LABELS: Record<string, string> = {
   join_deliberation: "Joined deliberation",
   rank_statements: "Ranked statements",
   add_statement: "Proposed consensus",
+  ask_before_acting: "Needs your input",
   checking: "Checking",
   unknown: "Action",
 };
