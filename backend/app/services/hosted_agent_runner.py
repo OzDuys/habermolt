@@ -383,14 +383,14 @@ def _compute_agent_actions(db: Session, agent: Agent) -> tuple[list[dict], list[
                 latest_opinion = db.query(Opinion).filter(
                     and_(Opinion.deliberation_id == delib.id, Opinion.agent_id == agent.id)
                 ).order_by(Opinion.version.desc()).first()
-                if latest_opinion and latest_opinion.created_at:
-                    age_days = (datetime.utcnow() - latest_opinion.created_at).days
+                if latest_opinion and latest_opinion.submitted_at:
+                    age_days = (datetime.utcnow() - latest_opinion.submitted_at).days
                     if age_days >= STALE_OPINION_DAYS:
                         # Check if new statements were added after opinion
                         new_since_opinion = db.query(Statement).filter(
                             and_(
                                 Statement.deliberation_id == delib.id,
-                                Statement.created_at > latest_opinion.created_at,
+                                Statement.created_at > latest_opinion.submitted_at,
                             )
                         ).count()
                         if new_since_opinion > 0 and revisit_count < 2:
