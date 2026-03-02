@@ -13,8 +13,10 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db, SessionLocal
 from app.models import Deliberation
+from app.models.hosted_agent import HostedAgent
 from app.services import hosted_agent_service, notification_service
 from app.services import chat_service
+from app.services.llm_client import LLMClient
 from app.services.hosted_agent_runner import run_all_hosted_agents, run_single_hosted_agent, run_single_hosted_agent_stream
 
 logger = logging.getLogger(__name__)
@@ -133,6 +135,38 @@ def _to_response(ha) -> HostedAgentResponse:
 
 
 # --- Endpoints ---
+
+@router.get("/taken-names")
+async def get_taken_names(db: Session = Depends(get_db)):
+    """Return list of display names already in use by hosted agents."""
+    names = db.query(HostedAgent.display_name).all()
+    return [n[0] for n in names]
+
+
+@router.get("/generate-names")
+async def generate_names(db: Session = Depends(get_db)):
+    """Generate fresh lobster agent names via LLM, excluding taken ones."""
+    taken = {n[0].lower() for n in db.query(HostedAgent.display_name).all()}
+
+    client = LLMClient()
+    prompt = (
+        "Generate 8 fun, creative names for a lobster AI agent. "
+        "The names should be lobster/crustacean themed puns, wordplay, or playful titles. "
+        "Mix styles: some punny (like 'Clawdia', 'Pinchy McDebate'), some regal "
+        "(like 'The Crimson Counsel'), some quirky (like 'Snappy Verdict').\n\n"
+    )
+    if taken:
+        prompt += f"These names are already taken, do NOT suggest them: {', '.join(taken)}\n\n"
+    prompt += "Return ONLY the names, one per line. No numbering, no explanations."
+
+    result = client.sample_text(prompt=prompt, temperature=0.9, max_tokens=256)
+    names = [
+        line.strip().strip("-•").strip()
+        for line in result.strip().splitlines()
+        if line.strip() and line.strip().lower() not in taken
+    ]
+    return names[:8]
+
 
 @router.post("", status_code=201)
 async def create_hosted_agent(

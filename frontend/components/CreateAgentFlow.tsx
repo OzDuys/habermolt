@@ -159,6 +159,38 @@ const SUGGESTED_NAMES = [
   "Crimson Counsel",
   "Lobster Libertas",
   "The Red Delegate",
+  "Snappy Verdict",
+  "Lobstotle",
+  "Shell Shocked",
+  "Coral Debater",
+  "Pinch of Wisdom",
+  "Butter Believer",
+  "The Claw Abides",
+  "Sheldon",
+  "Clawsome",
+  "Red Herring",
+  "Captain Claw",
+  "Snap Decision",
+  "The Crustacean",
+  "Larry Lobster",
+  "Bisque Business",
+  "Reef Thinker",
+  "Thermidor",
+  "Claw & Order",
+  "Crusty Philosopher",
+  "Nipper",
+  "Tail Spin",
+  "Boil Point",
+  "Cheddar Claw",
+  "Lobby McLobface",
+  "Antenna Analyst",
+  "Deep Sea Debater",
+  "Molt Mastermind",
+  "Claw-ver Girl",
+  "The Pinch Hitter",
+  "Admiral Snapper",
+  "Reef Judge",
+  "Scarlet Thinker",
 ];
 
 // ─── Color filter for lobster SVG ─────────────────────────────────────────────
@@ -784,6 +816,22 @@ function ExplainAgentScene({ onNext }: { onNext: () => void }) {
 
 // ─── Scene: Pick Deliberations ────────────────────────────────────────────────
 
+const DELIB_CATEGORIES: { id: string; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "ai", label: "AI" },
+  { id: "current-affairs", label: "Current Affairs" },
+  { id: "geopolitics", label: "Geopolitics" },
+  { id: "societal", label: "Societal" },
+  { id: "sport", label: "Sport" },
+  { id: "culture", label: "Culture" },
+  { id: "memes", label: "Memes" },
+  { id: "economy", label: "Economy" },
+  { id: "tech", label: "Tech" },
+  { id: "south-africa", label: "South Africa" },
+];
+
+type DelibSort = "recent" | "trending";
+
 function PickDeliberationsScene({
   deliberations,
   selected,
@@ -796,9 +844,20 @@ function PickDeliberationsScene({
   onNext: () => void;
 }) {
   const [search, setSearch] = useState("");
-  const filtered = deliberations.filter((d) =>
-    d.question.toLowerCase().includes(search.toLowerCase())
-  );
+  const [activeCategory, setActiveCategory] = useState("all");
+  const [sort, setSort] = useState<DelibSort>("trending");
+
+  const filtered = deliberations
+    .filter((d) => d.question.toLowerCase().includes(search.toLowerCase()))
+    .filter(
+      (d) =>
+        activeCategory === "all" ||
+        (d.categories ?? []).includes(activeCategory)
+    )
+    .sort((a, b) => {
+      if (sort === "trending") return (b.num_citizens ?? 0) - (a.num_citizens ?? 0);
+      return 0; // already sorted by recency from backend
+    });
 
   return (
     <Scene>
@@ -818,7 +877,7 @@ function PickDeliberationsScene({
               fontFamily: "'DM Sans', sans-serif",
             }}
           >
-            Pick a few deliberations for your lobster to join first. You can
+            Pick deliberations for your lobster to join first. You can
             always change these later.
           </p>
         </div>
@@ -838,13 +897,46 @@ function PickDeliberationsScene({
             background: "white",
             color: "#1a1a1a",
             boxSizing: "border-box",
-            marginBottom: 12,
+            marginBottom: 8,
           }}
         />
 
+        {/* Category pills + sort toggle — matching landing page style */}
+        <div className="flex items-center gap-1 overflow-x-auto pb-1 mb-2" style={{ scrollbarWidth: "none" }}>
+          {DELIB_CATEGORIES.map((cat) => (
+            <button
+              key={cat.id}
+              onClick={() => setActiveCategory(cat.id)}
+              className={`relative flex shrink-0 items-center gap-1.5 rounded-full font-medium transition-all ${
+                activeCategory === cat.id
+                  ? "bg-stone-200 text-stone-800"
+                  : "text-stone-600 hover:bg-stone-100 hover:text-stone-800"
+              }`}
+              style={{ padding: "4px 12px", fontSize: 12 }}
+            >
+              {cat.label}
+            </button>
+          ))}
+          <div style={{ width: 1, height: 16, background: "#d6d3d1", flexShrink: 0, margin: "0 4px" }} />
+          {(["trending", "recent"] as const).map((s) => (
+            <button
+              key={s}
+              onClick={() => setSort(s)}
+              className={`relative flex shrink-0 items-center gap-1 rounded-full font-medium transition-all ${
+                sort === s
+                  ? "bg-stone-200 text-stone-800"
+                  : "text-stone-600 hover:bg-stone-100 hover:text-stone-800"
+              }`}
+              style={{ padding: "4px 12px", fontSize: 12 }}
+            >
+              {s === "trending" ? "🔥 Trending" : "🕐 Recent"}
+            </button>
+          ))}
+        </div>
+
         <div
           style={{
-            maxHeight: 320,
+            maxHeight: 260,
             overflowY: "auto",
             display: "flex",
             flexDirection: "column",
@@ -960,13 +1052,22 @@ function PickDeliberationsScene({
         <div
           style={{
             display: "flex",
+            alignItems: "center",
             justifyContent: "flex-end",
+            gap: 10,
           }}
         >
-          <Btn onClick={onNext}>
-            {selected.length > 0
-              ? `Continue with ${selected.length} topic${selected.length > 1 ? "s" : ""} →`
-              : "Skip for now →"}
+          <span
+            style={{
+              fontSize: 12,
+              color: selected.length >= 3 ? "#888" : "#c84a20",
+              fontFamily: "'DM Sans', sans-serif",
+            }}
+          >
+            {selected.length}/10 selected{selected.length < 3 ? " (min 3)" : ""}
+          </span>
+          <Btn onClick={onNext} disabled={selected.length < 3}>
+            {`Continue with ${selected.length} topic${selected.length !== 1 ? "s" : ""} →`}
           </Btn>
         </div>
       </Card>
@@ -1136,12 +1237,15 @@ function SeedQuestionScene({
 
 function ShowProfileScene({
   profile,
+  onChange,
   onNext,
 }: {
   profile: string;
+  onChange: (val: string) => void;
   onNext: () => void;
 }) {
   const [typeDone, setTypeDone] = useState(false);
+  const [editing, setEditing] = useState(false);
 
   return (
     <Scene>
@@ -1187,11 +1291,6 @@ function ShowProfileScene({
                   background: "#111",
                   borderRadius: 12,
                   padding: "16px 18px",
-                  fontFamily: "monospace",
-                  fontSize: 12,
-                  lineHeight: 1.7,
-                  color: "#7ee787",
-                  whiteSpace: "pre-wrap",
                   marginBottom: 16,
                   maxHeight: 260,
                   overflowY: "auto",
@@ -1210,7 +1309,65 @@ function ShowProfileScene({
                     />
                   ))}
                 </div>
-                {profile}
+                {editing ? (
+                  <textarea
+                    value={profile}
+                    onChange={(e) => onChange(e.target.value)}
+                    autoFocus
+                    style={{
+                      width: "100%",
+                      minHeight: 160,
+                      background: "transparent",
+                      border: "none",
+                      outline: "none",
+                      fontFamily: "monospace",
+                      fontSize: 12,
+                      lineHeight: 1.7,
+                      color: "#7ee787",
+                      resize: "vertical",
+                      boxSizing: "border-box",
+                    }}
+                  />
+                ) : (
+                  <div
+                    style={{
+                      fontFamily: "monospace",
+                      fontSize: 12,
+                      lineHeight: 1.7,
+                      color: "#7ee787",
+                      whiteSpace: "pre-wrap",
+                    }}
+                  >
+                    {profile}
+                  </div>
+                )}
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 8,
+                  marginBottom: 16,
+                }}
+              >
+                <button
+                  onClick={() => setEditing(!editing)}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    fontSize: 12,
+                    color: "#c84a20",
+                    fontFamily: "'DM Sans', sans-serif",
+                    fontWeight: 500,
+                    textDecoration: "underline",
+                    textUnderlineOffset: 2,
+                  }}
+                >
+                  {editing ? "Done editing" : "✏️ Edit cheat sheet"}
+                </button>
               </div>
 
               <p
@@ -1222,7 +1379,7 @@ function ShowProfileScene({
                   marginBottom: 16,
                 }}
               >
-                You can always edit this later from your profile.
+                You can also edit this at any time from your profile page.
               </p>
 
               <div style={{ display: "flex", justifyContent: "center" }}>
@@ -1315,11 +1472,36 @@ function NameAgentScene({
   name,
   onChange,
   onNext,
+  takenNames,
 }: {
   name: string;
   onChange: (name: string) => void;
   onNext: () => void;
+  takenNames: string[];
 }) {
+  const isTaken = name.trim().length > 0 && takenNames.includes(name.trim().toLowerCase());
+  const availableHardcoded = SUGGESTED_NAMES.filter(
+    (n) => !takenNames.includes(n.toLowerCase())
+  );
+
+  const [generatedNames, setGeneratedNames] = useState<string[]>([]);
+  const [generatingNames, setGeneratingNames] = useState(false);
+
+  // If all hardcoded names are taken, fetch LLM-generated ones
+  useEffect(() => {
+    if (availableHardcoded.length === 0 && generatedNames.length === 0 && !generatingNames) {
+      setGeneratingNames(true);
+      fetch("/api/hosted-agent/generate-names")
+        .then((r) => r.json())
+        .then((names: string[]) => setGeneratedNames(names))
+        .catch(() => {})
+        .finally(() => setGeneratingNames(false));
+    }
+  }, [availableHardcoded.length, generatedNames.length, generatingNames]);
+
+  const availableSuggestions =
+    availableHardcoded.length > 0 ? availableHardcoded : generatedNames;
+
   return (
     <Scene>
       <Card style={{ maxWidth: 480 }}>
@@ -1353,13 +1535,13 @@ function NameAgentScene({
           value={name}
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={(e) =>
-            e.key === "Enter" && name.trim().length > 0 && onNext()
+            e.key === "Enter" && name.trim().length > 0 && !isTaken && onNext()
           }
           placeholder="Name your lobster..."
           autoFocus
           style={{
             width: "100%",
-            border: `1.5px solid ${USER_COLOR}30`,
+            border: `1.5px solid ${isTaken ? "#e53e3e" : `${USER_COLOR}30`}`,
             borderRadius: 14,
             padding: "14px 18px",
             fontFamily: "'DM Sans', sans-serif",
@@ -1370,9 +1552,22 @@ function NameAgentScene({
             background: "white",
             color: "#1a1a1a",
             boxSizing: "border-box",
-            marginBottom: 12,
+            marginBottom: isTaken ? 4 : 12,
           }}
         />
+        {isTaken && (
+          <p
+            style={{
+              fontSize: 12,
+              color: "#e53e3e",
+              fontFamily: "'DM Sans', sans-serif",
+              textAlign: "center",
+              margin: "0 0 12px",
+            }}
+          >
+            This name is already taken. Try another one!
+          </p>
+        )}
 
         <div
           style={{
@@ -1383,7 +1578,7 @@ function NameAgentScene({
             marginBottom: 20,
           }}
         >
-          {SUGGESTED_NAMES.map((n) => (
+          {availableSuggestions.map((n) => (
             <motion.button
               key={n}
               onClick={() => onChange(n)}
@@ -1406,10 +1601,48 @@ function NameAgentScene({
               {n}
             </motion.button>
           ))}
+          {generatingNames && (
+            <span
+              style={{
+                fontSize: 12,
+                color: "#999",
+                fontFamily: "'DM Sans', sans-serif",
+                padding: "5px 12px",
+              }}
+            >
+              Generating names...
+            </span>
+          )}
+          {!generatingNames && (
+            <motion.button
+              onClick={() => {
+                setGeneratingNames(true);
+                fetch("/api/hosted-agent/generate-names")
+                  .then((r) => r.json())
+                  .then((names: string[]) => setGeneratedNames(names))
+                  .catch(() => {})
+                  .finally(() => setGeneratingNames(false));
+              }}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              style={{
+                background: "none",
+                border: `1px dashed rgba(0,0,0,0.15)`,
+                borderRadius: 99,
+                padding: "5px 12px",
+                fontSize: 12,
+                color: "#999",
+                cursor: "pointer",
+                fontFamily: "'DM Sans', sans-serif",
+              }}
+            >
+              🎲 Suggest more
+            </motion.button>
+          )}
         </div>
 
         <div style={{ display: "flex", justifyContent: "center" }}>
-          <Btn onClick={onNext} disabled={name.trim().length === 0}>
+          <Btn onClick={onNext} disabled={name.trim().length === 0 || isTaken}>
             Launch my lobster →
           </Btn>
         </div>
@@ -1578,6 +1811,9 @@ export default function CreateAgentFlow() {
     {}
   );
 
+  // Editable profile (set when entering show-profile, editable by user)
+  const [editedProfile, setEditedProfile] = useState("");
+
   // Agent name
   const [agentName, setAgentName] = useState("");
 
@@ -1586,16 +1822,23 @@ export default function CreateAgentFlow() {
   const [created, setCreated] = useState(false);
   const [error, setError] = useState("");
 
-  // Fetch deliberations on mount
+  // Taken agent names (for filtering suggestions)
+  const [takenNames, setTakenNames] = useState<string[]>([]);
+
+  // Fetch deliberations and taken names on mount
   useEffect(() => {
     api.listDeliberations().then(setDeliberations).catch(() => {});
+    fetch("/api/hosted-agent/taken-names")
+      .then((r) => r.json())
+      .then((names: string[]) => setTakenNames(names.map((n) => n.toLowerCase())))
+      .catch(() => {});
   }, []);
 
   const toggleDelib = useCallback((id: string) => {
     setSelectedDelibIds((prev) =>
       prev.includes(id)
         ? prev.filter((d) => d !== id)
-        : prev.length < 3
+        : prev.length < 10
           ? [...prev, id]
           : prev
     );
@@ -1626,8 +1869,8 @@ export default function CreateAgentFlow() {
         throw new Error(data.detail || "Failed to create agent");
       }
 
-      // Upload bootstrapped profile
-      const profile = composeProfile(seedAnswers);
+      // Upload bootstrapped profile (use user-edited version if available)
+      const profile = editedProfile || composeProfile(seedAnswers);
       if (profile) {
         await fetch("/api/hosted-agent/profile", {
           method: "PUT",
@@ -1761,7 +2004,8 @@ export default function CreateAgentFlow() {
               style={{ flex: 1, display: "flex" }}
             >
               <ShowProfileScene
-                profile={composeProfile(seedAnswers)}
+                profile={editedProfile || composeProfile(seedAnswers)}
+                onChange={(val) => setEditedProfile(val)}
                 onNext={() => setPhase("explain-hlq")}
               />
             </motion.div>
@@ -1790,6 +2034,7 @@ export default function CreateAgentFlow() {
               <NameAgentScene
                 name={agentName}
                 onChange={setAgentName}
+                takenNames={takenNames}
                 onNext={() => {
                   setPhase("launch");
                   handleCreate();
