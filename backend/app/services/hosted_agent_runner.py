@@ -314,7 +314,7 @@ def run_single_hosted_agent(db: Session, hosted_agent: HostedAgent) -> dict:
                 messages.append({
                     "role": "tool",
                     "tool_call_id": tc["id"],
-                    "content": json.dumps(tool_result),
+                    "content": json.dumps(tool_result, default=str),
                 })
             continue
         break  # No more tool calls
@@ -445,7 +445,7 @@ def run_single_hosted_agent_stream(db: Session, hosted_agent: HostedAgent):
             messages.append({
                 "role": "tool",
                 "tool_call_id": tc["id"],
-                "content": json.dumps(tool_result),
+                "content": json.dumps(tool_result, default=str),
             })
 
     # Persist
