@@ -117,11 +117,17 @@ def update_hosted_agent(
 def delete_hosted_agent(db: Session, hosted_agent: HostedAgent) -> None:
     """Delete hosted agent and deactivate its shadow Agent record."""
     from app.models.llm_trace import LLMTrace
+    from app.models.heartbeat_session import HeartbeatSession
+    from app.models.interview_session import InterviewSession
 
     # Nullify FK references in llm_traces so delete doesn't violate constraint
     db.query(LLMTrace).filter(LLMTrace.hosted_agent_id == hosted_agent.id).update(
         {"hosted_agent_id": None}
     )
+
+    # Delete related sessions that have NOT NULL FK constraints
+    db.query(HeartbeatSession).filter(HeartbeatSession.hosted_agent_id == hosted_agent.id).delete()
+    db.query(InterviewSession).filter(InterviewSession.hosted_agent_id == hosted_agent.id).delete()
 
     agent = hosted_agent.agent
     if agent:
