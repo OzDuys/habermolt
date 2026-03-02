@@ -353,13 +353,17 @@ async def stream_chat_message(
                 session = chat_service.get_or_create_session(stream_db, stream_ha)
 
             stream = chat_service.stream_user_message(stream_db, stream_ha, session, body.content)
-            for event_type, event_data in stream:
-                if event_type == "text":
-                    yield f"data: {json.dumps({'type': 'chunk', 'content': event_data})}\n\n"
-                elif event_type == "action_start":
-                    yield f"data: {json.dumps({'type': 'action_start', 'action': event_data['action'], 'question': event_data.get('question', '')})}\n\n"
-                elif event_type == "action_done":
-                    yield f"data: {json.dumps({'type': 'action_done', 'action': event_data['action'], 'question': event_data.get('question', ''), 'description': event_data.get('description', ''), 'detail': event_data.get('detail', ''), 'reasoning': event_data.get('reasoning', '')})}\n\n"
+            try:
+                for event_type, event_data in stream:
+                    if event_type == "text":
+                        yield f"data: {json.dumps({'type': 'chunk', 'content': event_data})}\n\n"
+                    elif event_type == "action_start":
+                        yield f"data: {json.dumps({'type': 'action_start', 'action': event_data['action'], 'question': event_data.get('question', '')})}\n\n"
+                    elif event_type == "action_done":
+                        yield f"data: {json.dumps({'type': 'action_done', 'action': event_data['action'], 'question': event_data.get('question', ''), 'description': event_data.get('description', ''), 'detail': event_data.get('detail', ''), 'reasoning': event_data.get('reasoning', '')})}\n\n"
+            except Exception as e:
+                logger.error(f"Chat stream error: {e}")
+                yield f"data: {json.dumps({'type': 'error', 'content': 'Something went wrong. Please try again.'})}\n\n"
             yield f"data: {json.dumps({'type': 'done'})}\n\n"
         finally:
             stream_db.close()

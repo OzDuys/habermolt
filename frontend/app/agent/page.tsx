@@ -260,6 +260,8 @@ function AgentChat({
   const [runningHeartbeat, setRunningHeartbeat] = useState(false);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const messageQueueRef = useRef<string[]>([]);
+  const streamingRef = useRef(false);
 
   const scrollToBottom = useCallback(() => {
     const el = messagesContainerRef.current;
@@ -270,24 +272,42 @@ function AgentChat({
     scrollToBottom();
   }, [messages, scrollToBottom]);
 
-  const sendMessage = async (content: string) => {
-    if (!content.trim() || streaming) return;
+  const processQueue = useCallback(() => {
+    if (streamingRef.current || messageQueueRef.current.length === 0) return;
+    const next = messageQueueRef.current.shift()!;
+    doSendMessage(next);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSessionId]);
 
-    const userMsg: ChatMessage = { role: "user", content: content.trim() };
-    setMessages((prev) => [...prev, userMsg]);
-    setInput("");
+  const doSendMessage = async (content: string) => {
     setStreaming(true);
+    streamingRef.current = true;
+
+    // Add assistant placeholder immediately for loading indicator
+    setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
 
     try {
       const res = await fetch("/api/hosted-agent/chat/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: content.trim(), session_id: activeSessionId }),
+        body: JSON.stringify({ content, session_id: activeSessionId }),
       });
 
       if (!res.ok || !res.body) {
-        setMessages((prev) => [...prev, { role: "assistant", content: "Something went wrong. Please try again." }]);
+        // Replace placeholder with error
+        setMessages((prev) => {
+          const updated = [...prev];
+          for (let i = updated.length - 1; i >= 0; i--) {
+            if (updated[i].role === "assistant" && !updated[i].content) {
+              updated[i] = { role: "assistant", content: "Something went wrong. Please try again." };
+              break;
+            }
+          }
+          return updated;
+        });
         setStreaming(false);
+        streamingRef.current = false;
+        processQueue();
         return;
       }
 
@@ -295,7 +315,7 @@ function AgentChat({
       const decoder = new TextDecoder();
       let accumulated = "";
       let buffer = "";
-      let hasAssistantMsg = false;
+      let receivedContent = false;
       // Track action message indices for chat-stream actions
       const actionMsgIndices: Map<string, number> = new Map();
 
@@ -312,15 +332,18 @@ function AgentChat({
           try {
             const event = JSON.parse(line.slice(6));
             if (event.type === "chunk") {
-              if (!hasAssistantMsg) {
-                setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
-                hasAssistantMsg = true;
-              }
+              receivedContent = true;
               accumulated += event.content;
               const clean = cleanMessage(accumulated);
               setMessages((prev) => {
                 const updated = [...prev];
-                updated[updated.length - 1] = { role: "assistant", content: clean };
+                // Find the last assistant message (our placeholder or streaming msg)
+                for (let i = updated.length - 1; i >= 0; i--) {
+                  if (updated[i].role === "assistant") {
+                    updated[i] = { role: "assistant", content: clean };
+                    break;
+                  }
+                }
                 return updated;
               });
             } else if (event.type === "action_start") {
@@ -349,31 +372,81 @@ function AgentChat({
                 }
                 return prev;
               });
+            } else if (event.type === "error") {
+              receivedContent = true;
+              setMessages((prev) => {
+                const updated = [...prev];
+                for (let i = updated.length - 1; i >= 0; i--) {
+                  if (updated[i].role === "assistant") {
+                    updated[i] = { role: "assistant", content: event.content || "Something went wrong. Please try again." };
+                    break;
+                  }
+                }
+                return updated;
+              });
             }
           } catch {}
         }
       }
 
+      // Finalize: if we got content, ensure final state is clean
       if (accumulated) {
         const clean = cleanMessage(accumulated);
         setMessages((prev) => {
           const updated = [...prev];
-          if (hasAssistantMsg) {
-            // Find the last assistant message
-            for (let i = updated.length - 1; i >= 0; i--) {
-              if (updated[i].role === "assistant") {
-                updated[i] = { role: "assistant", content: clean };
-                break;
-              }
+          for (let i = updated.length - 1; i >= 0; i--) {
+            if (updated[i].role === "assistant") {
+              updated[i] = { role: "assistant", content: clean };
+              break;
+            }
+          }
+          return updated;
+        });
+      } else if (!receivedContent) {
+        // Stream completed but produced no content — show error
+        setMessages((prev) => {
+          const updated = [...prev];
+          for (let i = updated.length - 1; i >= 0; i--) {
+            if (updated[i].role === "assistant" && !updated[i].content) {
+              updated[i] = { role: "assistant", content: "Something went wrong. Please try again." };
+              break;
             }
           }
           return updated;
         });
       }
     } catch {
-      setMessages((prev) => [...prev, { role: "assistant", content: "Failed to reach the server." }]);
+      // Replace placeholder with error
+      setMessages((prev) => {
+        const updated = [...prev];
+        for (let i = updated.length - 1; i >= 0; i--) {
+          if (updated[i].role === "assistant") {
+            updated[i] = { role: "assistant", content: "Failed to reach the server. Please try again." };
+            break;
+          }
+        }
+        return updated;
+      });
     } finally {
       setStreaming(false);
+      streamingRef.current = false;
+      processQueue();
+    }
+  };
+
+  const sendMessage = (content: string) => {
+    if (!content.trim()) return;
+
+    const trimmed = content.trim();
+    const userMsg: ChatMessage = { role: "user", content: trimmed };
+    setMessages((prev) => [...prev, userMsg]);
+    setInput("");
+
+    if (streamingRef.current) {
+      // Queue the message to send after current stream finishes
+      messageQueueRef.current.push(trimmed);
+    } else {
+      doSendMessage(trimmed);
     }
   };
 
@@ -571,14 +644,14 @@ function AgentChat({
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Type a message..."
-            disabled={busy}
+            disabled={runningHeartbeat}
             rows={1}
             className="flex-1 resize-none rounded-lg border px-3 py-2 text-sm disabled:opacity-50"
             style={{ borderColor: "var(--border)", background: "var(--background)" }}
           />
           <button
             onClick={() => sendMessage(input)}
-            disabled={busy || !input.trim()}
+            disabled={runningHeartbeat || !input.trim()}
             className="rounded-lg px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
             style={{ background: "var(--accent)" }}
           >
