@@ -12,6 +12,8 @@ interface ActionItem {
   type: string;
   deliberation: string;
   status: "running" | "done" | "error";
+  detail?: string;
+  reasoning?: string;
 }
 
 interface ChatMessage {
@@ -397,7 +399,7 @@ function AgentChat({
               });
             } else if (event.type === "action_done") {
               const idx = chatActions.findIndex((a) => a.type === event.action && a.status === "running");
-              if (idx !== -1) chatActions[idx] = { ...chatActions[idx], status: "done" };
+              if (idx !== -1) chatActions[idx] = { ...chatActions[idx], status: "done", detail: event.detail || "", reasoning: event.reasoning || "" };
               setMessages((prev) => {
                 const updated = [...prev];
                 const lastActionIdx = updated.map((m) => m.role).lastIndexOf("action-group");
@@ -660,6 +662,8 @@ const ACTION_LABELS: Record<string, string> = {
 };
 
 function ActionGroup({ actions }: { actions: ActionItem[] }) {
+  const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
+
   return (
     <div className="flex justify-start mb-3">
       <div
@@ -667,30 +671,64 @@ function ActionGroup({ actions }: { actions: ActionItem[] }) {
         style={{ background: "var(--background)", border: "1px solid var(--border)" }}
       >
         <div className="space-y-2">
-          {actions.map((action, i) => (
-            <div key={i} className="flex items-center gap-2.5">
-              <span className="text-base shrink-0">{ACTION_ICONS[action.type] || "\u26A1"}</span>
-              <div className="flex-1 min-w-0">
-                <span className="text-xs font-medium" style={{ color: "var(--muted)" }}>
-                  {ACTION_LABELS[action.type] || action.type}
-                </span>
-                {action.deliberation && action.type !== "checking" && (
-                  <p className="text-xs truncate" style={{ color: "var(--foreground)" }}>
-                    {action.deliberation}
-                  </p>
+          {actions.map((action, i) => {
+            const hasDetails = action.status === "done" && (action.detail || action.reasoning);
+            const isExpanded = expandedIdx === i;
+
+            return (
+              <div key={i}>
+                <div
+                  className={`flex items-center gap-2.5 ${hasDetails ? "cursor-pointer" : ""}`}
+                  onClick={() => hasDetails && setExpandedIdx(isExpanded ? null : i)}
+                >
+                  <span className="text-base shrink-0">{ACTION_ICONS[action.type] || "\u26A1"}</span>
+                  <div className="flex-1 min-w-0">
+                    <span className="text-xs font-medium" style={{ color: "var(--muted)" }}>
+                      {ACTION_LABELS[action.type] || action.type}
+                    </span>
+                    {action.deliberation && action.type !== "checking" && (
+                      <p className="text-xs truncate" style={{ color: "var(--foreground)" }}>
+                        {action.deliberation}
+                      </p>
+                    )}
+                  </div>
+                  <span className="shrink-0 text-xs flex items-center gap-1">
+                    {hasDetails && (
+                      <span style={{ color: "var(--muted)", fontSize: "0.6rem" }}>
+                        {isExpanded ? "▾" : "▸"}
+                      </span>
+                    )}
+                    {action.status === "running" ? (
+                      <span className="inline-block animate-spin">&#x23F3;</span>
+                    ) : action.status === "error" ? (
+                      <span style={{ color: "var(--error, red)" }}>&#x2715;</span>
+                    ) : (
+                      <span style={{ color: "var(--accent)" }}>&#x2713;</span>
+                    )}
+                  </span>
+                </div>
+                {isExpanded && (
+                  <div
+                    className="mt-1.5 ml-7 rounded-lg px-3 py-2 text-xs leading-relaxed"
+                    style={{ background: "var(--surface, var(--background))", border: "1px solid var(--border)" }}
+                  >
+                    {action.reasoning && (
+                      <div className="mb-1.5">
+                        <span className="font-medium" style={{ color: "var(--muted)" }}>Reasoning: </span>
+                        <span style={{ color: "var(--foreground)" }}>{action.reasoning}</span>
+                      </div>
+                    )}
+                    {action.detail && (
+                      <div>
+                        <span className="font-medium" style={{ color: "var(--muted)" }}>Detail: </span>
+                        <span style={{ color: "var(--foreground)" }} className="whitespace-pre-wrap">{action.detail}</span>
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
-              <span className="shrink-0 text-xs">
-                {action.status === "running" ? (
-                  <span className="inline-block animate-spin">&#x23F3;</span>
-                ) : action.status === "error" ? (
-                  <span style={{ color: "var(--error, red)" }}>&#x2715;</span>
-                ) : (
-                  <span style={{ color: "var(--accent)" }}>&#x2713;</span>
-                )}
-              </span>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>

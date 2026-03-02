@@ -389,6 +389,7 @@ def _exec_update_profile(db: Session, hosted_agent: HostedAgent, profile_text: s
         "action": "update_profile",
         "description": "Profile updated successfully.",
         "profile_version": hosted_agent.profile_version,
+        "profile_text": profile_text,
     }
 
 

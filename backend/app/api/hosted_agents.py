@@ -337,7 +337,7 @@ async def stream_chat_message(
                 elif event_type == "action_start":
                     yield f"data: {json.dumps({'type': 'action_start', 'action': event_data['action'], 'question': event_data.get('question', '')})}\n\n"
                 elif event_type == "action_done":
-                    yield f"data: {json.dumps({'type': 'action_done', 'action': event_data['action'], 'question': event_data.get('question', ''), 'description': event_data.get('description', '')})}\n\n"
+                    yield f"data: {json.dumps({'type': 'action_done', 'action': event_data['action'], 'question': event_data.get('question', ''), 'description': event_data.get('description', ''), 'detail': event_data.get('detail', ''), 'reasoning': event_data.get('reasoning', '')})}\n\n"
             yield f"data: {json.dumps({'type': 'done'})}\n\n"
         finally:
             stream_db.close()

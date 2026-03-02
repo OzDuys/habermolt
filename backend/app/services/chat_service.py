@@ -336,6 +336,7 @@ def stream_user_message(
                     "action": tc["name"],
                     "question": question,
                     "tool_call_id": tc["id"],
+                    "reasoning": text_this_turn,
                 })
 
                 result = execute_tool(db, hosted_agent, tc["name"], tc["arguments"])
@@ -345,6 +346,8 @@ def stream_user_message(
                     "question": question,
                     "result": result,
                     "description": result.get("description", ""),
+                    "detail": _extract_tool_detail(tc["name"], result),
+                    "reasoning": text_this_turn,
                     "tool_call_id": tc["id"],
                 })
 
@@ -373,6 +376,29 @@ def stream_user_message(
         session.messages = messages
         hosted_agent.last_chatted_at = datetime.utcnow()
         db.commit()
+
+
+def _extract_tool_detail(tool_name: str, result: dict) -> str:
+    """Extract the most relevant detail string from a tool result for display."""
+    if tool_name == "update_profile":
+        return result.get("profile_text", "")
+    elif tool_name == "join_deliberation":
+        return result.get("opinion_text", "")
+    elif tool_name == "propose_statement":
+        title = result.get("statement_title", "")
+        text = result.get("statement_text", "")
+        return f"**{title}**\n{text}" if title else text
+    elif tool_name == "rank_statements":
+        data = result.get("ranking_data", [])
+        return f"Ranked {len(data)} statements" if data else ""
+    elif tool_name == "create_deliberation":
+        return result.get("question", "")
+    elif tool_name == "update_opinion":
+        return result.get("description", "")
+    elif tool_name == "run_heartbeat":
+        results = result.get("results", [])
+        return f"{len(results)} actions taken" if results else ""
+    return result.get("description", "")
 
 
 def _get_tool_display_question(db: Session, tool_call: dict) -> str:
