@@ -99,6 +99,68 @@ Respond in this format:
 TITLE: <5-10 word title>
 STATEMENT: <1-3 sentence consensus statement>"""
 
+CONFIDENCE_SYSTEM_PROMPT = """\
+You represent a human in democratic deliberations. Given your human's profile, assess how \
+confident you are about representing their view on the topic below.
+
+## Human's Profile
+{profile}
+
+Rate your confidence from 1 to 5:
+1 = No idea what they'd think — topic is completely outside their profile
+2 = Weak signal — might be able to guess but very uncertain
+3 = Moderate — some relevant values in profile but not directly addressed
+4 = Good — profile clearly covers related values/positions
+5 = Very confident — profile directly addresses this topic
+
+Respond with ONLY a single number (1-5), nothing else."""
+
+REVISIT_OPINION_PROMPT = """\
+You represent a human in democratic deliberations. You previously submitted an opinion on \
+this topic, but the deliberation has evolved since then — new statements and participants \
+have joined.
+
+## Human's Profile
+{profile}
+
+## Your Previous Opinion
+{old_opinion}
+
+## New Statements Since Your Opinion
+{new_statements}
+
+Considering these new perspectives, write an updated opinion from your human's perspective. \
+If their view would remain the same, reaffirm it clearly. If the new perspectives reveal \
+something they'd care about, adjust accordingly.
+
+Respond with ONLY the opinion text, nothing else."""
+
+CREATE_DELIBERATION_PROMPT = """\
+You represent a human in democratic deliberations. Based on their profile, suggest a \
+deliberation question on a topic they care about that would be interesting for group discussion.
+
+## Human's Profile
+{profile}
+
+The question should:
+- Be debatable — reasonable people could disagree
+- Be specific enough to generate concrete opinions
+- Reflect something your human genuinely cares about
+- Not be too broad ("Is AI good?") or too narrow ("Should we use Python 3.12?")
+
+Respond with ONLY the question text, nothing else."""
+
+CREATE_DELIBERATION_CATEGORIES_PROMPT = """\
+Given this deliberation question, pick 1-3 categories from this list:
+south-africa, ai, current-affairs, geopolitics, societal, sport, culture, memes
+
+Question: {question}
+
+Respond with ONLY a comma-separated list of categories, nothing else."""
+
+STALE_OPINION_DAYS = 7
+STALE_PROFILE_DAYS = 7
+
 
 def run_all_hosted_agents(db: Session) -> dict:
     """Run heartbeat for all eligible hosted agents. Called by the cron endpoint."""
@@ -127,6 +189,13 @@ def run_all_hosted_agents(db: Session) -> dict:
 
 def run_single_hosted_agent(db: Session, hosted_agent: HostedAgent) -> dict:
     """Run one heartbeat cycle for a hosted agent."""
+    logger.info(
+        f"Heartbeat for {hosted_agent.id}: "
+        f"profile={'yes' if hosted_agent.user_profile else 'NO'}, "
+        f"model={hosted_agent.model}, tier={hosted_agent.pricing_tier}, "
+        f"tokens={hosted_agent.tokens_used_period}"
+    )
+
     if not check_token_limit(hosted_agent):
         notification_service.create_notification(
             db, hosted_agent.user_id,
@@ -139,11 +208,13 @@ def run_single_hosted_agent(db: Session, hosted_agent: HostedAgent) -> dict:
     agent = hosted_agent.agent
     actions_taken = []  # string descriptions for backward compat
     structured_actions = []  # rich data for HeartbeatSession
+    errors = []  # track failures so they surface in the response
 
     started_at = datetime.utcnow()
 
     # Compute actions + discovered (same logic as agent_status.py)
     actions, discovered = _compute_agent_actions(db, agent)
+    logger.info(f"Heartbeat {hosted_agent.id}: actions={len(actions)}, discovered={len(discovered)}")
 
     # Handle actions first
     for action in actions:
@@ -152,18 +223,71 @@ def run_single_hosted_agent(db: Session, hosted_agent: HostedAgent) -> dict:
             if result:
                 actions_taken.append(result["description"])
                 structured_actions.append(result)
+            else:
+                msg = f"Action '{action['action']}' on '{action['question'][:50]}' returned no result"
+                logger.warning(f"Heartbeat {hosted_agent.id}: {msg}")
+                errors.append(msg)
         except Exception as e:
-            logger.error(f"Action failed for hosted agent {hosted_agent.id}: {e}")
+            msg = f"Action '{action['action']}' failed: {e}"
+            logger.error(f"Heartbeat {hosted_agent.id}: {msg}")
+            errors.append(msg)
 
-    # Join up to 3 discovered deliberations
+    # Join up to 3 discovered deliberations (with confidence scoring)
+    validation_candidates = []  # actions that should get user validation
     for disc in discovered[:3]:
         try:
-            result = _join_deliberation(db, hosted_agent, disc["deliberation_id"])
-            if result:
+            delib = db.query(Deliberation).filter(Deliberation.id == disc["deliberation_id"]).first()
+            if not delib:
+                continue
+
+            # Assess confidence before acting
+            confidence = _assess_confidence(hosted_agent, disc["question"])
+            logger.info(
+                f"Heartbeat {hosted_agent.id}: confidence for '{disc['question'][:40]}': "
+                f"score={confidence['confidence']}, sim={confidence['similarity']:.2f}, "
+                f"ask={confidence['should_ask']}, validate={confidence['should_validate']}"
+            )
+
+            if confidence["should_ask"]:
+                # Low confidence + novel topic — ask user first
+                result = _ask_before_acting(db, hosted_agent, delib, confidence)
                 actions_taken.append(result["description"])
                 structured_actions.append(result)
+            else:
+                # Confident enough — join the deliberation
+                result = _join_deliberation(db, hosted_agent, disc["deliberation_id"])
+                if result:
+                    actions_taken.append(result["description"])
+                    structured_actions.append(result)
+                    if confidence["should_validate"]:
+                        validation_candidates.append(result)
+                else:
+                    msg = f"Join '{disc['question'][:50]}' returned no result (LLM may have failed)"
+                    logger.warning(f"Heartbeat {hosted_agent.id}: {msg}")
+                    errors.append(msg)
         except Exception as e:
-            logger.error(f"Join failed for hosted agent {hosted_agent.id}: {e}")
+            msg = f"Join failed for '{disc['question'][:50]}': {e}"
+            logger.error(f"Heartbeat {hosted_agent.id}: {msg}")
+            errors.append(msg)
+
+    # Request validation on one action the agent was unsure about
+    if validation_candidates:
+        try:
+            val_result = _request_validation(db, hosted_agent, validation_candidates[0])
+            actions_taken.append(val_result["description"])
+            structured_actions.append(val_result)
+        except Exception as e:
+            logger.error(f"Heartbeat {hosted_agent.id}: validation request failed: {e}")
+
+    # Fallback: if no actions were taken, do something useful anyway
+    if not structured_actions:
+        try:
+            fallback = _do_fallback(db, hosted_agent)
+            if fallback:
+                actions_taken.append(fallback["description"])
+                structured_actions.append(fallback)
+        except Exception as e:
+            logger.error(f"Heartbeat {hosted_agent.id}: fallback failed: {e}")
 
     # Persist heartbeat session
     completed_at = datetime.utcnow()
@@ -181,7 +305,10 @@ def run_single_hosted_agent(db: Session, hosted_agent: HostedAgent) -> dict:
     hosted_agent.last_heartbeat_at = datetime.utcnow()
     db.commit()
 
-    return {"status": "ok", "actions_taken": actions_taken}
+    result = {"status": "ok", "actions_taken": actions_taken}
+    if errors:
+        result["errors"] = errors
+    return result
 
 
 def _should_run_now(hosted_agent: HostedAgent) -> bool:
@@ -202,6 +329,7 @@ def _compute_agent_actions(db: Session, agent: Agent) -> tuple[list[dict], list[
 
     actions = []
     discovered = []
+    revisit_count = 0
 
     for delib in deliberations:
         # Skip private deliberations the agent hasn't joined
@@ -250,6 +378,24 @@ def _compute_agent_actions(db: Session, agent: Agent) -> tuple[list[dict], list[
             ).count()
             if agent_stmt_count == 0 and agent_stmt_count < settings.CONTINUOUS_MAX_STATEMENTS_PER_AGENT and current_count < settings.CONTINUOUS_MAX_STATEMENTS:
                 actions.append({"deliberation_id": delib.id, "question": delib.question, "action": "add_statement"})
+            else:
+                # Check if opinion is stale and deliberation has evolved
+                latest_opinion = db.query(Opinion).filter(
+                    and_(Opinion.deliberation_id == delib.id, Opinion.agent_id == agent.id)
+                ).order_by(Opinion.version.desc()).first()
+                if latest_opinion and latest_opinion.created_at:
+                    age_days = (datetime.utcnow() - latest_opinion.created_at).days
+                    if age_days >= STALE_OPINION_DAYS:
+                        # Check if new statements were added after opinion
+                        new_since_opinion = db.query(Statement).filter(
+                            and_(
+                                Statement.deliberation_id == delib.id,
+                                Statement.created_at > latest_opinion.created_at,
+                            )
+                        ).count()
+                        if new_since_opinion > 0 and revisit_count < 2:
+                            actions.append({"deliberation_id": delib.id, "question": delib.question, "action": "revisit_opinion"})
+                            revisit_count += 1
 
     return actions, discovered
 
@@ -281,6 +427,18 @@ def _execute_action(db: Session, hosted_agent: HostedAgent, action: dict) -> Opt
             "statement_text": stmt_data.get("text") if stmt_data else None,
         }
 
+    elif act == "revisit_opinion":
+        result = _revisit_opinion(db, hosted_agent, delib_id)
+        if result:
+            return {
+                "action": "revisit_opinion",
+                "deliberation_id": str(delib_id),
+                "question": question,
+                "description": f"Updated opinion on '{question[:50]}'",
+                "opinion_text": result,
+            }
+        return None
+
     return None
 
 
@@ -303,6 +461,7 @@ def _join_deliberation(db: Session, hosted_agent: HostedAgent, delib_id: UUID) -
     )
 
     prompt = f"The deliberation question is:\n\"{delib.question}\"\n\nWrite your human's opinion."
+    logger.info(f"Hosted agent {hosted_agent.id}: generating opinion for delib {delib_id} using model={hosted_agent.model}")
     opinion_text = client.sample_text(
         prompt=prompt,
         system_prompt=OPINION_SYSTEM_PROMPT.format(profile=profile),
@@ -310,6 +469,7 @@ def _join_deliberation(db: Session, hosted_agent: HostedAgent, delib_id: UUID) -
     )
 
     if not opinion_text:
+        logger.error(f"Hosted agent {hosted_agent.id}: LLM returned empty opinion for delib {delib_id} — check LLM traces for errors")
         return None
 
     # Submit via service
@@ -474,6 +634,361 @@ def _do_add_statement(db: Session, hosted_agent: HostedAgent, delib_id: UUID) ->
 
     _track_tokens_from_recent_trace(db, hosted_agent)
     return {"title": title, "text": statement_text}
+
+
+def _revisit_opinion(db: Session, hosted_agent: HostedAgent, delib_id: UUID) -> Optional[str]:
+    """Re-evaluate and update opinion on a deliberation that has evolved."""
+    agent = hosted_agent.agent
+    profile = _get_profile_text(hosted_agent)
+
+    latest_opinion = db.query(Opinion).filter(
+        and_(Opinion.deliberation_id == delib_id, Opinion.agent_id == agent.id)
+    ).order_by(Opinion.version.desc()).first()
+    if not latest_opinion:
+        return None
+
+    # Get new statements since opinion
+    new_statements = db.query(Statement).filter(
+        and_(
+            Statement.deliberation_id == delib_id,
+            Statement.created_at > latest_opinion.created_at,
+        )
+    ).all()
+
+    new_stmts_text = "\n".join(
+        f"- {s.title or 'Untitled'}: {s.statement_text}" for s in new_statements
+    ) or "No new statements."
+
+    client = get_llm_client(hosted_agent)
+    client.set_trace_context(
+        trace_type="hosted_agent_revisit_opinion",
+        deliberation_id=delib_id,
+        agent_id=agent.id,
+        hosted_agent_id=hosted_agent.id,
+    )
+
+    delib = db.query(Deliberation).get(delib_id)
+    prompt = f"Deliberation question: \"{delib.question}\"\n\nReview the new statements and update your opinion if needed."
+    opinion_text = client.sample_text(
+        prompt=prompt,
+        system_prompt=REVISIT_OPINION_PROMPT.format(
+            profile=profile,
+            old_opinion=latest_opinion.opinion_text,
+            new_statements=new_stmts_text,
+        ),
+        temperature=0.7,
+    )
+
+    if not opinion_text:
+        logger.error(f"Hosted agent {hosted_agent.id}: LLM returned empty revisited opinion for delib {delib_id}")
+        return None
+
+    service = ContinuousDeliberationService(db)
+    try:
+        service.submit_opinion(delib, agent, opinion_text)
+    except ValueError:
+        return None
+
+    _track_tokens_from_recent_trace(db, hosted_agent)
+    return opinion_text
+
+
+def _assess_confidence(hosted_agent: HostedAgent, question: str) -> dict:
+    """Assess agent confidence for a deliberation topic.
+
+    Returns {"confidence": 1-5, "similarity": 0.0-1.0, "should_ask": bool, "should_validate": bool}
+    """
+    import numpy as np
+    from app.services.embedding_service import get_question_embedding
+
+    profile = _get_profile_text(hosted_agent)
+    result = {"confidence": 3, "similarity": 0.5, "should_ask": False, "should_validate": False}
+
+    # Embedding similarity between profile and question
+    q_embedding = get_question_embedding(question)
+    p_embedding = get_question_embedding(profile[:2000])  # truncate long profiles
+    if q_embedding and p_embedding:
+        q_vec = np.array(q_embedding)
+        p_vec = np.array(p_embedding)
+        cosine_sim = float(np.dot(q_vec, p_vec) / (np.linalg.norm(q_vec) * np.linalg.norm(p_vec)))
+        result["similarity"] = cosine_sim
+
+    # LLM self-rated confidence
+    client = get_llm_client(hosted_agent)
+    client.set_trace_context(trace_type="hosted_agent_confidence")
+    confidence_response = client.sample_text(
+        prompt=f"The deliberation topic is: \"{question}\"",
+        system_prompt=CONFIDENCE_SYSTEM_PROMPT.format(profile=profile),
+        temperature=0.1,
+        max_tokens=8,
+    )
+    try:
+        result["confidence"] = max(1, min(5, int(confidence_response.strip()[0])))
+    except (ValueError, IndexError):
+        result["confidence"] = 3  # default to moderate
+
+    # Decision logic
+    sim = result["similarity"]
+    conf = result["confidence"]
+    if sim < 0.3 and conf <= 2:
+        result["should_ask"] = True  # ask before acting
+    elif sim < 0.3 or conf <= 2:
+        result["should_validate"] = True  # act but request feedback after
+
+    return result
+
+
+def _ask_before_acting(db: Session, hosted_agent: HostedAgent, delib: Deliberation, confidence: dict) -> dict:
+    """Post a chat message asking the user for input before joining a deliberation."""
+    from app.services.chat_service import add_agent_message
+
+    msg = (
+        f"Hey! There's a new deliberation on Habermolt:\n\n"
+        f"> **{delib.question}**\n\n"
+        f"I'm not confident I know your position on this one "
+        f"(confidence: {confidence['confidence']}/5). "
+        f"Before I weigh in on your behalf, what's your take? "
+        f"Even a brief answer helps me represent you accurately."
+    )
+
+    add_agent_message(db, hosted_agent, msg)
+    notification_service.create_notification(
+        db, hosted_agent.user_id,
+        type="agent_needs_input",
+        title="Your agent needs your input",
+        body=f"New deliberation: \"{delib.question[:80]}\" — your agent isn't sure how you'd feel about this.",
+        metadata={"deliberation_id": str(delib.id)},
+    )
+
+    return {
+        "action": "ask_before_acting",
+        "deliberation_id": str(delib.id),
+        "question": delib.question,
+        "description": f"Asked for input on '{delib.question[:50]}'",
+        "confidence": confidence["confidence"],
+        "similarity": confidence["similarity"],
+    }
+
+
+def _request_validation(db: Session, hosted_agent: HostedAgent, action: dict) -> dict:
+    """Post a chat message asking the user to validate a recent action."""
+    from app.services.chat_service import add_agent_message
+
+    action_type = action.get("action", "unknown")
+    question = action.get("question", "a deliberation")
+
+    if action_type == "join_deliberation":
+        opinion = action.get("opinion_text", "")
+        msg = (
+            f"I just joined a deliberation:\n\n"
+            f"> **{question}**\n\n"
+            f"Here's what I said on your behalf:\n\n"
+            f"*\"{opinion[:300]}{'...' if len(opinion) > 300 else ''}\"*\n\n"
+            f"Does this sound right? Let me know if I got anything wrong and I'll update my opinion."
+        )
+    elif action_type == "revisit_opinion":
+        msg = (
+            f"I updated my opinion on:\n\n"
+            f"> **{question}**\n\n"
+            f"The deliberation evolved and I revised what I said. "
+            f"Want to take a look and tell me if the update reflects your views?"
+        )
+    else:
+        msg = (
+            f"I just took action on:\n\n"
+            f"> **{question}**\n\n"
+            f"Action: {action_type}. Does this look right to you?"
+        )
+
+    add_agent_message(db, hosted_agent, msg)
+    notification_service.create_notification(
+        db, hosted_agent.user_id,
+        type="agent_wants_feedback",
+        title="Your agent wants your feedback",
+        body=f"Check what your agent did on \"{question[:80]}\"",
+        metadata={"deliberation_id": action.get("deliberation_id")},
+    )
+
+    return {
+        "action": "request_validation",
+        "description": f"Asked for feedback on '{question[:50]}'",
+        **{k: v for k, v in action.items() if k != "description"},
+    }
+
+
+def _do_interview_request(db: Session, hosted_agent: HostedAgent) -> dict:
+    """Notify user to chat with their agent to build/update profile."""
+    from app.services.chat_service import add_agent_message
+
+    if not hosted_agent.user_profile:
+        msg = (
+            "Hi! I'd love to learn about your values and perspectives so I can represent you "
+            "in deliberations on Habermolt. Could we chat for a few minutes? I'll ask about "
+            "topics you care about — politics, society, tech, culture — so I can build a "
+            "profile of your views."
+        )
+        title = "Your agent wants to get to know you"
+        body = "Chat with your agent to build your profile so it can represent you in deliberations."
+    else:
+        msg = (
+            "Hey! It's been a while since we last chatted. Have any of your views changed, "
+            "or is there a new topic you've been thinking about? I want to make sure I'm "
+            "representing you accurately in deliberations."
+        )
+        title = "Your agent wants to check in"
+        body = "It's been a while — chat with your agent to keep your profile up to date."
+
+    add_agent_message(db, hosted_agent, msg)
+    notification_service.create_notification(
+        db, hosted_agent.user_id,
+        type="interview_request",
+        title=title,
+        body=body,
+    )
+
+    return {
+        "action": "interview_request",
+        "description": title,
+    }
+
+
+def _do_request_feedback(db: Session, hosted_agent: HostedAgent) -> dict:
+    """Ask user for feedback on their agent's performance or the platform."""
+    from app.services.chat_service import add_agent_message
+
+    # Count deliberations the agent has participated in
+    agent = hosted_agent.agent
+    participation_count = db.query(Opinion.deliberation_id).filter(
+        Opinion.agent_id == agent.id
+    ).distinct().count()
+
+    msg = (
+        f"I've participated in {participation_count} deliberation{'s' if participation_count != 1 else ''} "
+        f"on your behalf so far. How am I doing? Some things I'd love to know:\n\n"
+        f"- Am I representing your views accurately?\n"
+        f"- Are there topics I've been getting wrong?\n"
+        f"- Anything about Habermolt that could work better?\n\n"
+        f"Your feedback helps me improve — and I'll pass any platform feedback along too."
+    )
+
+    add_agent_message(db, hosted_agent, msg)
+    notification_service.create_notification(
+        db, hosted_agent.user_id,
+        type="request_feedback",
+        title="Your agent wants your feedback",
+        body="How is your agent doing? Share your thoughts to help it represent you better.",
+    )
+
+    return {
+        "action": "request_feedback",
+        "description": "Asked for feedback on performance",
+    }
+
+
+def _do_fallback(db: Session, hosted_agent: HostedAgent) -> Optional[dict]:
+    """When nothing else to do, pick a useful fallback action.
+
+    Priority:
+    1. Interview request — no profile or stale
+    2. Request feedback — has participated in 3+ deliberations
+    3. Create deliberation — generate a new topic from profile
+    """
+    # 1. Interview request
+    if not hosted_agent.user_profile:
+        return _do_interview_request(db, hosted_agent)
+
+    stale_chat = (
+        not hosted_agent.last_chatted_at
+        or (datetime.utcnow() - hosted_agent.last_chatted_at).days >= STALE_PROFILE_DAYS
+    )
+    if stale_chat:
+        return _do_interview_request(db, hosted_agent)
+
+    # 2. Request feedback (if participated in 3+ deliberations)
+    agent = hosted_agent.agent
+    participation_count = db.query(Opinion.deliberation_id).filter(
+        Opinion.agent_id == agent.id
+    ).distinct().count()
+    if participation_count >= 3:
+        return _do_request_feedback(db, hosted_agent)
+
+    # 3. Create a new deliberation
+    return _do_create_deliberation(db, hosted_agent)
+
+
+def _do_create_deliberation(db: Session, hosted_agent: HostedAgent) -> Optional[dict]:
+    """Create a new deliberation on a topic the user cares about."""
+    profile = _get_profile_text(hosted_agent)
+    agent = hosted_agent.agent
+
+    # Generate a question
+    client = get_llm_client(hosted_agent)
+    client.set_trace_context(
+        trace_type="hosted_agent_create_deliberation",
+        agent_id=agent.id,
+        hosted_agent_id=hosted_agent.id,
+    )
+
+    question = client.sample_text(
+        prompt="Suggest a deliberation question based on your human's profile.",
+        system_prompt=CREATE_DELIBERATION_PROMPT.format(profile=profile),
+        temperature=0.9,
+    )
+    if not question:
+        logger.error(f"Hosted agent {hosted_agent.id}: LLM returned empty deliberation question")
+        return None
+
+    question = question.strip().strip('"')
+    if len(question) < 10 or len(question) > 280:
+        logger.warning(f"Hosted agent {hosted_agent.id}: generated question has bad length ({len(question)})")
+        return None
+
+    # Generate categories
+    categories_response = client.sample_text(
+        prompt=CREATE_DELIBERATION_CATEGORIES_PROMPT.format(question=question),
+        temperature=0.1,
+        max_tokens=50,
+    )
+    categories = [c.strip().lower() for c in (categories_response or "").split(",") if c.strip()]
+    valid_cats = {"south-africa", "ai", "current-affairs", "geopolitics", "societal", "sport", "culture", "memes"}
+    categories = [c for c in categories if c in valid_cats] or ["societal"]
+
+    # Generate opinion
+    opinion_text = client.sample_text(
+        prompt=f"The deliberation question is:\n\"{question}\"\n\nWrite your human's opinion.",
+        system_prompt=OPINION_SYSTEM_PROMPT.format(profile=profile),
+        temperature=0.7,
+    )
+    if not opinion_text:
+        logger.error(f"Hosted agent {hosted_agent.id}: LLM returned empty opinion for new deliberation")
+        return None
+
+    _track_tokens_from_recent_trace(db, hosted_agent)
+
+    # Create deliberation via service
+    import asyncio
+    service = ContinuousDeliberationService(db)
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+    try:
+        delib = loop.run_until_complete(
+            service.create_deliberation(question, agent, opinion_text, categories=categories)
+        )
+    except Exception as e:
+        logger.error(f"Hosted agent {hosted_agent.id}: create deliberation failed: {e}")
+        return None
+
+    return {
+        "action": "create_deliberation",
+        "deliberation_id": str(delib.id),
+        "question": question,
+        "description": f"Created deliberation: '{question[:50]}'",
+        "categories": categories,
+    }
 
 
 def _parse_ranking_response(response: str, statements: list) -> list[dict]:

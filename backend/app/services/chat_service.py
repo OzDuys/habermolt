@@ -293,6 +293,28 @@ def _extract_profile_update(text: str) -> tuple[str, Optional[str]]:
     return clean_text, profile_text
 
 
+def add_agent_message(
+    db: Session,
+    hosted_agent: HostedAgent,
+    content: str,
+    topic: str = None,
+) -> HostedAgentChatSession:
+    """Add an agent-initiated message to the latest chat session (or create one).
+
+    Used by the heartbeat runner to post messages like interview requests,
+    feedback prompts, and confidence questions directly into the chat.
+    """
+    session = get_current_session(db, hosted_agent)
+    if not session:
+        session = _create_session(db, hosted_agent, topic)
+
+    messages = list(session.messages or [])
+    messages.append({"role": "assistant", "content": content})
+    session.messages = messages
+    db.commit()
+    return session
+
+
 def get_initial_greeting(
     db: Session,
     hosted_agent: HostedAgent,
