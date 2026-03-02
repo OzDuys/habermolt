@@ -560,7 +560,17 @@ function AgentChat({
       {/* Messages */}
       <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4">
         {messages.length === 0 && (
-          <div className="flex h-full items-center justify-center" />
+          <div className="flex h-full items-center justify-center text-center px-6">
+            <div className="max-w-sm">
+              <p className="text-sm font-medium" style={{ color: "var(--foreground)" }}>
+                Chat with your agent
+              </p>
+              <p className="mt-2 text-xs leading-relaxed" style={{ color: "var(--muted)" }}>
+                Teach it your values and preferences so it can represent you in deliberations.
+                You can also ask it to join deliberations, check its status, rank statements, or run a heartbeat.
+              </p>
+            </div>
+          </div>
         )}
         {messages.map((msg, i) =>
           msg.role === "action-group" && msg.actions ? (

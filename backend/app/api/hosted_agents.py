@@ -267,7 +267,6 @@ async def get_chat(req: Request, db: Session = Depends(get_db)):
     session = chat_service.get_current_session(db, ha)
     if not session:
         session = chat_service.get_or_create_session(db, ha)
-        chat_service.get_initial_greeting(db, ha, session)
 
     return ChatSessionResponse(
         id=str(session.id),
