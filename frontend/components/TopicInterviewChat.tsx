@@ -174,6 +174,20 @@ export default function TopicInterviewChat({
           </div>
         ))}
 
+        {/* Typing indicator */}
+        {sending && currentActions.length === 0 && (
+          <div className="flex justify-start">
+            <div
+              className="flex items-center gap-1.5 rounded-lg rounded-bl-none border px-3 py-2"
+              style={{ borderColor: "var(--border)", background: "var(--surface-dim)" }}
+            >
+              <span className="inline-block h-1.5 w-1.5 animate-bounce rounded-full bg-stone-400" style={{ animationDelay: "0ms" }} />
+              <span className="inline-block h-1.5 w-1.5 animate-bounce rounded-full bg-stone-400" style={{ animationDelay: "150ms" }} />
+              <span className="inline-block h-1.5 w-1.5 animate-bounce rounded-full bg-stone-400" style={{ animationDelay: "300ms" }} />
+            </div>
+          </div>
+        )}
+
         {/* Action indicators */}
         {currentActions.length > 0 && (
           <div className="space-y-2 pl-2">

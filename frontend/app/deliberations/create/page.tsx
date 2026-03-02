@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useSession, signIn } from "@/lib/auth-client";
 import { api } from "@/lib/api";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import TopicInterviewChat from "@/components/TopicInterviewChat";
 
 const CATEGORIES = [
@@ -12,10 +13,11 @@ const CATEGORIES = [
 ];
 
 type AgentType = "loading" | "none" | "hosted" | "openclaw";
-type PageState = "form" | "interview" | "done";
+type PageState = "form" | "interview";
 
 export default function CreateDeliberationPage() {
   const { data: session, isPending: sessionLoading } = useSession();
+  const router = useRouter();
 
   const [agentType, setAgentType] = useState<AgentType>("loading");
   const [isPrivate, setIsPrivate] = useState(false);
@@ -107,7 +109,9 @@ export default function CreateDeliberationPage() {
   };
 
   const handleInterviewComplete = () => {
-    setPageState("done");
+    if (deliberationId) {
+      router.push(`/deliberations/${deliberationId}`);
+    }
   };
 
   const handleGoogleSignIn = async () => {
@@ -158,69 +162,6 @@ export default function CreateDeliberationPage() {
           </svg>
           Sign in with Google
         </button>
-      </div>
-    );
-  }
-
-  // Done state
-  if (pageState === "done" && deliberationId) {
-    return (
-      <div className="mx-auto max-w-xl py-12">
-        <div className="rounded-lg border p-8" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
-          <h2 className="mb-2 text-center font-serif text-2xl" style={{ color: "var(--foreground)" }}>
-            Deliberation Created
-          </h2>
-          <p className="mb-6 text-center text-sm" style={{ color: "var(--muted)" }}>
-            Your opinion has been submitted and your agent is now participating in this deliberation.
-          </p>
-
-          {inviteCode && (
-            <>
-              <div className="mb-4 rounded-lg p-4" style={{ background: "var(--surface-dim)" }}>
-                <p className="mb-1 text-xs font-medium" style={{ color: "var(--muted)" }}>
-                  Invite Link
-                </p>
-                <p className="break-all font-mono text-sm" style={{ color: "var(--foreground)" }}>
-                  {inviteUrl}
-                </p>
-              </div>
-              <button
-                onClick={handleCopy}
-                className="mb-4 w-full rounded-lg px-4 py-3 text-sm font-medium text-white transition-colors"
-                style={{ background: "var(--accent)" }}
-              >
-                {copied ? "Copied!" : "Copy Invite Link"}
-              </button>
-              <p className="mb-6 text-center text-xs" style={{ color: "var(--muted)" }}>
-                Send this link on WhatsApp, Telegram, or any messaging app.
-              </p>
-            </>
-          )}
-
-          <div className="flex gap-3">
-            <Link
-              href={`/deliberations/${deliberationId}`}
-              className="flex-1 rounded-lg px-4 py-3 text-center text-sm font-medium text-white transition-colors"
-              style={{ background: "var(--accent)" }}
-            >
-              View Deliberation
-            </Link>
-            <button
-              onClick={() => {
-                setPageState("form");
-                setDeliberationId(null);
-                setInviteCode(null);
-                setInterviewSessionId(null);
-                setQuestion("");
-                setSelectedCategories([]);
-              }}
-              className="flex-1 rounded-lg border px-4 py-2 text-sm font-medium transition-colors"
-              style={{ borderColor: "var(--border)", color: "var(--foreground)" }}
-            >
-              Create Another
-            </button>
-          </div>
-        </div>
       </div>
     );
   }

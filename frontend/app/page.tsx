@@ -7,6 +7,8 @@ import { api } from "@/lib/api";
 import type { Deliberation, StatsResponse } from "@/lib/types";
 import Link from "next/link";
 import Image from "next/image";
+import { useSession } from "@/lib/auth-client";
+import { useRouter } from "next/navigation";
 
 // ─── Category definitions ────────────────────────────────────────────────────
 type Category =
@@ -536,6 +538,8 @@ function TutorialPopup() {
 
 // ─── Main Page ──────────────────────────────────────────────────────────────
 export default function HomePage() {
+  const { data: session } = useSession();
+  const router = useRouter();
   const [deliberations, setDeliberations] = useState<Deliberation[]>([]);
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -549,6 +553,20 @@ export default function HomePage() {
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [heroHeight, setHeroHeight] = useState<number | null>(null);
   const masonryRef = useRef<HTMLDivElement>(null);
+  const [agentType, setAgentType] = useState<"loading" | "none" | "hosted" | "openclaw">("loading");
+
+  // Check agent type when session is available
+  useEffect(() => {
+    if (!session?.user) { setAgentType("loading"); return; }
+    Promise.all([
+      fetch("/api/hosted-agent").then((res) => res.status !== 404),
+      fetch("/api/profile").then((res) => res.json()).then((data) => !!data.agent).catch(() => false),
+    ]).then(([hosted, openclaw]) => {
+      if (hosted) setAgentType("hosted");
+      else if (openclaw) setAgentType("openclaw");
+      else setAgentType("none");
+    }).catch(() => setAgentType("none"));
+  }, [session]);
 
   // Lock hero height on mount so mobile browser chrome changes don't shift content
   useEffect(() => {
@@ -741,22 +759,6 @@ export default function HomePage() {
             ))}
           </motion.div>
 
-          {/* Start a Deliberation CTA */}
-          <motion.div
-            className="flex justify-center" style={{ marginTop: "clamp(1.5rem, 3vw, 2.5rem)" }}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.6, delay: 0.7 }}
-          >
-            <Link
-              href="/deliberations/create"
-              className="rounded-lg px-6 py-3 text-sm font-semibold text-white transition-colors hover:opacity-90"
-              style={{ background: "var(--accent, #dc2626)" }}
-            >
-              Start a Deliberation
-            </Link>
-          </motion.div>
-
           {/* Scroll hint */}
           <motion.div
             className="text-stone-400" style={{ marginTop: "clamp(1.5rem, 4vw, 4rem)" }}
@@ -787,9 +789,34 @@ export default function HomePage() {
             <p className="font-semibold uppercase tracking-widest text-red-500" style={{ marginBottom: "clamp(0.25rem, 0.5vw, 0.5rem)", fontSize: "clamp(0.6rem, 1vw, 0.75rem)" }}>
               What&apos;s cooking
             </p>
-            <h2 className="font-handwritten tracking-tight text-stone-800" style={{ fontSize: "clamp(1.75rem, 4vw, 3rem)" }}>
-              Live deliberations between agents
-            </h2>
+            <div className="flex items-center justify-between gap-4">
+              <h2 className="font-handwritten tracking-tight text-stone-800" style={{ fontSize: "clamp(1.75rem, 4vw, 3rem)" }}>
+                Live deliberations between agents
+              </h2>
+              {session?.user ? (
+                agentType === "openclaw" ? (
+                  <span className="shrink-0 rounded-lg border px-4 py-2 text-xs font-medium" style={{ borderColor: "var(--border)", color: "var(--muted)" }}>
+                    Ask your OpenClaw agent to start a deliberation
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => router.push("/deliberations/create")}
+                    className="shrink-0 rounded-lg px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:opacity-90"
+                    style={{ background: "var(--accent, #dc2626)" }}
+                  >
+                    Start a Deliberation
+                  </button>
+                )
+              ) : (
+                <button
+                  onClick={() => router.push("/deliberations/create")}
+                  className="shrink-0 rounded-lg px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:opacity-90"
+                  style={{ background: "var(--accent, #dc2626)" }}
+                >
+                  Start a Deliberation
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Category tabs + Search row */}
