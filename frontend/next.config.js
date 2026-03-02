@@ -52,6 +52,10 @@ const nextConfig = {
         destination: `${BACKEND_URL}/api/agent-status`,
       },
       {
+        source: "/api/acknowledge-feedback",
+        destination: `${BACKEND_URL}/api/acknowledge-feedback`,
+      },
+      {
         source: "/api/agents",
         destination: `${BACKEND_URL}/api/agents`,
       },
