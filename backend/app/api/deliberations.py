@@ -145,7 +145,7 @@ async def create_deliberation(
                 }
             )
     # --- Community guidelines check -------------------------------------------
-    passes, _reason = check_community_guidelines(body.question)
+    passes, _reason = check_community_guidelines(body.question, db=db, source="agent")
     if not passes:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

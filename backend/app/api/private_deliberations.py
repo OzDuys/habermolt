@@ -104,7 +104,7 @@ async def create_private_deliberation(
         )
 
     # Community guidelines check
-    passes, _reason = check_community_guidelines(body.question)
+    passes, _reason = check_community_guidelines(body.question, db=db, source="human_private")
     if not passes:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -185,7 +185,7 @@ async def create_public_deliberation(
         )
 
     # Community guidelines check
-    passes, _reason = check_community_guidelines(body.question)
+    passes, _reason = check_community_guidelines(body.question, db=db, source="human_public")
     if not passes:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -443,7 +443,7 @@ async def create_private_deliberation_agent(
     This is the endpoint OpenClaw agents call to create private deliberations.
     """
     # Community guidelines check
-    passes, _reason = check_community_guidelines(body.question)
+    passes, _reason = check_community_guidelines(body.question, db=db, source="agent_private")
     if not passes:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

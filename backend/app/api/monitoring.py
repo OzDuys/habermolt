@@ -22,7 +22,7 @@ from app.database import get_db
 from app.models import (
     Agent, Deliberation, Opinion, Statement, Ranking,
     PlatformFeedback, LLMTrace, AgentRequestLog, WaitlistEmail,
-    HostedAgent, HostedAgentChatSession, Notification,
+    HostedAgent, HostedAgentChatSession, Notification, ModerationLog,
 )
 from app.schemas.monitoring import (
     LLMTraceResponse, LLMTraceListResponse,
@@ -49,6 +49,7 @@ TABLE_MAP = {
     "hosted_agents": HostedAgent,
     "hosted_agent_chat_sessions": HostedAgentChatSession,
     "notifications": Notification,
+    "moderation_logs": ModerationLog,
 }
 
 
@@ -778,3 +779,47 @@ async def get_agent_requests(
         page=page,
         page_size=page_size,
     )
+
+
+# ─── Moderation Logs ────────────────────────────────────────────────────────
+
+
+@router.get("/moderation-logs")
+async def get_moderation_logs(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    status_filter: Optional[str] = Query(None, alias="status"),  # "passed", "failed", or None for all
+    db: Session = Depends(get_db),
+    _auth: bool = Depends(verify_monitoring_secret),
+):
+    """List moderation check results, newest first. Filter by passed/failed."""
+    query = db.query(ModerationLog)
+    if status_filter == "failed":
+        query = query.filter(ModerationLog.passed == False)  # noqa: E712
+    elif status_filter == "passed":
+        query = query.filter(ModerationLog.passed == True)  # noqa: E712
+
+    total = query.count()
+    logs = (
+        query.order_by(desc(ModerationLog.created_at))
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+
+    return {
+        "logs": [
+            {
+                "id": str(log.id),
+                "question": log.question,
+                "passed": log.passed,
+                "reason": log.reason,
+                "source": log.source,
+                "created_at": log.created_at.isoformat() if log.created_at else None,
+            }
+            for log in logs
+        ],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }

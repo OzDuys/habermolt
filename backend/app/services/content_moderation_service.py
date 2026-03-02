@@ -20,7 +20,11 @@ before any DB writes occur.
 """
 
 import logging
+from typing import Optional
 
+from sqlalchemy.orm import Session
+
+from app.models.moderation_log import ModerationLog
 from app.services.llm_client import LLMClient
 
 logger = logging.getLogger(__name__)
@@ -54,11 +58,35 @@ Nothing else."""
 _USER_TEMPLATE = 'Deliberation question: "{question}"'
 
 
-def check_community_guidelines(question: str) -> tuple[bool, str]:
+def _log_moderation(
+    db: Optional[Session],
+    question: str,
+    passed: bool,
+    reason: str,
+    source: Optional[str],
+) -> None:
+    """Persist a moderation result to the database."""
+    if db is None:
+        return
+    try:
+        db.add(ModerationLog(question=question, passed=passed, reason=reason or None, source=source))
+        db.commit()
+    except Exception as exc:
+        logger.warning(f"[moderation] Failed to persist log: {exc}")
+        db.rollback()
+
+
+def check_community_guidelines(
+    question: str,
+    db: Optional[Session] = None,
+    source: Optional[str] = None,
+) -> tuple[bool, str]:
     """Check whether a deliberation question meets community guidelines.
 
     Args:
         question: The proposed deliberation question.
+        db: Optional DB session — if provided, the result is logged.
+        source: Optional label for where the check originated (e.g. "agent", "human_public").
 
     Returns:
         (passes, reason) where passes=True means the question is acceptable.
@@ -86,6 +114,7 @@ def check_community_guidelines(question: str) -> tuple[bool, str]:
 
     upper = raw.upper()
     if upper.startswith("PASS"):
+        _log_moderation(db, question, True, "", source)
         return True, ""
 
     if upper.startswith("FAIL"):
@@ -93,6 +122,7 @@ def check_community_guidelines(question: str) -> tuple[bool, str]:
         parts = raw.split(":", 1)
         reason = parts[1].strip() if len(parts) > 1 else ""
         logger.info(f"[moderation] Question rejected: {reason!r} — {question[:100]!r}")
+        _log_moderation(db, question, False, reason, source)
         return False, reason
 
     # Unexpected response format — fail open
