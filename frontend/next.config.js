@@ -26,71 +26,64 @@ const nextConfig = {
     ];
   },
   async rewrites() {
-    return {
-      // beforeFiles rewrites run before API routes — used for non-API rewrites
-      beforeFiles: [
-        {
-          source: "/skill.md",
-          destination: "/api/skill",
-        },
-        {
-          source: "/skill.json",
-          destination: "/api/skill-json",
-        },
-        {
-          source: "/heartbeat.md",
-          destination: "/api/heartbeat",
-        },
-      ],
-      // afterFiles rewrites run after API routes — so API routes take precedence
-      afterFiles: [
-        {
-          source: "/api/deliberations",
-          destination: `${BACKEND_URL}/api/deliberations`,
-        },
-        {
-          source: "/api/deliberations/:path*",
-          destination: `${BACKEND_URL}/api/deliberations/:path*`,
-        },
-        {
-          source: "/api/agent-status",
-          destination: `${BACKEND_URL}/api/agent-status`,
-        },
-        {
-          source: "/api/agents",
-          destination: `${BACKEND_URL}/api/agents`,
-        },
-        {
-          source: "/api/agents/:path*",
-          destination: `${BACKEND_URL}/api/agents/:path*`,
-        },
-        {
-          source: "/api/stats",
-          destination: `${BACKEND_URL}/api/stats`,
-        },
-        {
-          source: "/api/stats/:path*",
-          destination: `${BACKEND_URL}/api/stats/:path*`,
-        },
-        {
-          source: "/api/monitoring/:path*",
-          destination: `${BACKEND_URL}/api/monitoring/:path*`,
-        },
-        {
-          source: "/api/feedback",
-          destination: `${BACKEND_URL}/api/feedback`,
-        },
-        {
-          source: "/api/waitlist/email",
-          destination: `${BACKEND_URL}/api/waitlist/email`,
-        },
-        {
-          source: "/health",
-          destination: `${BACKEND_URL}/health`,
-        },
-      ],
-      fallback: [],
-    };
+    return [
+      {
+        source: "/skill.md",
+        destination: "/api/skill",
+      },
+      {
+        source: "/skill.json",
+        destination: "/api/skill-json",
+      },
+      {
+        source: "/heartbeat.md",
+        destination: "/api/heartbeat",
+      },
+      {
+        source: "/api/deliberations",
+        destination: `${BACKEND_URL}/api/deliberations`,
+      },
+      {
+        source: "/api/deliberations/:path*",
+        destination: `${BACKEND_URL}/api/deliberations/:path*`,
+      },
+      {
+        source: "/api/agent-status",
+        destination: `${BACKEND_URL}/api/agent-status`,
+      },
+      {
+        source: "/api/agents",
+        destination: `${BACKEND_URL}/api/agents`,
+      },
+      {
+        source: "/api/agents/:path*",
+        destination: `${BACKEND_URL}/api/agents/:path*`,
+      },
+      {
+        source: "/api/stats",
+        destination: `${BACKEND_URL}/api/stats`,
+      },
+      {
+        source: "/api/stats/:path*",
+        destination: `${BACKEND_URL}/api/stats/:path*`,
+      },
+      {
+        source: "/api/monitoring/:path*",
+        destination: `${BACKEND_URL}/api/monitoring/:path*`,
+      },
+      {
+        source: "/api/feedback",
+        destination: `${BACKEND_URL}/api/feedback`,
+      },
+      {
+        source: "/api/waitlist/email",
+        destination: `${BACKEND_URL}/api/waitlist/email`,
+      },
+      {
+        source: "/health",
+        destination: `${BACKEND_URL}/health`,
+      },
+    ];
   },
 }
 

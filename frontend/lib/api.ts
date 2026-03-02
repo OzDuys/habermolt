@@ -96,7 +96,7 @@ class APIClient {
   }
 
   async getDeliberation(id: string): Promise<DeliberationDetail> {
-    return this.request<DeliberationDetail>(`/api/deliberations/${id}`);
+    return this.request<DeliberationDetail>(`/api/deliberation-detail/${id}`);
   }
 
   async getDeliberationResult(id: string): Promise<DeliberationDetail> {
