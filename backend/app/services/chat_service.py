@@ -1,10 +1,11 @@
 """
 Chat service — manages the conversation between hosted agent and its human.
 
-The agent proactively decides when to update the user's profile based on
-what it learns during conversation. No explicit completion state.
+The agent uses tool calling to take deliberation actions and update profiles
+during conversation. No explicit completion state.
 """
 
+import json
 import logging
 from datetime import datetime
 from typing import Optional
@@ -14,6 +15,7 @@ from sqlalchemy.orm import Session
 from app.models.hosted_agent import HostedAgent
 from app.models.interview_session import HostedAgentChatSession
 from app.services.hosted_agent_service import get_llm_client
+from app.services.agent_tools import get_tool_schemas, execute_tool
 
 logger = logging.getLogger(__name__)
 
@@ -42,19 +44,17 @@ Just acknowledge briefly and continue.
 - If the person volunteers information without you asking, that's ideal — go deeper on it.
 - Do not patronize the participant.
 {context}
-Profile updates:
-When you learn enough new information to meaningfully update or refine the user's profile, \
-append a PROFILE_UPDATE section at the very end of your message. The user will NOT see this \
-section — it will be extracted and stored automatically. Format:
+Tools:
+You have tools to take actions. Use them when appropriate:
+- **update_profile**: Call this whenever you learn meaningful new information about the user's \
+values, opinions, or preferences. Don't wait — do it naturally as the conversation progresses.
+- **get_agent_status**: Check what deliberations are available and what actions are pending.
+- **join_deliberation**: Join a deliberation when you're confident about the user's position.
+- **rank_statements / propose_statement**: Participate in deliberations you've already joined.
+- **run_heartbeat**: Run a full cycle of checking and participating in deliberations.
 
-PROFILE_UPDATE:
-Write a concise markdown profile section capturing what you've learned. Be specific — vague \
-summaries are useless. Write it as if you're briefing another agent who will act on this \
-person's behalf.
-
-You can output PROFILE_UPDATE at any point in the conversation — whenever you feel you have \
-enough new information to meaningfully update their profile. You don't need to wait for a \
-specific moment. Do it naturally as the conversation progresses.
+If the user asks you to participate in deliberations, check status, or run a heartbeat, use \
+the appropriate tool. Always respond naturally after taking actions — tell the user what you did.
 """
 
 FIRST_TURN_PROMPT = "You are now connected with the participant. Start the conversation."
@@ -174,49 +174,67 @@ def add_user_message(
     session: HostedAgentChatSession,
     user_content: str,
 ) -> str:
-    """Add a user message, call LLM with full conversation history, return assistant response."""
+    """Add a user message with tool calling, return assistant text response."""
     messages = list(session.messages or [])
     messages.append({"role": "user", "content": user_content})
 
     system_prompt = _build_system_prompt(hosted_agent, session)
     llm_messages = _build_llm_messages(system_prompt, messages)
 
+    tools = get_tool_schemas()
     client = get_llm_client(hosted_agent)
-    client.set_trace_context(
-        trace_type="hosted_agent_chat",
-        hosted_agent_id=hosted_agent.id,
-        agent_id=hosted_agent.agent_id,
-    )
 
-    response_text = client.chat(
-        messages=llm_messages,
-        temperature=0.7,
-    )
+    response_parts = []
+    max_turns = 10
 
+    for _ in range(max_turns):
+        client.set_trace_context(
+            trace_type="hosted_agent_chat",
+            hosted_agent_id=hosted_agent.id,
+            agent_id=hosted_agent.agent_id,
+        )
+
+        result = client.chat(messages=llm_messages, temperature=0.7, tools=tools)
+
+        if result.content:
+            response_parts.append(result.content)
+
+        if not result.tool_calls:
+            break
+
+        # Execute tool calls
+        assistant_msg = {"role": "assistant", "content": result.content}
+        assistant_msg["tool_calls"] = [
+            {
+                "id": tc["id"],
+                "type": "function",
+                "function": {
+                    "name": tc["name"],
+                    "arguments": json.dumps(tc["arguments"]),
+                },
+            }
+            for tc in result.tool_calls
+        ]
+        llm_messages.append(assistant_msg)
+
+        for tc in result.tool_calls:
+            tool_result = execute_tool(db, hosted_agent, tc["name"], tc["arguments"])
+            llm_messages.append({
+                "role": "tool",
+                "tool_call_id": tc["id"],
+                "content": json.dumps(tool_result),
+            })
+
+    response_text = "".join(response_parts)
     if not response_text:
         response_text = "I'm sorry, I had trouble processing that. Could you try again?"
 
-    # Extract and apply profile updates if present
-    clean_response = response_text
-    if "PROFILE_UPDATE:" in response_text:
-        clean_response, profile_text = _extract_profile_update(response_text)
-        if profile_text:
-            if hosted_agent.user_profile:
-                hosted_agent.user_profile = hosted_agent.user_profile.rstrip() + "\n\n" + profile_text
-            else:
-                hosted_agent.user_profile = profile_text
-            hosted_agent.profile_version += 1
-            hosted_agent.last_chatted_at = datetime.utcnow()
-            logger.info(f"Updated user profile for hosted agent {hosted_agent.id}")
-
-    # Store the full response (with marker) in messages for LLM context continuity
     messages.append({"role": "assistant", "content": response_text})
     session.messages = messages
     hosted_agent.last_chatted_at = datetime.utcnow()
     db.commit()
 
-    # Return the clean response (without PROFILE_UPDATE) for display
-    return clean_response
+    return response_text
 
 
 def stream_user_message(
@@ -225,15 +243,22 @@ def stream_user_message(
     session: HostedAgentChatSession,
     user_content: str,
 ):
-    """Stream a user message response. Yields text chunks.
+    """Stream a user message response with tool calling support.
 
-    After the generator is exhausted, the session and profile are updated in DB.
+    Yields tuples:
+    - ("text", chunk_str) for text content
+    - ("action_start", {"action": name, ...}) before tool execution
+    - ("action_done", {"action": name, "result": ..., ...}) after tool execution
+
+    After the generator is exhausted, the session is updated in DB.
     """
     messages = list(session.messages or [])
     messages.append({"role": "user", "content": user_content})
 
     system_prompt = _build_system_prompt(hosted_agent, session)
     llm_messages = _build_llm_messages(system_prompt, messages)
+
+    tools = get_tool_schemas()
 
     client = get_llm_client(hosted_agent)
     client.set_trace_context(
@@ -242,33 +267,110 @@ def stream_user_message(
         agent_id=hosted_agent.agent_id,
     )
 
-    accumulated = []
+    # Track the full assistant response text for persistence
+    full_response_parts = []
+
     try:
-        for chunk in client.chat_stream(messages=llm_messages, temperature=0.7):
-            accumulated.append(chunk)
-            yield chunk
+        while True:
+            accumulated_text = []
+            tool_calls_this_turn = []
+
+            for event_type, event_data in client.chat_stream(
+                messages=llm_messages, temperature=0.7, tools=tools,
+            ):
+                if event_type == "text":
+                    accumulated_text.append(event_data)
+                    yield ("text", event_data)
+                elif event_type == "tool_call":
+                    tool_calls_this_turn.append(event_data)
+
+            text_this_turn = "".join(accumulated_text)
+
+            if not tool_calls_this_turn:
+                # No tool calls — LLM is done
+                full_response_parts.append(text_this_turn)
+                break
+
+            # There are tool calls to execute
+            # Build the assistant message with tool calls for the conversation
+            assistant_msg = {"role": "assistant"}
+            if text_this_turn:
+                assistant_msg["content"] = text_this_turn
+                full_response_parts.append(text_this_turn)
+            else:
+                assistant_msg["content"] = None
+
+            assistant_msg["tool_calls"] = [
+                {
+                    "id": tc["id"],
+                    "type": "function",
+                    "function": {
+                        "name": tc["name"],
+                        "arguments": json.dumps(tc["arguments"]),
+                    },
+                }
+                for tc in tool_calls_this_turn
+            ]
+            llm_messages.append(assistant_msg)
+
+            # Execute each tool call
+            for tc in tool_calls_this_turn:
+                # Get deliberation question for display
+                question = _get_tool_display_question(db, tc)
+
+                yield ("action_start", {
+                    "action": tc["name"],
+                    "question": question,
+                    "tool_call_id": tc["id"],
+                })
+
+                result = execute_tool(db, hosted_agent, tc["name"], tc["arguments"])
+
+                yield ("action_done", {
+                    "action": tc["name"],
+                    "question": question,
+                    "result": result,
+                    "description": result.get("description", ""),
+                    "tool_call_id": tc["id"],
+                })
+
+                # Add tool result to conversation for next LLM turn
+                llm_messages.append({
+                    "role": "tool",
+                    "tool_call_id": tc["id"],
+                    "content": json.dumps(result),
+                })
+
+            # Reset trace context for next turn
+            client.set_trace_context(
+                trace_type="hosted_agent_chat",
+                hosted_agent_id=hosted_agent.id,
+                agent_id=hosted_agent.agent_id,
+            )
+            # Loop back — LLM needs to see tool results and respond
+
     finally:
-        # Always persist, even if the stream is interrupted or generator closed early
-        response_text = "".join(accumulated)
+        # Persist conversation
+        response_text = "".join(full_response_parts)
         if not response_text:
             response_text = "I'm sorry, I had trouble processing that. Could you try again?"
 
-        # Extract and apply profile updates if present
-        if "PROFILE_UPDATE:" in response_text:
-            _, profile_text = _extract_profile_update(response_text)
-            if profile_text:
-                if hosted_agent.user_profile:
-                    hosted_agent.user_profile = hosted_agent.user_profile.rstrip() + "\n\n" + profile_text
-                else:
-                    hosted_agent.user_profile = profile_text
-                hosted_agent.profile_version += 1
-                logger.info(f"Updated user profile for hosted agent {hosted_agent.id}")
-
-        # Store the full response in messages for LLM context continuity
         messages.append({"role": "assistant", "content": response_text})
         session.messages = messages
         hosted_agent.last_chatted_at = datetime.utcnow()
         db.commit()
+
+
+def _get_tool_display_question(db: Session, tool_call: dict) -> str:
+    """Extract a display-friendly question/description for a tool call."""
+    args = tool_call.get("arguments", {})
+    delib_id = args.get("deliberation_id")
+    if delib_id:
+        from app.models import Deliberation
+        delib = db.query(Deliberation).filter(Deliberation.id == delib_id).first()
+        if delib:
+            return delib.question
+    return ""
 
 
 def _extract_profile_update(text: str) -> tuple[str, Optional[str]]:
@@ -337,7 +439,7 @@ def get_initial_greeting(
     response = client.chat(
         messages=llm_messages,
         temperature=0.7,
-    )
+    ).content or ""
 
     if not response:
         response = (

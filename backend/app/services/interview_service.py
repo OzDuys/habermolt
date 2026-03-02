@@ -223,7 +223,7 @@ def add_user_message(
     response_text = client.chat(
         messages=llm_messages,
         temperature=0.7,
-    )
+    ).content or ""
 
     if not response_text:
         response_text = "I'm sorry, I had trouble processing that. Could you try again?"
@@ -309,7 +309,7 @@ def get_initial_greeting(
     response = client.chat(
         messages=llm_messages,
         temperature=0.7,
-    )
+    ).content or ""
 
     if not response:
         response = (

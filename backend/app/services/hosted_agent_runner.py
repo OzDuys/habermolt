@@ -187,8 +187,28 @@ def run_all_hosted_agents(db: Session) -> dict:
     return results
 
 
+HEARTBEAT_SYSTEM_PROMPT = """\
+You are an AI agent running a periodic heartbeat for your human on Habermolt, \
+a democratic deliberation platform.
+
+## Your Human's Profile
+{profile}
+
+## Instructions
+You're running a heartbeat cycle. Follow these steps:
+1. Call get_agent_status to see what needs doing.
+2. Process pending actions first (rank_statements, propose_statement for deliberations you've already joined).
+3. Join discovered deliberations you're confident about. If unsure about a topic, skip it — \
+you can ask your human about it next time you chat.
+4. Don't join more than 3 new deliberations per heartbeat.
+5. After taking all actions, summarize what you did in a brief message.
+
+Be efficient — take actions, don't overthink. Your human trusts you to represent them.
+"""
+
+
 def run_single_hosted_agent(db: Session, hosted_agent: HostedAgent) -> dict:
-    """Run one heartbeat cycle for a hosted agent."""
+    """Run one heartbeat cycle using LLM tool calling."""
     logger.info(
         f"Heartbeat for {hosted_agent.id}: "
         f"profile={'yes' if hosted_agent.user_profile else 'NO'}, "
@@ -205,89 +225,60 @@ def run_single_hosted_agent(db: Session, hosted_agent: HostedAgent) -> dict:
         )
         return {"status": "token_limit"}
 
-    agent = hosted_agent.agent
-    actions_taken = []  # string descriptions for backward compat
-    structured_actions = []  # rich data for HeartbeatSession
-    errors = []  # track failures so they surface in the response
+    from app.services.agent_tools import get_tool_schemas, execute_tool
 
+    profile = _get_profile_text(hosted_agent)
+    system_prompt = HEARTBEAT_SYSTEM_PROMPT.format(profile=profile)
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": "Run your heartbeat cycle now."},
+    ]
+
+    tools = get_tool_schemas()
+    client = get_llm_client(hosted_agent)
+    structured_actions = []
     started_at = datetime.utcnow()
 
-    # Compute actions + discovered (same logic as agent_status.py)
-    actions, discovered = _compute_agent_actions(db, agent)
-    logger.info(f"Heartbeat {hosted_agent.id}: actions={len(actions)}, discovered={len(discovered)}")
+    # Agentic loop
+    max_turns = 10
+    for _ in range(max_turns):
+        client.set_trace_context(
+            trace_type="hosted_agent_heartbeat",
+            agent_id=hosted_agent.agent_id,
+            hosted_agent_id=hosted_agent.id,
+        )
+        result = client.chat(messages, tools=tools, temperature=0.3)
 
-    # Handle actions first
-    for action in actions:
-        try:
-            result = _execute_action(db, hosted_agent, action)
-            if result:
-                actions_taken.append(result["description"])
-                structured_actions.append(result)
-            else:
-                msg = f"Action '{action['action']}' on '{action['question'][:50]}' returned no result"
-                logger.warning(f"Heartbeat {hosted_agent.id}: {msg}")
-                errors.append(msg)
-        except Exception as e:
-            msg = f"Action '{action['action']}' failed: {e}"
-            logger.error(f"Heartbeat {hosted_agent.id}: {msg}")
-            errors.append(msg)
+        if result.tool_calls:
+            # Build assistant message
+            assistant_msg = {"role": "assistant", "content": result.content}
+            assistant_msg["tool_calls"] = [
+                {
+                    "id": tc["id"],
+                    "type": "function",
+                    "function": {
+                        "name": tc["name"],
+                        "arguments": json.dumps(tc["arguments"]),
+                    },
+                }
+                for tc in result.tool_calls
+            ]
+            messages.append(assistant_msg)
 
-    # Join up to 3 discovered deliberations (with confidence scoring)
-    validation_candidates = []  # actions that should get user validation
-    for disc in discovered[:3]:
-        try:
-            delib = db.query(Deliberation).filter(Deliberation.id == disc["deliberation_id"]).first()
-            if not delib:
-                continue
-
-            # Assess confidence before acting
-            confidence = _assess_confidence(hosted_agent, disc["question"])
-            logger.info(
-                f"Heartbeat {hosted_agent.id}: confidence for '{disc['question'][:40]}': "
-                f"score={confidence['confidence']}, sim={confidence['similarity']:.2f}, "
-                f"ask={confidence['should_ask']}, validate={confidence['should_validate']}"
-            )
-
-            if confidence["should_ask"]:
-                # Low confidence + novel topic — ask user first
-                result = _ask_before_acting(db, hosted_agent, delib, confidence)
-                actions_taken.append(result["description"])
-                structured_actions.append(result)
-            else:
-                # Confident enough — join the deliberation
-                result = _join_deliberation(db, hosted_agent, disc["deliberation_id"])
-                if result:
-                    actions_taken.append(result["description"])
-                    structured_actions.append(result)
-                    if confidence["should_validate"]:
-                        validation_candidates.append(result)
-                else:
-                    msg = f"Join '{disc['question'][:50]}' returned no result (LLM may have failed)"
-                    logger.warning(f"Heartbeat {hosted_agent.id}: {msg}")
-                    errors.append(msg)
-        except Exception as e:
-            msg = f"Join failed for '{disc['question'][:50]}': {e}"
-            logger.error(f"Heartbeat {hosted_agent.id}: {msg}")
-            errors.append(msg)
-
-    # Request validation on one action the agent was unsure about
-    if validation_candidates:
-        try:
-            val_result = _request_validation(db, hosted_agent, validation_candidates[0])
-            actions_taken.append(val_result["description"])
-            structured_actions.append(val_result)
-        except Exception as e:
-            logger.error(f"Heartbeat {hosted_agent.id}: validation request failed: {e}")
-
-    # Fallback: if no actions were taken, do something useful anyway
-    if not structured_actions:
-        try:
-            fallback = _do_fallback(db, hosted_agent)
-            if fallback:
-                actions_taken.append(fallback["description"])
-                structured_actions.append(fallback)
-        except Exception as e:
-            logger.error(f"Heartbeat {hosted_agent.id}: fallback failed: {e}")
+            for tc in result.tool_calls:
+                tool_result = execute_tool(db, hosted_agent, tc["name"], tc["arguments"])
+                structured_actions.append({
+                    "action": tc["name"],
+                    "description": tool_result.get("description", tc["name"]),
+                    **{k: v for k, v in tool_result.items() if k not in ("action", "description", "error")},
+                })
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tc["id"],
+                    "content": json.dumps(tool_result),
+                })
+            continue
+        break  # No more tool calls
 
     # Persist heartbeat session
     completed_at = datetime.utcnow()
@@ -300,19 +291,17 @@ def run_single_hosted_agent(db: Session, hosted_agent: HostedAgent) -> dict:
         completed_at=completed_at,
     )
     db.add(hb_session)
-
-    # Update heartbeat timestamp
     hosted_agent.last_heartbeat_at = datetime.utcnow()
     db.commit()
 
-    result = {"status": "ok", "actions_taken": actions_taken}
-    if errors:
-        result["errors"] = errors
-    return result
+    return {
+        "status": "ok",
+        "actions_taken": [a.get("description", "") for a in structured_actions],
+    }
 
 
 def run_single_hosted_agent_stream(db: Session, hosted_agent: HostedAgent):
-    """Streaming version of run_single_hosted_agent. Yields SSE event dicts."""
+    """Streaming heartbeat using LLM tool calling. Yields SSE event dicts."""
     logger.info(
         f"Heartbeat (stream) for {hosted_agent.id}: "
         f"profile={'yes' if hosted_agent.user_profile else 'NO'}, "
@@ -323,87 +312,98 @@ def run_single_hosted_agent_stream(db: Session, hosted_agent: HostedAgent):
         yield {"type": "error", "message": "Token limit reached for this period."}
         return
 
-    agent = hosted_agent.agent
+    from app.services.agent_tools import get_tool_schemas, execute_tool
+
+    profile = _get_profile_text(hosted_agent)
+    system_prompt = HEARTBEAT_SYSTEM_PROMPT.format(profile=profile)
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": "Run your heartbeat cycle now."},
+    ]
+
+    tools = get_tool_schemas()
+    client = get_llm_client(hosted_agent)
     structured_actions = []
     started_at = datetime.utcnow()
 
-    actions, discovered = _compute_agent_actions(db, agent)
-    logger.info(f"Heartbeat (stream) {hosted_agent.id}: actions={len(actions)}, discovered={len(discovered)}")
+    max_turns = 10
+    for _ in range(max_turns):
+        client.set_trace_context(
+            trace_type="hosted_agent_heartbeat",
+            agent_id=hosted_agent.agent_id,
+            hosted_agent_id=hosted_agent.id,
+        )
 
-    # Execute queued actions
-    for action in actions:
-        yield {"type": "action_start", "action": action["action"], "question": action.get("question", "")}
-        try:
-            result = _execute_action(db, hosted_agent, action)
-            if result:
-                structured_actions.append(result)
-                yield {"type": "action_done", "action": action["action"], "question": action.get("question", ""), "description": result["description"]}
-            else:
-                yield {"type": "action_error", "action": action["action"], "question": action.get("question", ""), "message": "No result returned"}
-        except Exception as e:
-            logger.error(f"Heartbeat (stream) {hosted_agent.id}: action failed: {e}")
-            yield {"type": "action_error", "action": action["action"], "question": action.get("question", ""), "message": str(e)}
+        # Use streaming so we can emit events as tools execute
+        accumulated_text = []
+        tool_calls_this_turn = []
 
-    # Join discovered deliberations
-    validation_candidates = []
-    for disc in discovered[:3]:
-        try:
-            delib = db.query(Deliberation).filter(Deliberation.id == disc["deliberation_id"]).first()
-            if not delib:
-                continue
+        for event_type, event_data in client.chat_stream(messages, temperature=0.3, tools=tools):
+            if event_type == "text":
+                accumulated_text.append(event_data)
+            elif event_type == "tool_call":
+                tool_calls_this_turn.append(event_data)
 
-            confidence = _assess_confidence(hosted_agent, disc["question"])
-            logger.info(
-                f"Heartbeat (stream) {hosted_agent.id}: confidence for '{disc['question'][:40]}': "
-                f"score={confidence['confidence']}, sim={confidence['similarity']:.2f}"
-            )
+        text_this_turn = "".join(accumulated_text)
 
-            if confidence["should_ask"]:
-                result = _ask_before_acting(db, hosted_agent, delib, confidence)
-                structured_actions.append(result)
+        if not tool_calls_this_turn:
+            break
+
+        # Build assistant message
+        assistant_msg = {"role": "assistant", "content": text_this_turn or None}
+        assistant_msg["tool_calls"] = [
+            {
+                "id": tc["id"],
+                "type": "function",
+                "function": {
+                    "name": tc["name"],
+                    "arguments": json.dumps(tc["arguments"]),
+                },
+            }
+            for tc in tool_calls_this_turn
+        ]
+        messages.append(assistant_msg)
+
+        for tc in tool_calls_this_turn:
+            # Get display question
+            delib_id = tc["arguments"].get("deliberation_id")
+            question = ""
+            if delib_id:
+                delib = db.query(Deliberation).filter(Deliberation.id == delib_id).first()
+                if delib:
+                    question = delib.question
+
+            yield {"type": "action_start", "action": tc["name"], "question": question}
+
+            try:
+                tool_result = execute_tool(db, hosted_agent, tc["name"], tc["arguments"])
+                structured_actions.append({
+                    "action": tc["name"],
+                    "description": tool_result.get("description", tc["name"]),
+                    "question": question,
+                    **{k: v for k, v in tool_result.items() if k not in ("action", "description", "error")},
+                })
                 yield {
-                    "type": "ask_input",
-                    "action": "ask_before_acting",
-                    "question": delib.question,
-                    "deliberation_id": str(delib.id),
-                    "message": (
-                        f"There's a new deliberation: **{delib.question}**\n\n"
-                        f"I'm not confident I know your position on this (confidence: {confidence['confidence']}/5). "
-                        f"What's your take?"
-                    ),
-                    "confidence": confidence["confidence"],
+                    "type": "action_done",
+                    "action": tc["name"],
+                    "question": question,
+                    "description": tool_result.get("description", ""),
                 }
-            else:
-                yield {"type": "action_start", "action": "join_deliberation", "question": disc["question"]}
-                result = _join_deliberation(db, hosted_agent, disc["deliberation_id"])
-                if result:
-                    structured_actions.append(result)
-                    if confidence["should_validate"]:
-                        validation_candidates.append(result)
-                    yield {"type": "action_done", "action": "join_deliberation", "question": disc["question"], "description": result["description"]}
-                else:
-                    yield {"type": "action_error", "action": "join_deliberation", "question": disc["question"], "message": "Join returned no result"}
-        except Exception as e:
-            logger.error(f"Heartbeat (stream) {hosted_agent.id}: join failed: {e}")
-            yield {"type": "action_error", "action": "join_deliberation", "question": disc.get("question", ""), "message": str(e)}
+            except Exception as e:
+                logger.error(f"Heartbeat (stream) {hosted_agent.id}: tool {tc['name']} failed: {e}")
+                tool_result = {"error": str(e)}
+                yield {
+                    "type": "action_error",
+                    "action": tc["name"],
+                    "question": question,
+                    "message": str(e),
+                }
 
-    # Request validation
-    if validation_candidates:
-        try:
-            val_result = _request_validation(db, hosted_agent, validation_candidates[0])
-            structured_actions.append(val_result)
-        except Exception as e:
-            logger.error(f"Heartbeat (stream) {hosted_agent.id}: validation request failed: {e}")
-
-    # Fallback
-    if not structured_actions:
-        try:
-            fallback = _do_fallback(db, hosted_agent)
-            if fallback:
-                structured_actions.append(fallback)
-                yield {"type": "action_done", "action": fallback.get("action", "fallback"), "question": "", "description": fallback["description"]}
-        except Exception as e:
-            logger.error(f"Heartbeat (stream) {hosted_agent.id}: fallback failed: {e}")
+            messages.append({
+                "role": "tool",
+                "tool_call_id": tc["id"],
+                "content": json.dumps(tool_result),
+            })
 
     # Persist
     completed_at = datetime.utcnow()

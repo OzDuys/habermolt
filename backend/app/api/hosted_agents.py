@@ -332,15 +332,13 @@ async def stream_chat_message(
                 session = chat_service.get_or_create_session(stream_db, stream_ha)
 
             stream = chat_service.stream_user_message(stream_db, stream_ha, session, body.content)
-            for chunk in stream:
-                if "PROFILE_UPDATE:" in chunk:
-                    clean_part = chunk[:chunk.index("PROFILE_UPDATE:")].rstrip()
-                    if clean_part:
-                        yield f"data: {json.dumps({'type': 'chunk', 'content': clean_part})}\n\n"
-                    for _ in stream:
-                        pass
-                    break
-                yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
+            for event_type, event_data in stream:
+                if event_type == "text":
+                    yield f"data: {json.dumps({'type': 'chunk', 'content': event_data})}\n\n"
+                elif event_type == "action_start":
+                    yield f"data: {json.dumps({'type': 'action_start', 'action': event_data['action'], 'question': event_data.get('question', '')})}\n\n"
+                elif event_type == "action_done":
+                    yield f"data: {json.dumps({'type': 'action_done', 'action': event_data['action'], 'question': event_data.get('question', ''), 'description': event_data.get('description', '')})}\n\n"
             yield f"data: {json.dumps({'type': 'done'})}\n\n"
         finally:
             stream_db.close()

@@ -322,9 +322,8 @@ function AgentChat({
       const decoder = new TextDecoder();
       let accumulated = "";
       let buffer = "";
-
-      // Add placeholder assistant message
-      setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+      const chatActions: ActionItem[] = [];
+      let hasAssistantMsg = false;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -339,6 +338,11 @@ function AgentChat({
           try {
             const event = JSON.parse(line.slice(6));
             if (event.type === "chunk") {
+              if (!hasAssistantMsg) {
+                // Add placeholder assistant message on first chunk
+                setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+                hasAssistantMsg = true;
+              }
               accumulated += event.content;
               const clean = cleanMessage(accumulated);
               setMessages((prev) => {
@@ -346,17 +350,49 @@ function AgentChat({
                 updated[updated.length - 1] = { role: "assistant", content: clean };
                 return updated;
               });
+            } else if (event.type === "action_start") {
+              chatActions.push({ type: event.action, deliberation: event.question || "", status: "running" });
+              // Insert/update action-group before the assistant text message
+              setMessages((prev) => {
+                const updated = [...prev];
+                // Find or create the action-group
+                const lastActionIdx = updated.map((m) => m.role).lastIndexOf("action-group");
+                const actionGroupMsg: ChatMessage = { role: "action-group", content: "", actions: [...chatActions] };
+                if (lastActionIdx !== -1) {
+                  updated[lastActionIdx] = actionGroupMsg;
+                } else {
+                  // Insert before the last assistant message (or at end)
+                  const insertIdx = hasAssistantMsg ? updated.length - 1 : updated.length;
+                  updated.splice(insertIdx, 0, actionGroupMsg);
+                }
+                return updated;
+              });
+            } else if (event.type === "action_done") {
+              const idx = chatActions.findIndex((a) => a.type === event.action && a.status === "running");
+              if (idx !== -1) chatActions[idx] = { ...chatActions[idx], status: "done" };
+              setMessages((prev) => {
+                const updated = [...prev];
+                const lastActionIdx = updated.map((m) => m.role).lastIndexOf("action-group");
+                if (lastActionIdx !== -1) {
+                  updated[lastActionIdx] = { role: "action-group", content: "", actions: [...chatActions] };
+                }
+                return updated;
+              });
             }
           } catch {}
         }
       }
 
-      // Final clean
-      if (accumulated) {
+      // If we got actions but no text, add a placeholder
+      if (!hasAssistantMsg && chatActions.length > 0) {
+        // LLM didn't produce text — that's fine, actions speak for themselves
+      } else if (accumulated) {
         const clean = cleanMessage(accumulated);
         setMessages((prev) => {
           const updated = [...prev];
-          updated[updated.length - 1] = { role: "assistant", content: clean };
+          if (hasAssistantMsg) {
+            updated[updated.length - 1] = { role: "assistant", content: clean };
+          }
           return updated;
         });
       }
@@ -557,8 +593,12 @@ const ACTION_ICONS: Record<string, string> = {
   join_deliberation: "\uD83D\uDCAC",
   rank_statements: "\uD83D\uDDF3\uFE0F",
   add_statement: "\uD83D\uDCDD",
+  propose_statement: "\uD83D\uDCDD",
   ask_before_acting: "\uD83D\uDCAC",
   checking: "\uD83D\uDD0D",
+  run_heartbeat: "\u2764\uFE0F",
+  get_agent_status: "\uD83D\uDCCA",
+  update_profile: "\u2705",
   unknown: "\u26A1",
 };
 
@@ -566,8 +606,12 @@ const ACTION_LABELS: Record<string, string> = {
   join_deliberation: "Joined deliberation",
   rank_statements: "Ranked statements",
   add_statement: "Proposed consensus",
+  propose_statement: "Proposed consensus",
   ask_before_acting: "Needs your input",
   checking: "Checking",
+  run_heartbeat: "Running heartbeat",
+  get_agent_status: "Checked status",
+  update_profile: "Profile updated",
   unknown: "Action",
 };
 
@@ -610,6 +654,7 @@ function ActionGroup({ actions }: { actions: ActionItem[] }) {
 }
 
 function cleanMessage(content: string): string {
+  // Legacy markers — kept for backward compat with old session messages
   const idx = content.indexOf("PROFILE_UPDATE:");
   if (idx !== -1) return content.substring(0, idx).trim();
   const legacyIdx = content.indexOf("INTERVIEW_COMPLETE");

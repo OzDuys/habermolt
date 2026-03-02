@@ -6,8 +6,10 @@ by configuring LLM_BASE_URL and LLM_API_KEY in .env.
 Automatically logs all calls (including cost) to llm_traces table for monitoring.
 """
 
+import json
 import logging
 import time
+from dataclasses import dataclass, field
 from typing import Optional
 from uuid import UUID
 
@@ -29,6 +31,13 @@ MODEL_PRICING_FALLBACK: dict[str, tuple[float, float]] = {
     "openai/text-embedding-3-small":       (0.02, 0.00),
 }
 DEFAULT_PRICING = (0.50, 1.50)  # fallback for unknown models
+
+
+@dataclass
+class ChatResult:
+    """Result from a chat() call that may include tool calls."""
+    content: Optional[str] = None
+    tool_calls: Optional[list[dict]] = None
 
 
 class LLMClient:
@@ -149,8 +158,13 @@ class LLMClient:
         messages: list[dict],
         temperature: float = None,
         max_tokens: int = 8192,
-    ) -> str:
-        """Generate text from a full message history (system + user/assistant turns)."""
+        tools: list[dict] = None,
+    ) -> ChatResult:
+        """Generate text from a full message history (system + user/assistant turns).
+
+        When tools is None, returns ChatResult(content=text) for backward compatibility.
+        When tools is provided, may return ChatResult with tool_calls.
+        """
         if temperature is None:
             temperature = settings.HABERMAS_LLM_TEMPERATURE
 
@@ -160,13 +174,16 @@ class LLMClient:
             temperature=temperature,
             max_tokens=max_tokens,
         )
+        if tools:
+            kwargs["tools"] = tools
 
         start_time = time.time()
 
         try:
             response = self._client.chat.completions.create(**kwargs)
             latency_ms = int((time.time() - start_time) * 1000)
-            output_text = response.choices[0].message.content or ""
+            message = response.choices[0].message
+            output_text = message.content or ""
 
             usage = getattr(response, 'usage', None)
             tokens_in = usage.prompt_tokens if usage else None
@@ -185,7 +202,24 @@ class LLMClient:
             )
 
             self._clear_trace_context()
-            return output_text
+
+            # Check for tool calls
+            raw_tool_calls = getattr(message, 'tool_calls', None)
+            if raw_tool_calls:
+                parsed_calls = []
+                for tc in raw_tool_calls:
+                    try:
+                        args = json.loads(tc.function.arguments) if tc.function.arguments else {}
+                    except json.JSONDecodeError:
+                        args = {}
+                    parsed_calls.append({
+                        "id": tc.id,
+                        "name": tc.function.name,
+                        "arguments": args,
+                    })
+                return ChatResult(content=message.content, tool_calls=parsed_calls)
+
+            return ChatResult(content=output_text)
         except Exception as e:
             latency_ms = int((time.time() - start_time) * 1000)
             self._log_trace(
@@ -197,18 +231,20 @@ class LLMClient:
             )
             self._clear_trace_context()
             logger.error(f"LLM API error: {e}")
-            return ""
+            return ChatResult(content="")
 
     def chat_stream(
         self,
         messages: list[dict],
         temperature: float = None,
         max_tokens: int = 8192,
+        tools: list[dict] = None,
     ):
-        """Stream text from a full message history. Yields chunks as they arrive.
+        """Stream text from a full message history. Yields events as they arrive.
 
-        Yields str chunks. After iteration completes, call finalize_stream_trace()
-        with the accumulated text to log the trace.
+        When tools is None: yields ("text", chunk_str) tuples for backward compat.
+        When tools is provided: yields ("text", str) for text content and
+        ("tool_call", {"id": ..., "name": ..., "arguments": ...}) for completed tool calls.
         """
         if temperature is None:
             temperature = settings.HABERMAS_LLM_TEMPERATURE
@@ -221,21 +257,66 @@ class LLMClient:
             stream=True,
             stream_options={"include_usage": True},
         )
+        if tools:
+            kwargs["tools"] = tools
 
         start_time = time.time()
         accumulated = []
         usage_data = None
+        # Accumulate tool calls across streaming chunks
+        tool_call_accumulators: dict[int, dict] = {}  # index -> {id, name, arguments_parts}
 
         try:
             stream = self._client.chat.completions.create(**kwargs)
             for chunk in stream:
-                if chunk.choices and chunk.choices[0].delta.content:
-                    text = chunk.choices[0].delta.content
-                    accumulated.append(text)
-                    yield text
+                if not chunk.choices:
+                    if hasattr(chunk, 'usage') and chunk.usage:
+                        usage_data = chunk.usage
+                    continue
+
+                delta = chunk.choices[0].delta
+
+                # Text content
+                if delta.content:
+                    accumulated.append(delta.content)
+                    yield ("text", delta.content)
+
+                # Tool calls (arrive incrementally across chunks)
+                if hasattr(delta, 'tool_calls') and delta.tool_calls:
+                    for tc_delta in delta.tool_calls:
+                        idx = tc_delta.index
+                        if idx not in tool_call_accumulators:
+                            tool_call_accumulators[idx] = {
+                                "id": "",
+                                "name": "",
+                                "arguments_parts": [],
+                            }
+                        acc = tool_call_accumulators[idx]
+                        if tc_delta.id:
+                            acc["id"] = tc_delta.id
+                        if tc_delta.function:
+                            if tc_delta.function.name:
+                                acc["name"] = tc_delta.function.name
+                            if tc_delta.function.arguments:
+                                acc["arguments_parts"].append(tc_delta.function.arguments)
+
                 # Final chunk often has usage
                 if hasattr(chunk, 'usage') and chunk.usage:
                     usage_data = chunk.usage
+
+            # Yield completed tool calls
+            for idx in sorted(tool_call_accumulators.keys()):
+                acc = tool_call_accumulators[idx]
+                args_str = "".join(acc["arguments_parts"])
+                try:
+                    args = json.loads(args_str) if args_str else {}
+                except json.JSONDecodeError:
+                    args = {}
+                yield ("tool_call", {
+                    "id": acc["id"],
+                    "name": acc["name"],
+                    "arguments": args,
+                })
 
             latency_ms = int((time.time() - start_time) * 1000)
             output_text = "".join(accumulated)
