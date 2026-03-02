@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useSession } from "@/lib/auth-client";
 import SessionCarousel from "@/components/agent/SessionCarousel";
 import { type UnifiedSession } from "@/components/agent/SessionCard";
@@ -184,13 +185,13 @@ function AgentPageContent() {
             Create via OpenClaw
           </span>
         ) : (
-          <a
+          <Link
             href="/deliberations/create"
             className="rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90"
             style={{ background: "var(--accent)" }}
           >
             Start a Deliberation
-          </a>
+          </Link>
         )}
       </div>
 
