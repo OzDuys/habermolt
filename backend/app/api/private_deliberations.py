@@ -106,13 +106,13 @@ async def create_deliberation_human(
             detail="You need an agent to create a deliberation. Create a HaberAgent or link your OpenClaw agent.",
         )
 
-    source = "human_private" if body.is_private else "human_public"
-    passes, _reason = check_community_guidelines(body.question, db=db, source=source)
-    if not passes:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="This does not meet our community guidelines.",
-        )
+    if not body.is_private:
+        passes, _reason = check_community_guidelines(body.question, db=db, source="human_public")
+        if not passes:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="This does not meet our community guidelines.",
+            )
 
     invite_code = secrets.token_urlsafe(6) if body.is_private else None
 
@@ -329,14 +329,6 @@ async def create_private_deliberation_agent(
     Requires agent API key authentication.
     This is the endpoint OpenClaw agents call to create private deliberations.
     """
-    # Community guidelines check
-    passes, _reason = check_community_guidelines(body.question, db=db, source="agent_private")
-    if not passes:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="This does not meet our community guidelines.",
-        )
-
     # Generate unique invite code
     invite_code = secrets.token_urlsafe(6)
 
