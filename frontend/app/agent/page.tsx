@@ -4,7 +4,6 @@ import { Suspense, useEffect, useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "@/lib/auth-client";
 import SessionCarousel from "@/components/agent/SessionCarousel";
-import HeartbeatActionViewer from "@/components/agent/HeartbeatActionViewer";
 import { type UnifiedSession } from "@/components/agent/SessionCard";
 import AgentActivitySection from "@/components/profile/AgentActivitySection";
 
@@ -17,7 +16,7 @@ interface ActionItem {
 }
 
 interface ChatMessage {
-  role: "user" | "assistant" | "action-group";
+  role: "user" | "assistant" | "action";
   content: string;
   actions?: ActionItem[];
 }
@@ -27,26 +26,6 @@ interface ChatSessionSummary {
   topic: string | null;
   message_count: number;
   created_at: string;
-}
-
-interface HeartbeatSessionData {
-  id: string;
-  action_count: number;
-  actions: HeartbeatAction[];
-  status: string;
-  started_at: string;
-  completed_at: string | null;
-}
-
-interface HeartbeatAction {
-  action: string;
-  deliberation_id: string;
-  question: string;
-  description: string;
-  opinion_text?: string;
-  ranking_data?: { statement_id: string; rank: number }[];
-  statement_title?: string;
-  statement_text?: string;
 }
 
 export default function AgentPage() {
@@ -76,7 +55,6 @@ function AgentPageContent() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [unifiedSessions, setUnifiedSessions] = useState<UnifiedSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
-  const [viewingHeartbeat, setViewingHeartbeat] = useState<HeartbeatSessionData | null>(null);
   const [chatReady, setChatReady] = useState(false);
 
   useEffect(() => {
@@ -88,50 +66,35 @@ function AgentPageContent() {
         if (res.status === 404) { setHasHostedAgent(false); return; }
         setHasHostedAgent(true);
 
-        // Load current chat + chat history + heartbeat history in parallel
+        // Load current chat + chat history
         Promise.all([
           fetch("/api/hosted-agent/chat").then((r) => r.json()),
           fetch("/api/hosted-agent/chat/history").then((r) => r.json()),
-          fetch("/api/hosted-agent/heartbeat/history").then((r) => r.json()).catch(() => []),
-        ]).then(([chatData, chatHistory, heartbeatHistory]) => {
+        ]).then(([chatData, chatHistory]) => {
           if (chatData.messages?.length) {
-            setMessages(chatData.messages.map((m: ChatMessage) => ({
-              role: m.role,
-              content: cleanMessage(m.content),
-            })));
+            setMessages(chatData.messages.map((m: ChatMessage) => {
+              if (m.role === "action" && m.actions) {
+                return { role: m.role, content: "", actions: m.actions };
+              }
+              return { role: m.role, content: cleanMessage(m.content || "") };
+            }));
           }
           setActiveSessionId(chatData.id || null);
 
-          // Build unified session list
           const chatSessions: UnifiedSession[] = (Array.isArray(chatHistory) ? chatHistory : []).map(
             (s: ChatSessionSummary) => ({
               id: s.id,
-              type: "chat" as const,
               topic: s.topic,
               messageCount: s.message_count,
-              actionSummary: [],
               createdAt: s.created_at,
               snippet: null,
             })
           );
 
-          const hbSessions: UnifiedSession[] = (Array.isArray(heartbeatHistory) ? heartbeatHistory : []).map(
-            (s: HeartbeatSessionData) => ({
-              id: `hb-${s.id}`,
-              type: "heartbeat" as const,
-              topic: null,
-              messageCount: 0,
-              actionSummary: s.actions.map((a) => a.description),
-              createdAt: s.started_at,
-              snippet: s.actions[0]?.description || null,
-            })
-          );
-
-          // Merge and sort by date, oldest first (newest on right)
-          const merged = [...chatSessions, ...hbSessions].sort(
+          chatSessions.sort(
             (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
           );
-          setUnifiedSessions(merged);
+          setUnifiedSessions(chatSessions);
           setChatReady(true);
         });
       })
@@ -149,40 +112,24 @@ function AgentPageContent() {
       const res = await fetch(`/api/hosted-agent/chat/${sessionId}`);
       const data = await res.json();
       if (data.messages) {
-        setMessages(data.messages.map((m: ChatMessage) => ({
-          role: m.role,
-          content: cleanMessage(m.content),
-        })));
+        setMessages(data.messages.map((m: ChatMessage) => {
+          if (m.role === "action" && m.actions) {
+            return { role: m.role, content: "", actions: m.actions };
+          }
+          return { role: m.role, content: cleanMessage(m.content || "") };
+        }));
         setActiveSessionId(sessionId);
-        setViewingHeartbeat(null);
       }
     } catch {}
   }, [activeSessionId]);
 
-  const loadHeartbeatSession = useCallback(async (hbId: string) => {
-    // hbId is prefixed with "hb-"
-    const realId = hbId.replace("hb-", "");
-    try {
-      const res = await fetch(`/api/hosted-agent/heartbeat/${realId}`);
-      const data: HeartbeatSessionData = await res.json();
-      setViewingHeartbeat(data);
-      setActiveSessionId(hbId);
-    } catch {}
-  }, []);
-
   const handleSelectSession = useCallback((session: UnifiedSession) => {
-    if (session.type === "heartbeat") {
-      loadHeartbeatSession(session.id);
-    } else {
-      loadChatSession(session.id);
-    }
-  }, [loadChatSession, loadHeartbeatSession]);
+    loadChatSession(session.id);
+  }, [loadChatSession]);
 
   const handleNewChat = useCallback(() => {
-    // Reset to fresh state — new messages will create a new session
     setMessages([]);
     setActiveSessionId(null);
-    setViewingHeartbeat(null);
   }, []);
 
   if (isPending) {
@@ -251,30 +198,7 @@ function AgentPageContent() {
               )}
             </div>
 
-            {viewingHeartbeat ? (
-              <div
-                className="flex flex-col rounded-xl border"
-                style={{ borderColor: "var(--border)", background: "var(--surface)", height: "28rem" }}
-              >
-                <div className="flex-1 overflow-y-auto">
-                  <HeartbeatActionViewer
-                    actions={viewingHeartbeat.actions}
-                    startedAt={viewingHeartbeat.started_at}
-                  />
-                </div>
-                <div className="border-t p-3" style={{ borderColor: "var(--border)" }}>
-                  <button
-                    onClick={handleNewChat}
-                    className="w-full rounded-lg px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
-                    style={{ background: "var(--accent)" }}
-                  >
-                    Start New Conversation
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <AgentChat messages={messages} setMessages={setMessages} activeSessionId={activeSessionId} />
-            )}
+            <AgentChat messages={messages} setMessages={setMessages} activeSessionId={activeSessionId} />
           </div>
 
           {/* Session Timeline Carousel */}
@@ -352,8 +276,9 @@ function AgentChat({
       const decoder = new TextDecoder();
       let accumulated = "";
       let buffer = "";
-      const chatActions: ActionItem[] = [];
       let hasAssistantMsg = false;
+      // Track action message indices for chat-stream actions
+      const actionMsgIndices: Map<string, number> = new Map();
 
       while (true) {
         const { done, value } = await reader.read();
@@ -369,7 +294,6 @@ function AgentChat({
             const event = JSON.parse(line.slice(6));
             if (event.type === "chunk") {
               if (!hasAssistantMsg) {
-                // Add placeholder assistant message on first chunk
                 setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
                 hasAssistantMsg = true;
               }
@@ -381,47 +305,48 @@ function AgentChat({
                 return updated;
               });
             } else if (event.type === "action_start") {
-              chatActions.push({ type: event.action, deliberation: event.question || "", status: "running" });
-              // Insert/update action-group before the assistant text message
+              const actionKey = `${event.action}-${event.question || ""}`;
               setMessages((prev) => {
-                const updated = [...prev];
-                // Find or create the action-group
-                const lastActionIdx = updated.map((m) => m.role).lastIndexOf("action-group");
-                const actionGroupMsg: ChatMessage = { role: "action-group", content: "", actions: [...chatActions] };
-                if (lastActionIdx !== -1) {
-                  updated[lastActionIdx] = actionGroupMsg;
-                } else {
-                  // Insert before the last assistant message (or at end)
-                  const insertIdx = hasAssistantMsg ? updated.length - 1 : updated.length;
-                  updated.splice(insertIdx, 0, actionGroupMsg);
-                }
-                return updated;
+                const newIdx = prev.length;
+                actionMsgIndices.set(actionKey, newIdx);
+                return [...prev, {
+                  role: "action",
+                  content: "",
+                  actions: [{ type: event.action, deliberation: event.question || "", status: "running" }],
+                }];
               });
             } else if (event.type === "action_done") {
-              const idx = chatActions.findIndex((a) => a.type === event.action && a.status === "running");
-              if (idx !== -1) chatActions[idx] = { ...chatActions[idx], status: "done", detail: event.detail || "", reasoning: event.reasoning || "" };
+              const actionKey = `${event.action}-${event.question || ""}`;
+              const msgIdx = actionMsgIndices.get(actionKey);
               setMessages((prev) => {
-                const updated = [...prev];
-                const lastActionIdx = updated.map((m) => m.role).lastIndexOf("action-group");
-                if (lastActionIdx !== -1) {
-                  updated[lastActionIdx] = { role: "action-group", content: "", actions: [...chatActions] };
+                if (msgIdx !== undefined && msgIdx < prev.length) {
+                  const updated = [...prev];
+                  updated[msgIdx] = {
+                    role: "action",
+                    content: "",
+                    actions: [{ type: event.action, deliberation: event.question || "", status: "done", detail: event.detail || "", reasoning: event.reasoning || "" }],
+                  };
+                  return updated;
                 }
-                return updated;
+                return prev;
               });
             }
           } catch {}
         }
       }
 
-      // If we got actions but no text, add a placeholder
-      if (!hasAssistantMsg && chatActions.length > 0) {
-        // LLM didn't produce text — that's fine, actions speak for themselves
-      } else if (accumulated) {
+      if (accumulated) {
         const clean = cleanMessage(accumulated);
         setMessages((prev) => {
           const updated = [...prev];
           if (hasAssistantMsg) {
-            updated[updated.length - 1] = { role: "assistant", content: clean };
+            // Find the last assistant message
+            for (let i = updated.length - 1; i >= 0; i--) {
+              if (updated[i].role === "assistant") {
+                updated[i] = { role: "assistant", content: clean };
+                break;
+              }
+            }
           }
           return updated;
         });
@@ -437,11 +362,12 @@ function AgentChat({
     if (streaming || runningHeartbeat) return;
     setRunningHeartbeat(true);
 
-    // Add initial loading action-group
+    // Add initial checking action
     setMessages((prev) => [
       ...prev,
-      { role: "action-group", content: "", actions: [{ type: "checking", deliberation: "Checking deliberations...", status: "running" }] },
+      { role: "action", content: "", actions: [{ type: "checking", deliberation: "Checking deliberations...", status: "running" }] },
     ]);
+    const checkingIdx = messages.length; // index of the checking message we just added
 
     try {
       const res = await fetch("/api/hosted-agent/heartbeat/stream", { method: "POST" });
@@ -450,7 +376,10 @@ function AgentChat({
         const data = await res.json();
         setMessages((prev) => {
           const updated = [...prev];
-          updated[updated.length - 1] = { role: "assistant", content: data.detail || "Something went wrong while running the heartbeat." };
+          // Replace checking message with error
+          if (checkingIdx < updated.length) {
+            updated[checkingIdx] = { role: "assistant", content: data.detail || "Something went wrong while running the heartbeat." };
+          }
           return updated;
         });
         return;
@@ -461,19 +390,9 @@ function AgentChat({
 
       const decoder = new TextDecoder();
       let buffer = "";
-      const currentActions: ActionItem[] = [];
-
-      // Helper to update the action-group message (last message before any trailing assistant messages)
-      const updateActionGroup = (actions: ActionItem[]) => {
-        setMessages((prev) => {
-          // Find the last action-group message
-          const lastActionIdx = prev.map((m) => m.role).lastIndexOf("action-group");
-          if (lastActionIdx === -1) return prev;
-          const updated = [...prev];
-          updated[lastActionIdx] = { role: "action-group", content: "", actions: [...actions] };
-          return updated;
-        });
-      };
+      let firstRealAction = false;
+      // Track action message indices by key
+      const actionMsgIndices: Map<string, number> = new Map();
 
       while (true) {
         const { done, value } = await reader.read();
@@ -489,42 +408,72 @@ function AgentChat({
             const event = JSON.parse(line.slice(6));
 
             if (event.type === "action_start") {
-              currentActions.push({ type: event.action, deliberation: event.question, status: "running" });
-              // Remove the initial "checking" placeholder on first real action
-              const display = currentActions.filter((a) => a.type !== "checking");
-              updateActionGroup(display.length > 0 ? display : currentActions);
+              if (!firstRealAction) {
+                // Remove the checking placeholder
+                firstRealAction = true;
+                setMessages((prev) => {
+                  const updated = [...prev];
+                  if (checkingIdx < updated.length && updated[checkingIdx]?.actions?.[0]?.type === "checking") {
+                    updated.splice(checkingIdx, 1);
+                  }
+                  return updated;
+                });
+              }
+              const actionKey = `${event.action}-${event.question || ""}`;
+              setMessages((prev) => {
+                const newIdx = prev.length;
+                actionMsgIndices.set(actionKey, newIdx);
+                return [...prev, {
+                  role: "action",
+                  content: "",
+                  actions: [{ type: event.action, deliberation: event.question || "", status: "running" }],
+                }];
+              });
             } else if (event.type === "action_done") {
-              const idx = currentActions.findIndex((a) => a.type === event.action && a.status === "running");
-              if (idx !== -1) currentActions[idx] = { ...currentActions[idx], status: "done" };
-              updateActionGroup(currentActions.filter((a) => a.type !== "checking"));
+              const actionKey = `${event.action}-${event.question || ""}`;
+              const msgIdx = actionMsgIndices.get(actionKey);
+              setMessages((prev) => {
+                if (msgIdx !== undefined && msgIdx < prev.length) {
+                  const updated = [...prev];
+                  updated[msgIdx] = {
+                    role: "action",
+                    content: "",
+                    actions: [{ type: event.action, deliberation: event.question || "", status: "done", reasoning: event.reasoning || "" }],
+                  };
+                  return updated;
+                }
+                return prev;
+              });
             } else if (event.type === "action_error") {
-              const idx = currentActions.findIndex((a) => a.type === event.action && a.status === "running");
-              if (idx !== -1) currentActions[idx] = { ...currentActions[idx], status: "error" };
-              updateActionGroup(currentActions.filter((a) => a.type !== "checking"));
+              const actionKey = `${event.action}-${event.question || ""}`;
+              const msgIdx = actionMsgIndices.get(actionKey);
+              setMessages((prev) => {
+                if (msgIdx !== undefined && msgIdx < prev.length) {
+                  const updated = [...prev];
+                  updated[msgIdx] = {
+                    role: "action",
+                    content: "",
+                    actions: [{ ...updated[msgIdx].actions![0], status: "error" }],
+                  };
+                  return updated;
+                }
+                return prev;
+              });
             } else if (event.type === "ask_input") {
-              // Show as action card
-              currentActions.push({ type: "ask_before_acting", deliberation: event.question, status: "done" });
-              updateActionGroup(currentActions.filter((a) => a.type !== "checking"));
-              // Also add an assistant chat message so user can reply
               setMessages((prev) => [...prev, { role: "assistant", content: event.message }]);
             } else if (event.type === "error") {
-              setMessages((prev) => {
-                const updated = [...prev];
-                updated[updated.length - 1] = { role: "assistant", content: event.message };
-                return updated;
-              });
+              setMessages((prev) => [...prev, { role: "assistant", content: event.message }]);
             } else if (event.type === "text") {
-              // LLM narration/summary text — show as assistant message
+              // Final summary text — show as assistant message
               setMessages((prev) => [...prev, { role: "assistant", content: event.content }]);
             } else if (event.type === "done") {
-              // Stream complete — if no actions were taken and no text was shown, show "up to date"
-              if (currentActions.filter((a) => a.type !== "checking").length === 0) {
+              if (!firstRealAction) {
+                // No actions were taken — replace checking placeholder
                 setMessages((prev) => {
-                  // Only show default message if no assistant text was added
-                  const hasText = prev.some((m) => m.role === "assistant" && m.content && m.content !== "");
-                  if (hasText) return prev;
                   const updated = [...prev];
-                  updated[updated.length - 1] = { role: "assistant", content: "Everything is up to date — no actions needed." };
+                  if (checkingIdx < updated.length) {
+                    updated[checkingIdx] = { role: "assistant", content: "Everything is up to date — no actions needed." };
+                  }
                   return updated;
                 });
               }
@@ -535,11 +484,7 @@ function AgentChat({
         }
       }
     } catch {
-      setMessages((prev) => {
-        const updated = [...prev];
-        updated[updated.length - 1] = { role: "assistant", content: "Failed to reach the server." };
-        return updated;
-      });
+      setMessages((prev) => [...prev, { role: "assistant", content: "Failed to reach the server." }]);
     } finally {
       setRunningHeartbeat(false);
     }
@@ -575,8 +520,8 @@ function AgentChat({
           </div>
         )}
         {messages.map((msg, i) =>
-          msg.role === "action-group" && msg.actions ? (
-            <ActionGroup key={i} actions={msg.actions} />
+          msg.role === "action" && msg.actions ? (
+            <ActionCard key={i} action={msg.actions[0]} />
           ) : (
             <div key={i} className={`mb-3 flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
               <div
@@ -661,82 +606,72 @@ const ACTION_LABELS: Record<string, string> = {
   unknown: "Action",
 };
 
-function ActionGroup({ actions }: { actions: ActionItem[] }) {
-  const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
+function ActionCard({ action }: { action: ActionItem }) {
+  const [expanded, setExpanded] = useState(false);
+  const hasDetails = action.status === "done" && (action.detail || action.reasoning);
 
   return (
     <div className="flex justify-start mb-3">
       <div
-        className="max-w-[80%] rounded-2xl rounded-bl-md px-4 py-3 text-sm"
+        className="max-w-[80%] rounded-2xl rounded-bl-md px-4 py-2.5 text-sm"
         style={{ background: "var(--background)", border: "1px solid var(--border)" }}
       >
-        <div className="space-y-2">
-          {actions.map((action, i) => {
-            const hasDetails = action.status === "done" && (action.detail || action.reasoning);
-            const isExpanded = expandedIdx === i;
-
-            return (
-              <div key={i}>
-                <div
-                  className={`flex items-center gap-2.5 ${hasDetails ? "cursor-pointer" : ""}`}
-                  onClick={() => hasDetails && setExpandedIdx(isExpanded ? null : i)}
-                >
-                  <span className="text-base shrink-0">{ACTION_ICONS[action.type] || "\u26A1"}</span>
-                  <div className="flex-1 min-w-0">
-                    <span className="text-xs font-medium" style={{ color: "var(--muted)" }}>
-                      {ACTION_LABELS[action.type] || action.type}
-                    </span>
-                    {action.deliberation && action.type !== "checking" && (
-                      <p className="text-xs truncate" style={{ color: "var(--foreground)" }}>
-                        {action.deliberation}
-                      </p>
-                    )}
-                  </div>
-                  <span className="shrink-0 text-xs flex items-center gap-1">
-                    {hasDetails && (
-                      <span style={{ color: "var(--muted)", fontSize: "0.6rem" }}>
-                        {isExpanded ? "▾" : "▸"}
-                      </span>
-                    )}
-                    {action.status === "running" ? (
-                      <span className="inline-block animate-spin">&#x23F3;</span>
-                    ) : action.status === "error" ? (
-                      <span style={{ color: "var(--error, red)" }}>&#x2715;</span>
-                    ) : (
-                      <span style={{ color: "var(--accent)" }}>&#x2713;</span>
-                    )}
-                  </span>
-                </div>
-                {isExpanded && (
-                  <div
-                    className="mt-1.5 ml-7 rounded-lg px-3 py-2 text-xs leading-relaxed"
-                    style={{ background: "var(--surface, var(--background))", border: "1px solid var(--border)" }}
-                  >
-                    {action.reasoning && (
-                      <div className="mb-1.5">
-                        <span className="font-medium" style={{ color: "var(--muted)" }}>Reasoning: </span>
-                        <span style={{ color: "var(--foreground)" }}>{action.reasoning}</span>
-                      </div>
-                    )}
-                    {action.detail && (
-                      <div>
-                        <span className="font-medium" style={{ color: "var(--muted)" }}>Detail: </span>
-                        <span style={{ color: "var(--foreground)" }} className="whitespace-pre-wrap">{action.detail}</span>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+        <div
+          className={`flex items-center gap-2.5 ${hasDetails ? "cursor-pointer" : ""}`}
+          onClick={() => hasDetails && setExpanded(!expanded)}
+        >
+          <span className="text-base shrink-0">{ACTION_ICONS[action.type] || "\u26A1"}</span>
+          <div className="flex-1 min-w-0">
+            <span className="text-xs font-medium" style={{ color: "var(--muted)" }}>
+              {ACTION_LABELS[action.type] || action.type}
+            </span>
+            {action.deliberation && action.type !== "checking" && (
+              <p className="text-xs truncate" style={{ color: "var(--foreground)" }}>
+                {action.deliberation}
+              </p>
+            )}
+          </div>
+          <span className="shrink-0 text-xs flex items-center gap-1">
+            {hasDetails && (
+              <span style={{ color: "var(--muted)", fontSize: "0.6rem" }}>
+                {expanded ? "\u25BE" : "\u25B8"}
+              </span>
+            )}
+            {action.status === "running" ? (
+              <span className="inline-block animate-spin">&#x23F3;</span>
+            ) : action.status === "error" ? (
+              <span style={{ color: "var(--error, red)" }}>&#x2715;</span>
+            ) : (
+              <span style={{ color: "var(--accent)" }}>&#x2713;</span>
+            )}
+          </span>
         </div>
+        {expanded && (
+          <div
+            className="mt-1.5 ml-7 rounded-lg px-3 py-2 text-xs leading-relaxed"
+            style={{ background: "var(--surface, var(--background))", border: "1px solid var(--border)" }}
+          >
+            {action.reasoning && (
+              <div className="mb-1.5">
+                <span className="font-medium" style={{ color: "var(--muted)" }}>Reasoning: </span>
+                <span style={{ color: "var(--foreground)" }}>{action.reasoning}</span>
+              </div>
+            )}
+            {action.detail && (
+              <div>
+                <span className="font-medium" style={{ color: "var(--muted)" }}>Detail: </span>
+                <span style={{ color: "var(--foreground)" }} className="whitespace-pre-wrap">{action.detail}</span>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
 function cleanMessage(content: string): string {
-  // Legacy markers — kept for backward compat with old session messages
+  if (!content) return "";
   const idx = content.indexOf("PROFILE_UPDATE:");
   if (idx !== -1) return content.substring(0, idx).trim();
   const legacyIdx = content.indexOf("INTERVIEW_COMPLETE");

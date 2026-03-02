@@ -22,8 +22,8 @@ from app.models import (
     Opinion,
     Ranking,
     Statement,
-    HeartbeatSession,
 )
+from app.models.interview_session import HostedAgentChatSession
 from app.models.deliberation_member import DeliberationMember
 from app.models.hosted_agent import HostedAgent
 from app.services.hosted_agent_service import (
@@ -319,17 +319,24 @@ def run_single_hosted_agent(db: Session, hosted_agent: HostedAgent) -> dict:
             continue
         break  # No more tool calls
 
-    # Persist heartbeat session
-    completed_at = datetime.utcnow()
-    hb_session = HeartbeatSession(
-        hosted_agent_id=hosted_agent.id,
-        actions=structured_actions,
-        action_count=len(structured_actions),
-        status="success",
-        started_at=started_at,
-        completed_at=completed_at,
+    # Persist actions into the active chat session
+    sanitized_actions = json.loads(json.dumps(structured_actions, default=str))
+
+    session = (
+        db.query(HostedAgentChatSession)
+        .filter(HostedAgentChatSession.hosted_agent_id == hosted_agent.id)
+        .order_by(HostedAgentChatSession.created_at.desc())
+        .first()
     )
-    db.add(hb_session)
+    if not session:
+        session = HostedAgentChatSession(hosted_agent_id=hosted_agent.id, messages=[])
+        db.add(session)
+        db.flush()
+
+    messages_list = list(session.messages or [])
+    messages_list.append({"role": "action", "actions": sanitized_actions})
+    session.messages = messages_list
+
     hosted_agent.last_heartbeat_at = datetime.utcnow()
     db.commit()
 
@@ -385,11 +392,10 @@ def run_single_hosted_agent_stream(db: Session, hosted_agent: HostedAgent):
 
         text_this_turn = "".join(accumulated_text)
 
-        # Emit any LLM narration text to the frontend
-        if text_this_turn and text_this_turn.strip():
-            yield {"type": "text", "content": text_this_turn.strip()}
-
         if not tool_calls_this_turn:
+            # Final LLM text with no tool calls — emit as summary
+            if text_this_turn and text_this_turn.strip():
+                yield {"type": "text", "content": text_this_turn.strip()}
             break
 
         # Build assistant message
@@ -431,6 +437,7 @@ def run_single_hosted_agent_stream(db: Session, hosted_agent: HostedAgent):
                     "action": tc["name"],
                     "question": question,
                     "description": tool_result.get("description", ""),
+                    "reasoning": text_this_turn.strip() if text_this_turn and text_this_turn.strip() else None,
                 }
             except Exception as e:
                 logger.error(f"Heartbeat (stream) {hosted_agent.id}: tool {tc['name']} failed: {e}")
@@ -448,21 +455,29 @@ def run_single_hosted_agent_stream(db: Session, hosted_agent: HostedAgent):
                 "content": json.dumps(tool_result, default=str),
             })
 
-    # Persist
-    completed_at = datetime.utcnow()
-    hb_session = HeartbeatSession(
-        hosted_agent_id=hosted_agent.id,
-        actions=structured_actions,
-        action_count=len(structured_actions),
-        status="success",
-        started_at=started_at,
-        completed_at=completed_at,
+    # Persist actions into the active chat session
+    sanitized_actions = json.loads(json.dumps(structured_actions, default=str))
+
+    # Get or create a chat session to store heartbeat actions
+    session = (
+        db.query(HostedAgentChatSession)
+        .filter(HostedAgentChatSession.hosted_agent_id == hosted_agent.id)
+        .order_by(HostedAgentChatSession.created_at.desc())
+        .first()
     )
-    db.add(hb_session)
+    if not session:
+        session = HostedAgentChatSession(hosted_agent_id=hosted_agent.id, messages=[])
+        db.add(session)
+        db.flush()
+
+    messages = list(session.messages or [])
+    messages.append({"role": "action", "actions": sanitized_actions})
+    session.messages = messages
+
     hosted_agent.last_heartbeat_at = datetime.utcnow()
     db.commit()
 
-    yield {"type": "done", "session_id": str(hb_session.id)}
+    yield {"type": "done"}
 
 
 def _should_run_now(hosted_agent: HostedAgent) -> bool:

@@ -78,14 +78,6 @@ class ChatSessionSummary(BaseModel):
     message_count: int
     created_at: str
 
-class HeartbeatSessionSummary(BaseModel):
-    id: str
-    action_count: int
-    actions: list  # structured action data
-    status: str
-    started_at: str
-    completed_at: Optional[str]
-
 class RerankRequest(BaseModel):
     rankings: list  # [{statement_id, rank}]
 
@@ -454,59 +446,6 @@ async def manual_heartbeat_stream(req: Request, db: Session = Depends(get_db)):
         event_stream(),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )
-
-
-# --- Heartbeat history ---
-
-@router.get("/me/heartbeat/history")
-async def list_heartbeat_sessions(req: Request, db: Session = Depends(get_db)):
-    user_id = _require_user_id(req)
-    ha = hosted_agent_service.get_hosted_agent_by_user(db, user_id)
-    if not ha:
-        raise HTTPException(status_code=404, detail="No hosted agent found")
-    from app.models.heartbeat_session import HeartbeatSession
-    sessions = (
-        db.query(HeartbeatSession)
-        .filter(HeartbeatSession.hosted_agent_id == ha.id)
-        .order_by(HeartbeatSession.started_at.desc())
-        .limit(50)
-        .all()
-    )
-    return [
-        HeartbeatSessionSummary(
-            id=str(s.id),
-            action_count=s.action_count,
-            actions=s.actions or [],
-            status=s.status,
-            started_at=s.started_at.isoformat(),
-            completed_at=s.completed_at.isoformat() if s.completed_at else None,
-        )
-        for s in sessions
-    ]
-
-
-@router.get("/me/heartbeat/{session_id}")
-async def get_heartbeat_session(session_id: str, req: Request, db: Session = Depends(get_db)):
-    user_id = _require_user_id(req)
-    ha = hosted_agent_service.get_hosted_agent_by_user(db, user_id)
-    if not ha:
-        raise HTTPException(status_code=404, detail="No hosted agent found")
-    from app.models.heartbeat_session import HeartbeatSession
-    session = (
-        db.query(HeartbeatSession)
-        .filter(HeartbeatSession.hosted_agent_id == ha.id, HeartbeatSession.id == session_id)
-        .first()
-    )
-    if not session:
-        raise HTTPException(status_code=404, detail="Heartbeat session not found")
-    return HeartbeatSessionSummary(
-        id=str(session.id),
-        action_count=session.action_count,
-        actions=session.actions or [],
-        status=session.status,
-        started_at=session.started_at.isoformat(),
-        completed_at=session.completed_at.isoformat() if session.completed_at else None,
     )
 
 
