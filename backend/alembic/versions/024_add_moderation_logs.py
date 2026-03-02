@@ -1,7 +1,7 @@
 """Add moderation_logs table
 
-Revision ID: e5f2ee7ff68c
-Revises: 021_private_deliberations
+Revision ID: 024_moderation_logs
+Revises: 023_opinion_versioning
 Create Date: 2026-03-02 10:20:24.853096+00:00
 
 """
@@ -9,8 +9,8 @@ from alembic import op
 import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
-revision = 'e5f2ee7ff68c'
-down_revision = '021_private_deliberations'
+revision = '024_moderation_logs'
+down_revision = '023_opinion_versioning'
 branch_labels = None
 depends_on = None
 
