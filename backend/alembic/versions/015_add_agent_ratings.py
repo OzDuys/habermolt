@@ -5,7 +5,7 @@ in each deliberation. Used to build trust metrics and track
 representation accuracy across the platform.
 
 Revision ID: 015
-Revises: ab38712fafef
+Revises: 014b_waitlist_emails
 Create Date: 2026-02-27
 """
 
@@ -14,7 +14,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import UUID
 
 revision = '015_agent_ratings'
-down_revision = 'ab38712fafef'
+down_revision = '014b_waitlist_emails'
 branch_labels = None
 depends_on = None
 

@@ -1,6 +1,6 @@
 """Add waitlist_emails table
 
-Revision ID: ab38712fafef
+Revision ID: 014b_waitlist_emails
 Revises: 014
 Create Date: 2026-02-25 14:04:03.375822+00:00
 
@@ -9,7 +9,7 @@ from alembic import op
 import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
-revision = 'ab38712fafef'
+revision = '014b_waitlist_emails'
 down_revision = '014'
 branch_labels = None
 depends_on = None
