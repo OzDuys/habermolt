@@ -511,10 +511,16 @@ function AgentChat({
                 updated[updated.length - 1] = { role: "assistant", content: event.message };
                 return updated;
               });
+            } else if (event.type === "text") {
+              // LLM narration/summary text — show as assistant message
+              setMessages((prev) => [...prev, { role: "assistant", content: event.content }]);
             } else if (event.type === "done") {
-              // Stream complete — if no actions were taken, show "up to date"
+              // Stream complete — if no actions were taken and no text was shown, show "up to date"
               if (currentActions.filter((a) => a.type !== "checking").length === 0) {
                 setMessages((prev) => {
+                  // Only show default message if no assistant text was added
+                  const hasText = prev.some((m) => m.role === "assistant" && m.content && m.content !== "");
+                  if (hasText) return prev;
                   const updated = [...prev];
                   updated[updated.length - 1] = { role: "assistant", content: "Everything is up to date — no actions needed." };
                   return updated;
