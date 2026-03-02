@@ -174,7 +174,9 @@ function TypeIcon({ type }: { type: string }) {
 }
 
 function timeAgo(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime();
+  // Backend stores UTC timestamps without Z suffix — ensure UTC parsing
+  const utcStr = dateStr.endsWith("Z") || dateStr.includes("+") ? dateStr : dateStr + "Z";
+  const diff = Date.now() - new Date(utcStr).getTime();
   const mins = Math.floor(diff / 60000);
   if (mins < 1) return "just now";
   if (mins < 60) return `${mins}m ago`;

@@ -6,7 +6,7 @@ what it learns during conversation. No explicit completion state.
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 from sqlalchemy.orm import Session
@@ -60,12 +60,15 @@ specific moment. Do it naturally as the conversation progresses.
 FIRST_TURN_PROMPT = "You are now connected with the participant. Start the conversation."
 
 
+SESSION_GAP = timedelta(hours=1)
+
+
 def get_or_create_session(
     db: Session,
     hosted_agent: HostedAgent,
     topic: str = None,
 ) -> HostedAgentChatSession:
-    """Get the most recent session or create a new one."""
+    """Get the most recent session, or create a new one if stale (>1h since last chat)."""
     session = (
         db.query(HostedAgentChatSession)
         .filter(HostedAgentChatSession.hosted_agent_id == hosted_agent.id)
@@ -73,8 +76,20 @@ def get_or_create_session(
         .first()
     )
     if session:
+        # Start a new session if the last interaction was over SESSION_GAP ago
+        last_active = hosted_agent.last_chatted_at or session.created_at
+        if session.messages and datetime.utcnow() - last_active > SESSION_GAP:
+            return _create_session(db, hosted_agent, topic)
         return session
 
+    return _create_session(db, hosted_agent, topic)
+
+
+def _create_session(
+    db: Session,
+    hosted_agent: HostedAgent,
+    topic: str = None,
+) -> HostedAgentChatSession:
     session = HostedAgentChatSession(
         hosted_agent_id=hosted_agent.id,
         topic=topic,
@@ -199,6 +214,7 @@ def add_user_message(
     # Store the full response (with marker) in messages for LLM context continuity
     messages.append({"role": "assistant", "content": response_text})
     session.messages = messages
+    hosted_agent.last_chatted_at = datetime.utcnow()
     db.commit()
 
     # Return the clean response (without PROFILE_UPDATE) for display
@@ -248,12 +264,12 @@ def stream_user_message(
                 else:
                     hosted_agent.user_profile = profile_text
                 hosted_agent.profile_version += 1
-                hosted_agent.last_chatted_at = datetime.utcnow()
                 logger.info(f"Updated user profile for hosted agent {hosted_agent.id}")
 
         # Store the full response in messages for LLM context continuity
         messages.append({"role": "assistant", "content": response_text})
         session.messages = messages
+        hosted_agent.last_chatted_at = datetime.utcnow()
         db.commit()
 
 

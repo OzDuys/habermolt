@@ -163,16 +163,6 @@ def run_single_hosted_agent(db: Session, hosted_agent: HostedAgent) -> dict:
     hosted_agent.last_heartbeat_at = datetime.utcnow()
     db.commit()
 
-    # Create summary notification if actions were taken
-    if actions_taken:
-        summary = "; ".join(actions_taken[:5])
-        notification_service.create_notification(
-            db, hosted_agent.user_id,
-            type="agent_action",
-            title="Agent activity",
-            body=f"Your agent participated in deliberations: {summary}",
-        )
-
     return {"status": "ok", "actions_taken": actions_taken}
 
 

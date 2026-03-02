@@ -5,9 +5,16 @@ import { useRouter } from "next/navigation";
 import { useSession } from "@/lib/auth-client";
 import AgentActivitySection from "@/components/profile/AgentActivitySection";
 
+interface ActionItem {
+  type: string;
+  deliberation: string;
+  status: "running" | "done" | "error";
+}
+
 interface ChatMessage {
-  role: "user" | "assistant";
+  role: "user" | "assistant" | "action-group";
   content: string;
+  actions?: ActionItem[];
 }
 
 interface ChatSessionSummary {
@@ -272,32 +279,45 @@ function AgentChat({
     if (streaming || runningHeartbeat) return;
     setRunningHeartbeat(true);
 
-    setMessages((prev) => [...prev, { role: "user", content: "Run my agent now" }]);
-    setMessages((prev) => [...prev, { role: "assistant", content: "Checking deliberations..." }]);
+    // Add a loading action-group message
+    setMessages((prev) => [
+      ...prev,
+      { role: "action-group", content: "", actions: [{ type: "checking", deliberation: "Checking deliberations...", status: "running" }] },
+    ]);
 
     try {
       const res = await fetch("/api/hosted-agent/heartbeat", { method: "POST" });
       const data = await res.json();
 
-      let response: string;
       if (!res.ok) {
-        response = data.detail || "Something went wrong while running the heartbeat.";
+        setMessages((prev) => {
+          const updated = [...prev];
+          updated[updated.length - 1] = { role: "assistant", content: data.detail || "Something went wrong while running the heartbeat." };
+          return updated;
+        });
       } else if (data.status === "token_limit") {
-        response = "I've hit the token limit for this period. You can upgrade your plan or wait for the next billing cycle.";
+        setMessages((prev) => {
+          const updated = [...prev];
+          updated[updated.length - 1] = { role: "assistant", content: "Token limit reached for this period." };
+          return updated;
+        });
       } else {
-        const actions = data.actions_taken || [];
-        if (actions.length > 0) {
-          response = `I checked all active deliberations and took ${actions.length} action${actions.length === 1 ? "" : "s"}:\n\n${actions.map((a: string) => `- ${a}`).join("\n")}`;
+        const actionStrings: string[] = data.actions_taken || [];
+        if (actionStrings.length > 0) {
+          const parsedActions: ActionItem[] = actionStrings.map((a: string) => parseActionString(a));
+          setMessages((prev) => {
+            const updated = [...prev];
+            updated[updated.length - 1] = { role: "action-group", content: "", actions: parsedActions };
+            return updated;
+          });
         } else {
-          response = "I checked all active deliberations — everything is up to date. No actions needed right now.";
+          setMessages((prev) => {
+            const updated = [...prev];
+            updated[updated.length - 1] = { role: "assistant", content: "Everything is up to date — no actions needed." };
+            return updated;
+          });
         }
       }
-
-      setMessages((prev) => {
-        const updated = [...prev];
-        updated[updated.length - 1] = { role: "assistant", content: response };
-        return updated;
-      });
     } catch {
       setMessages((prev) => {
         const updated = [...prev];
@@ -326,30 +346,30 @@ function AgentChat({
       {/* Messages */}
       <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4">
         {messages.length === 0 && (
-          <div className="flex h-full items-center justify-center">
-            <p className="text-sm" style={{ color: "var(--muted)" }}>
-              Start a conversation with your agent...
-            </p>
-          </div>
+          <div className="flex h-full items-center justify-center" />
         )}
-        {messages.map((msg, i) => (
-          <div key={i} className={`mb-3 flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-            <div
-              className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap ${
-                msg.role === "user" ? "rounded-br-md text-white" : "rounded-bl-md"
-              }`}
-              style={
-                msg.role === "user"
-                  ? { background: "var(--accent)" }
-                  : { background: "var(--background)", border: "1px solid var(--border)" }
-              }
-            >
-              {msg.content || (
-                <span className="inline-block animate-pulse" style={{ color: "var(--muted)" }}>...</span>
-              )}
+        {messages.map((msg, i) =>
+          msg.role === "action-group" && msg.actions ? (
+            <ActionGroup key={i} actions={msg.actions} />
+          ) : (
+            <div key={i} className={`mb-3 flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+              <div
+                className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap ${
+                  msg.role === "user" ? "rounded-br-md text-white" : "rounded-bl-md"
+                }`}
+                style={
+                  msg.role === "user"
+                    ? { background: "var(--accent)" }
+                    : { background: "var(--background)", border: "1px solid var(--border)" }
+                }
+              >
+                {msg.content || (
+                  <span className="inline-block animate-pulse" style={{ color: "var(--muted)" }}>...</span>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          )
+        )}
       </div>
 
       {/* Composer */}
@@ -377,12 +397,79 @@ function AgentChat({
           <button
             onClick={handleHeartbeat}
             disabled={busy}
-            title="Manually trigger your agent to check deliberations and participate"
-            className="rounded-lg border px-3 py-2 text-sm font-medium transition-opacity hover:opacity-80 disabled:opacity-50"
-            style={{ borderColor: "var(--border)", color: "var(--foreground)" }}
+            title="Run heartbeat — check deliberations and participate"
+            className={`rounded-lg border px-3 py-2 text-lg transition-opacity hover:opacity-80 disabled:opacity-50 ${runningHeartbeat ? "animate-pulse" : ""}`}
+            style={{ borderColor: "var(--border)" }}
           >
-            {runningHeartbeat ? "Running..." : "Run now"}
+            ❤️
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function parseActionString(action: string): ActionItem {
+  if (action.startsWith("Joined '")) {
+    return { type: "join_deliberation", deliberation: action.slice(8, -1), status: "done" };
+  }
+  if (action.startsWith("Ranked statements on '")) {
+    return { type: "rank_statements", deliberation: action.slice(22, -1), status: "done" };
+  }
+  if (action.startsWith("Proposed consensus on '")) {
+    return { type: "add_statement", deliberation: action.slice(22, -1), status: "done" };
+  }
+  return { type: "unknown", deliberation: action, status: "done" };
+}
+
+const ACTION_ICONS: Record<string, string> = {
+  join_deliberation: "💬",
+  rank_statements: "🗳️",
+  add_statement: "📝",
+  checking: "🔍",
+  unknown: "⚡",
+};
+
+const ACTION_LABELS: Record<string, string> = {
+  join_deliberation: "Joined deliberation",
+  rank_statements: "Ranked statements",
+  add_statement: "Proposed consensus",
+  checking: "Checking",
+  unknown: "Action",
+};
+
+function ActionGroup({ actions }: { actions: ActionItem[] }) {
+  return (
+    <div className="flex justify-start mb-3">
+      <div
+        className="max-w-[80%] rounded-2xl rounded-bl-md px-4 py-3 text-sm"
+        style={{ background: "var(--background)", border: "1px solid var(--border)" }}
+      >
+        <div className="space-y-2">
+          {actions.map((action, i) => (
+            <div key={i} className="flex items-center gap-2.5">
+              <span className="text-base shrink-0">{ACTION_ICONS[action.type] || "⚡"}</span>
+              <div className="flex-1 min-w-0">
+                <span className="text-xs font-medium" style={{ color: "var(--muted)" }}>
+                  {ACTION_LABELS[action.type] || action.type}
+                </span>
+                {action.deliberation && action.type !== "checking" && (
+                  <p className="text-xs truncate" style={{ color: "var(--foreground)" }}>
+                    {action.deliberation}
+                  </p>
+                )}
+              </div>
+              <span className="shrink-0 text-xs">
+                {action.status === "running" ? (
+                  <span className="inline-block animate-spin">⏳</span>
+                ) : action.status === "error" ? (
+                  <span style={{ color: "var(--error, red)" }}>✕</span>
+                ) : (
+                  <span style={{ color: "var(--accent)" }}>✓</span>
+                )}
+              </span>
+            </div>
+          ))}
         </div>
       </div>
     </div>
