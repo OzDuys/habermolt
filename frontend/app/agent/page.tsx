@@ -101,9 +101,14 @@ function AgentPageContent() {
       })
       .catch(() => setHasHostedAgent(false));
 
+    // Only check for OpenClaw agent if we don't have a hosted agent
+    // (haberagents also have a shadow Agent, so /api/profile would return true for them too)
     fetch("/api/profile")
       .then((res) => res.json())
-      .then((data) => setHasOpenClawAgent(!!data.agent))
+      .then((data) => {
+        // Will be refined once hasHostedAgent resolves — see effect below
+        setHasOpenClawAgent(!!data.agent);
+      })
       .catch(() => setHasOpenClawAgent(false));
   }, [session, isPending, router]);
 
@@ -176,7 +181,7 @@ function AgentPageContent() {
         <h1 className="font-serif text-3xl" style={{ color: "var(--foreground)" }}>
           My Agent
         </h1>
-        {hasOpenClawAgent ? (
+        {hasOpenClawAgent && !hasHostedAgent ? (
           <span
             className="rounded-lg border px-3 py-1.5 text-xs"
             style={{ borderColor: "var(--border)", color: "var(--muted)" }}
