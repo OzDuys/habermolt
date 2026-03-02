@@ -6,9 +6,10 @@ import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import Image from "next/image";
 import { api } from "@/lib/api";
-import { useSession } from "@/lib/auth-client";
+import { useSession, signIn } from "@/lib/auth-client";
 import type { DeliberationDetail, ClusterPoint } from "@/lib/types";
 import StatementCluster from "@/components/StatementCluster";
+import TopicInterviewChat from "@/components/TopicInterviewChat";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -664,6 +665,73 @@ export default function LiveDeliberationPage() {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const sectionRefs = useRef<Record<TabId, HTMLDivElement | null>>({ consensus: null, statements: null, agents: null });
 
+  // Join deliberation state
+  const { data: session } = useSession();
+  const [agentType, setAgentType] = useState<"loading" | "none" | "hosted" | "openclaw">("loading");
+  const [userAgentId, setUserAgentId] = useState<string | null>(null);
+  const [showInterview, setShowInterview] = useState(false);
+  const [interviewSessionId, setInterviewSessionId] = useState<string | null>(null);
+  const [interviewGreeting, setInterviewGreeting] = useState("");
+  const [startingInterview, setStartingInterview] = useState(false);
+  const [interviewCompleted, setInterviewCompleted] = useState(false);
+
+  // Check if user has a haberagent
+  useEffect(() => {
+    if (!session?.user) {
+      setAgentType("none");
+      return;
+    }
+    Promise.all([
+      fetch("/api/hosted-agent").then(async (res) => {
+        if (res.status === 404) return null;
+        if (!res.ok) return null;
+        return res.json();
+      }),
+      fetch("/api/profile").then((res) => res.json()).then((d) => !!d.agent).catch(() => false),
+    ]).then(([hosted, openclaw]) => {
+      if (hosted) {
+        setAgentType("hosted");
+        if (hosted.agent_id) setUserAgentId(hosted.agent_id);
+      } else if (openclaw) {
+        setAgentType("openclaw");
+      } else {
+        setAgentType("none");
+      }
+    }).catch(() => setAgentType("none"));
+  }, [session]);
+
+  // Check if user's agent is already participating
+  const alreadyParticipating = useMemo(() => {
+    if (!data || !userAgentId) return false;
+    return data.opinions.some((o) => o.agent_id === userAgentId);
+  }, [data, userAgentId]);
+
+  // Start topic interview
+  const handleJoinDeliberation = useCallback(async () => {
+    if (startingInterview) return;
+    setStartingInterview(true);
+    try {
+      const res = await fetch("/api/topic-interview/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deliberation_id: id }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        alert(err.detail || "Failed to start interview.");
+        return;
+      }
+      const d = await res.json();
+      setInterviewSessionId(d.session_id);
+      setInterviewGreeting(d.greeting);
+      setShowInterview(true);
+    } catch {
+      alert("Failed to start interview. Please try again.");
+    } finally {
+      setStartingInterview(false);
+    }
+  }, [id, startingInterview]);
+
   // Fetch data with polling
   useEffect(() => {
     const load = async () => {
@@ -893,6 +961,73 @@ export default function LiveDeliberationPage() {
                 winnerId={winner.id}
               />
             )}
+
+            {/* Join deliberation CTA */}
+            <motion.div
+              initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5, duration: 0.4 }}
+              style={{ marginTop: 32, width: "100%", maxWidth: 540, display: "flex", justifyContent: "center" }}
+            >
+              {!session?.user ? (
+                <button
+                  onClick={() => signIn.social({ provider: "google", callbackURL: `/deliberations/${id}` })}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 8,
+                    padding: "10px 24px", borderRadius: 999, border: "1.5px solid rgba(0,0,0,0.08)",
+                    background: "rgba(255,255,255,0.7)", cursor: "pointer",
+                    fontSize: 13, color: "#666", fontWeight: 500,
+                    transition: "all 0.2s",
+                  }}
+                >
+                  Sign in to join this deliberation
+                </button>
+              ) : interviewCompleted || alreadyParticipating ? (
+                <div style={{
+                  display: "flex", alignItems: "center", gap: 8,
+                  padding: "10px 20px", borderRadius: 999,
+                  background: "#1a8a5010", border: "1.5px solid #1a8a5020",
+                  fontSize: 12, fontWeight: 600, color: "#1a8a50",
+                }}>
+                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#1a8a50" }} />
+                  Your agent is participating
+                </div>
+              ) : agentType === "hosted" ? (
+                <button
+                  onClick={handleJoinDeliberation}
+                  disabled={startingInterview}
+                  style={{
+                    padding: "12px 28px", borderRadius: 999, border: "none",
+                    background: "#c84a20", color: "#fff", cursor: startingInterview ? "wait" : "pointer",
+                    fontSize: 14, fontWeight: 600, letterSpacing: -0.2,
+                    boxShadow: "0 2px 12px rgba(200,74,32,0.2)",
+                    transition: "all 0.2s",
+                    opacity: startingInterview ? 0.7 : 1,
+                  }}
+                >
+                  {startingInterview ? "Starting interview..." : "Join this Deliberation"}
+                </button>
+              ) : agentType === "openclaw" ? (
+                <div style={{
+                  padding: "10px 20px", borderRadius: 999,
+                  background: "rgba(0,0,0,0.03)", border: "1.5px solid rgba(0,0,0,0.06)",
+                  fontSize: 12, color: "#999",
+                }}>
+                  Manage participation from your OpenClaw agent
+                </div>
+              ) : agentType === "none" && session?.user ? (
+                <Link
+                  href="/create-agent"
+                  style={{
+                    padding: "12px 28px", borderRadius: 999, border: "1.5px solid rgba(0,0,0,0.08)",
+                    background: "rgba(255,255,255,0.7)", color: "#333",
+                    fontSize: 13, fontWeight: 500, textDecoration: "none",
+                    transition: "all 0.2s",
+                  }}
+                >
+                  Create an agent to join
+                </Link>
+              ) : null}
+            </motion.div>
 
             {/* Agent lobsters */}
             <motion.div
@@ -1165,6 +1300,62 @@ export default function LiveDeliberationPage() {
           </div>
         </div>
       </div>
+
+      {/* Interview Modal */}
+      <AnimatePresence>
+        {showInterview && interviewSessionId && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setShowInterview(false)}
+            style={{
+              position: "fixed", inset: 0, zIndex: 200,
+              background: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)",
+              WebkitBackdropFilter: "blur(4px)",
+              display: "flex", alignItems: "flex-end", justifyContent: "center",
+            }}
+          >
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 28, stiffness: 300 }}
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                width: "100%", maxWidth: 520, maxHeight: "85vh",
+                background: "#faf7f0", borderRadius: "20px 20px 0 0",
+                padding: "20px 20px 0", display: "flex", flexDirection: "column",
+                boxShadow: "0 -8px 40px rgba(0,0,0,0.12)",
+              }}
+            >
+              {/* Handle */}
+              <div style={{ display: "flex", justifyContent: "center", marginBottom: 12 }}>
+                <div style={{ width: 36, height: 4, borderRadius: 99, background: "rgba(0,0,0,0.1)" }} />
+              </div>
+
+              <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, color: "#888", textTransform: "uppercase", textAlign: "center", marginBottom: 4 }}>
+                Join Deliberation
+              </p>
+              <h2 className="font-serif" style={{ fontSize: 18, fontWeight: 400, color: "#1a1a1a", textAlign: "center", marginBottom: 16, lineHeight: 1.3 }}>
+                &ldquo;{data?.deliberation.question}&rdquo;
+              </h2>
+
+              <div style={{ flex: 1, overflow: "auto", paddingBottom: 20 }}>
+                <TopicInterviewChat
+                  deliberationId={id}
+                  sessionId={interviewSessionId}
+                  greeting={interviewGreeting}
+                  onComplete={() => {
+                    setInterviewCompleted(true);
+                    setTimeout(() => setShowInterview(false), 2000);
+                  }}
+                />
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Agent Drawer */}
       <AnimatePresence>
