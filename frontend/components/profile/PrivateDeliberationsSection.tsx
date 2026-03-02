@@ -89,11 +89,7 @@ export default function PrivateDeliberationsSection() {
               <div className="flex items-center gap-3 text-xs" style={{ color: "var(--muted)" }}>
                 <span>
                   {d.participant_count} participant{d.participant_count !== 1 ? "s" : ""}
-                  {d.max_participants ? ` / ${d.max_participants}` : ""}
                 </span>
-                {d.complexity_tier && (
-                  <span className="capitalize">{d.complexity_tier}</span>
-                )}
                 <span>{new Date(d.created_at).toLocaleDateString()}</span>
               </div>
 

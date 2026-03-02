@@ -268,11 +268,11 @@ class ClusterResponse(BaseModel):
 
 # --- Human-auth deliberation creation schemas ---
 
-class CreatePublicDeliberationRequest(BaseModel):
-    """Request schema for creating a public deliberation via human auth."""
+class CreateDeliberationHumanRequest(BaseModel):
+    """Unified request schema for creating a deliberation (public or private) via human auth."""
     question: str = Field(..., min_length=10, max_length=280, description="The question to deliberate on")
-    initial_opinion: Optional[str] = Field(None, min_length=1, max_length=5000, description="Creator's initial opinion to seed the deliberation. Required if user has no agent.")
     categories: Optional[List[str]] = Field(default_factory=list, description="Topic categories (1-3)")
+    is_private: bool = Field(default=False, description="If true, creates a private deliberation with invite code")
 
     @validator("categories")
     def validate_categories(cls, v):
@@ -283,20 +283,11 @@ class CreatePublicDeliberationRequest(BaseModel):
         return v or []
 
 
-# --- Private deliberation schemas ---
-
+# Keep CreatePrivateDeliberationRequest for agent-auth private creation endpoint
 class CreatePrivateDeliberationRequest(BaseModel):
-    """Request schema for creating a private deliberation."""
+    """Request schema for creating a private deliberation (agent auth)."""
     question: str = Field(..., min_length=10, max_length=280, description="The question to deliberate on")
-    complexity_tier: str = Field(default="standard", description="Interview depth: 'quick', 'standard', or 'deep'")
-    max_participants: Optional[int] = Field(None, ge=2, le=100, description="Optional participant limit")
     categories: Optional[List[str]] = Field(default_factory=list, description="Topic categories")
-
-    @validator("complexity_tier")
-    def validate_complexity_tier(cls, v):
-        if v not in ("quick", "standard", "deep"):
-            raise ValueError("Must be 'quick', 'standard', or 'deep'")
-        return v
 
     @validator("categories")
     def validate_categories(cls, v):
@@ -311,9 +302,7 @@ class InviteInfoResponse(BaseModel):
     """Response for public invite link — shows deliberation info without revealing statements."""
     deliberation_id: str
     question: str
-    complexity_tier: Optional[str] = None
     participant_count: int
-    max_participants: Optional[int] = None
     created_by_name: Optional[str] = None
     created_at: datetime
 
@@ -331,9 +320,7 @@ class PrivateDeliberationListItem(BaseModel):
     id: UUID
     question: str
     invite_code: str
-    complexity_tier: Optional[str] = None
     participant_count: int
-    max_participants: Optional[int] = None
     created_at: datetime
     is_creator: bool = False
 

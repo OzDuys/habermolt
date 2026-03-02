@@ -171,9 +171,28 @@ function AgentPageContent() {
 
   return (
     <div className="mx-auto max-w-3xl py-8 px-4">
-      <h1 className="mb-6 font-serif text-3xl" style={{ color: "var(--foreground)" }}>
-        My Agent
-      </h1>
+      <div className="mb-6 flex items-center justify-between">
+        <h1 className="font-serif text-3xl" style={{ color: "var(--foreground)" }}>
+          My Agent
+        </h1>
+        {hasOpenClawAgent ? (
+          <span
+            className="rounded-lg border px-3 py-1.5 text-xs"
+            style={{ borderColor: "var(--border)", color: "var(--muted)" }}
+            title="Your OpenClaw agent can start deliberations via chat. Site-based creation coming soon."
+          >
+            Create via OpenClaw
+          </span>
+        ) : (
+          <a
+            href="/deliberations/create"
+            className="rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90"
+            style={{ background: "var(--accent)" }}
+          >
+            Start a Deliberation
+          </a>
+        )}
+      </div>
 
       {hasHostedAgent && chatReady && (
         <>

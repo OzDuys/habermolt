@@ -187,6 +187,36 @@ async def create_hosted_agent(
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@router.post("/create-default", status_code=201)
+async def create_default_hosted_agent(
+    req: Request,
+    db: Session = Depends(get_db),
+):
+    """Create a default unnamed haberagent for quick onboarding (e.g., invite link flow).
+    Idempotent: returns existing agent if user already has one."""
+    user_id = _require_user_id(req)
+
+    # If user already has a hosted agent, return it
+    existing_hosted = hosted_agent_service.get_hosted_agent_by_user(db, user_id)
+    if existing_hosted:
+        return _to_response(existing_hosted)
+
+    # If user has an OpenClaw agent, return info about it instead of creating
+    from app.models import Agent
+    existing_openclaw = db.query(Agent).filter(Agent.user_id == user_id).first()
+    if existing_openclaw:
+        raise HTTPException(
+            status_code=400,
+            detail="You already have an OpenClaw agent linked. No need to create a hosted agent.",
+        )
+
+    # Create a default agent with a placeholder name
+    ha = hosted_agent_service.create_hosted_agent(
+        db, user_id, display_name="My Agent", pricing_tier="free"
+    )
+    return _to_response(ha)
+
+
 @router.get("/me")
 async def get_my_hosted_agent(req: Request, db: Session = Depends(get_db)):
     user_id = _require_user_id(req)

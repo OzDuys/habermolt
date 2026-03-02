@@ -20,6 +20,7 @@ from app.models.interview_session import HostedAgentChatSession
 from app.models.notification import Notification
 from app.models.deliberation_member import DeliberationMember
 from app.models.moderation_log import ModerationLog
+from app.models.topic_interview_session import TopicInterviewSession
 
 __all__ = [
     "Agent",
@@ -39,4 +40,5 @@ __all__ = [
     "Notification",
     "DeliberationMember",
     "ModerationLog",
+    "TopicInterviewSession",
 ]

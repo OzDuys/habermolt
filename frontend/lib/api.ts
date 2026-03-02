@@ -5,10 +5,8 @@ import type {
   AgentRegistrationResponse,
   ClusterResponse,
   CreateDeliberationRequest,
-  CreatePrivateDeliberationRequest,
-  CreatePrivateDeliberationResponse,
-  CreatePublicDeliberationRequest,
-  CreatePublicDeliberationResponse,
+  CreateDeliberationHumanRequest,
+  CreateDeliberationHumanResponse,
   CurrentWinner,
   Deliberation,
   DeliberationDetail,
@@ -209,12 +207,12 @@ class APIClient {
     });
   }
 
-  // Public Deliberation (human auth)
-  async createPublicDeliberation(
-    data: CreatePublicDeliberationRequest
-  ): Promise<CreatePublicDeliberationResponse> {
-    return this.request<CreatePublicDeliberationResponse>(
-      "/api/deliberations/create-public",
+  // Create Deliberation (human auth — unified public/private)
+  async createDeliberationHuman(
+    data: CreateDeliberationHumanRequest
+  ): Promise<CreateDeliberationHumanResponse> {
+    return this.request<CreateDeliberationHumanResponse>(
+      "/api/deliberations/create",
       {
         method: "POST",
         body: JSON.stringify(data),
@@ -222,17 +220,11 @@ class APIClient {
     );
   }
 
-  // Private Deliberations
-  async createPrivateDeliberation(
-    data: CreatePrivateDeliberationRequest
-  ): Promise<CreatePrivateDeliberationResponse> {
-    return this.request<CreatePrivateDeliberationResponse>(
-      "/api/deliberations/create-private",
-      {
-        method: "POST",
-        body: JSON.stringify(data),
-      }
-    );
+  // Create a default unnamed haberagent (for quick onboarding)
+  async createDefaultAgent(): Promise<any> {
+    return this.request<any>("/api/hosted-agents/create-default", {
+      method: "POST",
+    });
   }
 
   async getInviteInfo(inviteCode: string): Promise<InviteInfo> {

@@ -9,7 +9,7 @@ Supports two paths:
 import logging
 import secrets
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
 
@@ -20,10 +20,9 @@ from app.models.deliberation_member import DeliberationMember
 from app.models.hosted_agent import HostedAgent
 from app.middleware.auth import APIKeyAuth
 from app.services.content_moderation_service import check_community_guidelines
-from app.services.continuous_deliberation_service import ContinuousDeliberationService
 from app.schemas.deliberation import (
+    CreateDeliberationHumanRequest,
     CreatePrivateDeliberationRequest,
-    CreatePublicDeliberationRequest,
     InviteInfoResponse,
     JoinDeliberationResponse,
     PrivateDeliberationListItem,
@@ -80,166 +79,78 @@ def check_private_access(db: Session, deliberation: Deliberation, agent: Agent):
 # --- Endpoints ---
 
 @router.post(
-    "/create-private",
+    "/create",
     status_code=status.HTTP_201_CREATED,
-    summary="Create a private deliberation (human auth)",
+    summary="Create a deliberation (human auth)",
 )
-async def create_private_deliberation(
-    body: CreatePrivateDeliberationRequest,
+async def create_deliberation_human(
+    body: CreateDeliberationHumanRequest,
     req: Request,
     db: Session = Depends(get_db),
 ):
     """
-    Create a private deliberation with a shareable invite code.
+    Create a deliberation (public or private).
     Requires human authentication (X-User-Id header).
+    User must have an agent (HaberAgent or OpenClaw).
+
+    Creates a shell deliberation — no opinion or seed statements yet.
+    The user will be interviewed inline after creation, and seed statements
+    are generated after the interview opinion is submitted.
     """
     user_id = _require_user_id(req)
 
-    # Find the user's agent
     agent = _find_user_agent(db, user_id)
     if not agent:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="You need an agent to create a deliberation. Create a HaberAgent on your profile page, or link your OpenClaw agent.",
+            detail="You need an agent to create a deliberation. Create a HaberAgent or link your OpenClaw agent.",
         )
 
-    # Community guidelines check
-    passes, _reason = check_community_guidelines(body.question, db=db, source="human_private")
+    source = "human_private" if body.is_private else "human_public"
+    passes, _reason = check_community_guidelines(body.question, db=db, source=source)
     if not passes:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="This does not meet our community guidelines.",
         )
 
-    # Generate unique invite code
-    invite_code = secrets.token_urlsafe(6)
+    invite_code = secrets.token_urlsafe(6) if body.is_private else None
 
-    # Create the deliberation
     deliberation = Deliberation(
         question=body.question,
         stage=DeliberationStage.ACTIVE,
         mechanism_type="continuous",
         created_by_agent_id=agent.id,
         created_by_user_id=user_id,
-        is_private=True,
+        is_private=body.is_private,
         invite_code=invite_code,
-        complexity_tier=body.complexity_tier,
-        max_participants=body.max_participants,
         categories=body.categories or [],
         num_citizens=0,
+        num_critique_rounds=0,
+        current_critique_round=0,
+        meta_data={},
     )
     db.add(deliberation)
     db.flush()
 
-    # Add creator as first member
-    member = DeliberationMember(
-        deliberation_id=deliberation.id,
-        agent_id=agent.id,
-        joined_by_user_id=user_id,
-    )
-    db.add(member)
+    if body.is_private:
+        member = DeliberationMember(
+            deliberation_id=deliberation.id,
+            agent_id=agent.id,
+            joined_by_user_id=user_id,
+        )
+        db.add(member)
+
     db.commit()
     db.refresh(deliberation)
 
-    logger.info(f"Private deliberation created: {deliberation.id} by user {user_id} with invite code {invite_code}")
+    logger.info(f"Deliberation created: {deliberation.id} by user {user_id} (private={body.is_private})")
 
     return {
         "deliberation_id": str(deliberation.id),
         "question": deliberation.question,
         "invite_code": invite_code,
-        "complexity_tier": body.complexity_tier,
-        "max_participants": body.max_participants,
         "created_at": deliberation.created_at.isoformat(),
-    }
-
-
-@router.post(
-    "/create-public",
-    status_code=status.HTTP_201_CREATED,
-    summary="Create a public deliberation (human auth)",
-)
-async def create_public_deliberation(
-    body: CreatePublicDeliberationRequest,
-    req: Request,
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
-):
-    """
-    Create a public deliberation.
-    Requires human authentication (X-User-Id header).
-    User must have an agent (HaberAgent or OpenClaw) to create a deliberation.
-
-    Two paths:
-    1. Agent + initial_opinion: full flow (opinion + seed statements)
-    2. Agent + no initial_opinion: create deliberation, agent will interview
-       the user and submit opinion later (no seed statements yet)
-    """
-    user_id = _require_user_id(req)
-
-    # Find the user's agent — required for deliberation to function
-    agent = _find_user_agent(db, user_id)
-    if not agent:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="You need an agent to create a deliberation. Create a HaberAgent on your profile page, or link your OpenClaw agent.",
-        )
-
-    # Community guidelines check
-    passes, _reason = check_community_guidelines(body.question, db=db, source="human_public")
-    if not passes:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="This does not meet our community guidelines.",
-        )
-
-    service = ContinuousDeliberationService(db)
-
-    if body.initial_opinion:
-        # Path 1: Agent + opinion — full flow
-        try:
-            deliberation = await service.create_deliberation(
-                question=body.question,
-                creator_agent=agent,
-                initial_opinion=body.initial_opinion,
-                categories=body.categories,
-            )
-        except Exception as e:
-            error_msg = str(e)
-            logger.error(f"Failed to create public deliberation: {error_msg}", exc_info=True)
-            if "429" in error_msg or "quota" in error_msg.lower() or "rate" in error_msg.lower():
-                raise HTTPException(
-                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    detail="LLM API rate limit exceeded. Please try again later.",
-                )
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to create deliberation. Please try again later.",
-            )
-    else:
-        # Path 2: No opinion — create shell, agent interviews user later
-        deliberation = Deliberation(
-            question=body.question,
-            mechanism_type="continuous",
-            stage=DeliberationStage.ACTIVE,
-            created_by_agent_id=agent.id,
-            created_by_user_id=user_id,
-            num_citizens=0,
-            num_critique_rounds=0,
-            current_critique_round=0,
-            categories=body.categories or [],
-            meta_data={},
-        )
-        db.add(deliberation)
-        db.commit()
-        db.refresh(deliberation)
-
-    logger.info(f"Public deliberation created: {deliberation.id} by user {user_id} (agent={'yes' if agent else 'no'}, opinion={'yes' if body.initial_opinion else 'no'})")
-
-    return {
-        "deliberation_id": str(deliberation.id),
-        "question": deliberation.question,
-        "created_at": deliberation.created_at.isoformat(),
-        "has_agent": agent is not None,
     }
 
 
@@ -278,9 +189,7 @@ async def get_invite_info(
     return InviteInfoResponse(
         deliberation_id=str(deliberation.id),
         question=deliberation.question,
-        complexity_tier=deliberation.complexity_tier,
         participant_count=member_count,
-        max_participants=deliberation.max_participants,
         created_by_name=creator_name,
         created_at=deliberation.created_at,
     )
@@ -331,17 +240,6 @@ async def join_deliberation(
             agent_name=agent.name,
             message="You are already a member of this deliberation",
         )
-
-    # Check participant limit
-    if deliberation.max_participants:
-        current_count = db.query(DeliberationMember).filter(
-            DeliberationMember.deliberation_id == deliberation.id
-        ).count()
-        if current_count >= deliberation.max_participants:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="This deliberation has reached its participant limit",
-            )
 
     # Add as member
     member = DeliberationMember(
@@ -398,17 +296,6 @@ async def join_deliberation_agent(
             message="You are already a member of this deliberation",
         )
 
-    # Check participant limit
-    if deliberation.max_participants:
-        current_count = db.query(DeliberationMember).filter(
-            DeliberationMember.deliberation_id == deliberation.id
-        ).count()
-        if current_count >= deliberation.max_participants:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="This deliberation has reached its participant limit",
-            )
-
     # Add as member
     member = DeliberationMember(
         deliberation_id=deliberation.id,
@@ -461,8 +348,6 @@ async def create_private_deliberation_agent(
         created_by_agent_id=agent.id,
         is_private=True,
         invite_code=invite_code,
-        complexity_tier=body.complexity_tier,
-        max_participants=body.max_participants,
         categories=body.categories or [],
         num_citizens=0,
     )
@@ -485,8 +370,6 @@ async def create_private_deliberation_agent(
         "question": deliberation.question,
         "invite_code": invite_code,
         "invite_url": f"https://habermolt.com/invite/{invite_code}",
-        "complexity_tier": body.complexity_tier,
-        "max_participants": body.max_participants,
         "created_at": deliberation.created_at.isoformat(),
     }
 
@@ -542,9 +425,7 @@ async def list_my_private_deliberations(
             id=d.id,
             question=d.question,
             invite_code=d.invite_code,
-            complexity_tier=d.complexity_tier,
             participant_count=member_count,
-            max_participants=d.max_participants,
             created_at=d.created_at,
             is_creator=d.created_by_user_id == user_id,
         ))

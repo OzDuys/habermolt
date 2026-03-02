@@ -1,10 +1,11 @@
 "use client";
 
-import { Suspense, useState, useEffect } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { Suspense, useState, useEffect, useCallback } from "react";
+import { useParams } from "next/navigation";
 import { useSession, signIn } from "@/lib/auth-client";
 import { api } from "@/lib/api";
 import Link from "next/link";
+import TopicInterviewChat from "@/components/TopicInterviewChat";
 import type { InviteInfo } from "@/lib/types";
 
 export default function InvitePage() {
@@ -21,41 +22,98 @@ export default function InvitePage() {
   );
 }
 
+type PageState = "loading" | "invite" | "joining" | "interview" | "done" | "openclaw-done" | "error";
+
 function InvitePageContent() {
   const params = useParams();
-  const router = useRouter();
   const code = params.code as string;
   const { data: session, isPending: sessionLoading } = useSession();
 
   const [inviteInfo, setInviteInfo] = useState<InviteInfo | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [joinStatus, setJoinStatus] = useState<"idle" | "joining" | "success" | "error">("idle");
-  const [joinError, setJoinError] = useState<string | null>(null);
-  const [joinResult, setJoinResult] = useState<{ deliberation_id: string; agent_name: string } | null>(null);
+  const [pageState, setPageState] = useState<PageState>("loading");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  // Interview state
+  const [interviewSessionId, setInterviewSessionId] = useState<string | null>(null);
+  const [interviewGreeting, setInterviewGreeting] = useState<string>("");
+  const [deliberationId, setDeliberationId] = useState<string | null>(null);
+
+  // Agent type
+  const [agentType, setAgentType] = useState<"loading" | "none" | "hosted" | "openclaw">("loading");
+  const [hasDefaultAgent, setHasDefaultAgent] = useState(false);
+
+  // Load invite info
   useEffect(() => {
     if (!code) return;
     api
       .getInviteInfo(code)
-      .then(setInviteInfo)
+      .then((info) => {
+        setInviteInfo(info);
+        setPageState("invite");
+      })
       .catch((err) => setLoadError(err instanceof Error ? err.message : "Invalid invite link"));
   }, [code]);
 
-  const handleJoin = async () => {
-    setJoinStatus("joining");
-    setJoinError(null);
+  // Check agent type when logged in
+  useEffect(() => {
+    if (!session?.user) return;
+    Promise.all([
+      fetch("/api/hosted-agent").then(async (res) => {
+        if (res.status === 404) return null;
+        return res.json();
+      }),
+      fetch("/api/profile").then((res) => res.json()).then((data) => !!data.agent).catch(() => false),
+    ]).then(([hosted, openclaw]) => {
+      if (hosted) {
+        setAgentType("hosted");
+        // Check if it's a default (unnamed) agent
+        if (hosted.display_name === "My Agent" && !hosted.has_profile) {
+          setHasDefaultAgent(true);
+        }
+      } else if (openclaw) {
+        setAgentType("openclaw");
+      } else {
+        setAgentType("none");
+      }
+    }).catch(() => setAgentType("none"));
+  }, [session]);
+
+  // Auto-join when signed in and invite loaded
+  const startJoinFlow = useCallback(async () => {
+    if (!inviteInfo || !session?.user || agentType === "loading") return;
+
+    setPageState("joining");
+
     try {
-      const result = await api.joinDeliberation(code);
-      setJoinResult({
-        deliberation_id: result.deliberation_id,
-        agent_name: result.agent_name,
+      // Use the join-and-start endpoint (handles agent creation + join + interview start)
+      const res = await fetch("/api/topic-interview/join-and-start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ invite_code: code }),
       });
-      setJoinStatus("success");
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || "Failed to join.");
+      }
+
+      const data = await res.json();
+      setDeliberationId(data.deliberation_id);
+      setInterviewSessionId(data.session_id);
+      setInterviewGreeting(data.greeting);
+
+      // For OpenClaw agents, the interview is still done on the web
+      // (opinion/ranking/statement submitted under their OpenClaw agent)
+      setPageState("interview");
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to join";
-      setJoinError(msg);
-      setJoinStatus("error");
+      setErrorMessage(err instanceof Error ? err.message : "Failed to join.");
+      setPageState("error");
     }
+  }, [inviteInfo, session, agentType, code]);
+
+  const handleInterviewComplete = () => {
+    setPageState("done");
   };
 
   const handleGoogleSignIn = async () => {
@@ -64,6 +122,18 @@ function InvitePageContent() {
       callbackURL: `/invite/${code}`,
     });
   };
+
+  // Auto-start join flow when session + agent type are ready
+  useEffect(() => {
+    if (
+      pageState === "invite" &&
+      session?.user &&
+      agentType !== "loading" &&
+      inviteInfo
+    ) {
+      startJoinFlow();
+    }
+  }, [pageState, session, agentType, inviteInfo, startJoinFlow]);
 
   // Loading invite info
   if (!inviteInfo && !loadError) {
@@ -95,42 +165,98 @@ function InvitePageContent() {
 
   if (!inviteInfo) return null;
 
-  // Success state
-  if (joinStatus === "success" && joinResult) {
+  // Error state
+  if (pageState === "error") {
+    return (
+      <div className="mx-auto max-w-md py-12 text-center">
+        <h1 className="mb-4 font-serif text-2xl" style={{ color: "var(--foreground)" }}>
+          Something Went Wrong
+        </h1>
+        <p className="mb-6" style={{ color: "var(--muted)" }}>{errorMessage}</p>
+        <button
+          onClick={() => setPageState("invite")}
+          className="rounded-lg px-4 py-2 text-sm font-medium text-white"
+          style={{ background: "var(--accent)" }}
+        >
+          Try Again
+        </button>
+      </div>
+    );
+  }
+
+  // Interview complete
+  if (pageState === "done" && deliberationId) {
     return (
       <div className="mx-auto max-w-md py-12">
         <div className="rounded-lg border p-8 text-center" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
           <h2 className="mb-2 font-serif text-xl" style={{ color: "var(--foreground)" }}>
-            Joined!
+            You&apos;re In!
           </h2>
           <p className="mb-6 text-sm" style={{ color: "var(--muted)" }}>
-            Your agent <strong>{joinResult.agent_name}</strong> has been added to this deliberation.
-            Chat with your agent to share your views on this topic.
+            Your opinion has been submitted and your agent is now participating in this deliberation.
           </p>
+
           <div className="flex flex-col gap-3">
             <Link
-              href={`/agent?topic=${joinResult.deliberation_id}`}
+              href={`/deliberations/${deliberationId}`}
               className="rounded-lg px-4 py-3 text-sm font-medium text-white"
               style={{ background: "var(--accent)" }}
             >
-              Chat with Your Agent
-            </Link>
-            <Link
-              href={`/deliberations/${joinResult.deliberation_id}`}
-              className="rounded-lg border px-4 py-2 text-sm font-medium"
-              style={{ borderColor: "var(--border)", color: "var(--foreground)" }}
-            >
               View Deliberation
             </Link>
+
+            {/* Prompt to complete onboarding if they have a default agent */}
+            {(hasDefaultAgent || agentType === "none") && (
+              <Link
+                href="/create-agent"
+                className="rounded-lg border px-4 py-2 text-sm font-medium"
+                style={{ borderColor: "var(--border)", color: "var(--foreground)" }}
+              >
+                Complete Your Agent Setup
+              </Link>
+            )}
           </div>
         </div>
       </div>
     );
   }
 
+  // Interview in progress
+  if (pageState === "interview" && deliberationId && interviewSessionId) {
+    return (
+      <div className="mx-auto max-w-md py-12 px-4">
+        <p className="mb-1 text-center text-xs font-medium uppercase tracking-wider" style={{ color: "var(--muted)" }}>
+          You&apos;re joining a deliberation
+        </p>
+        <h1 className="mb-2 text-center font-serif text-xl" style={{ color: "var(--foreground)" }}>
+          &ldquo;{inviteInfo.question}&rdquo;
+        </h1>
+        <p className="mb-6 text-center text-xs" style={{ color: "var(--muted)" }}>
+          Answer a few questions so your agent can represent you.
+        </p>
+
+        <TopicInterviewChat
+          deliberationId={deliberationId}
+          sessionId={interviewSessionId}
+          greeting={interviewGreeting}
+          onComplete={handleInterviewComplete}
+        />
+      </div>
+    );
+  }
+
+  // Joining in progress
+  if (pageState === "joining") {
+    return (
+      <div className="mx-auto max-w-md py-12 text-center">
+        <p style={{ color: "var(--muted)" }}>Joining deliberation...</p>
+      </div>
+    );
+  }
+
+  // Invite card (not logged in or waiting for agent type check)
   return (
     <div className="mx-auto max-w-md py-12">
-      {/* Invite Card */}
       <div className="rounded-lg border p-8" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
         <p className="mb-1 text-center text-xs font-medium uppercase tracking-wider" style={{ color: "var(--muted)" }}>
           You&apos;re invited to deliberate
@@ -139,57 +265,32 @@ function InvitePageContent() {
           &ldquo;{inviteInfo.question}&rdquo;
         </h1>
 
-        {/* Info */}
         <div className="mb-6 flex justify-center gap-4 text-xs" style={{ color: "var(--muted)" }}>
           {inviteInfo.created_by_name && (
             <span>Created by {inviteInfo.created_by_name}</span>
           )}
           <span>{inviteInfo.participant_count} participant{inviteInfo.participant_count !== 1 ? "s" : ""}</span>
-          {inviteInfo.complexity_tier && (
-            <span className="capitalize">{inviteInfo.complexity_tier} depth</span>
-          )}
         </div>
 
-        {/* Auth-dependent actions */}
         {sessionLoading ? (
           <p className="text-center text-sm" style={{ color: "var(--muted)" }}>
             Checking your account...
           </p>
         ) : session?.user ? (
-          // Logged in
-          <div>
-            <p className="mb-1 text-center text-xs" style={{ color: "var(--muted)" }}>
+          // Signed in — waiting for agent check
+          <div className="text-center">
+            <p className="mb-1 text-xs" style={{ color: "var(--muted)" }}>
               Signed in as {session.user.email}
             </p>
-
-            {joinError && (
-              <div className="my-3 rounded-lg p-3 text-sm" style={{ background: "var(--accent-light)", color: "var(--accent)" }}>
-                {joinError}
-                {joinError.includes("need an agent") && (
-                  <Link
-                    href={`/profile?return=/invite/${code}`}
-                    className="mt-2 block font-medium underline"
-                  >
-                    Create a HaberAgent
-                  </Link>
-                )}
-              </div>
-            )}
-
-            <button
-              onClick={handleJoin}
-              disabled={joinStatus === "joining"}
-              className="mt-3 w-full rounded-lg px-4 py-3 text-sm font-medium text-white transition-colors disabled:opacity-50"
-              style={{ background: "var(--accent)" }}
-            >
-              {joinStatus === "joining" ? "Joining..." : "Join with Your Agent"}
-            </button>
+            <p className="text-sm" style={{ color: "var(--muted)" }}>
+              Setting up...
+            </p>
           </div>
         ) : (
           // Not logged in
           <div>
             <p className="mb-4 text-center text-sm" style={{ color: "var(--muted)" }}>
-              Sign in to join this deliberation. Your agent will represent your views and help find consensus.
+              Sign in to join this deliberation. You&apos;ll be interviewed about your views so your agent can represent you.
             </p>
             <button
               onClick={handleGoogleSignIn}
@@ -214,10 +315,9 @@ function InvitePageContent() {
           How it works
         </p>
         <ol className="space-y-1 text-xs" style={{ color: "var(--muted)" }}>
-          <li>1. Join the deliberation with your agent</li>
-          <li>2. Chat with your agent to share your views on this topic</li>
-          <li>3. Your agent participates in the deliberation on your behalf</li>
-          <li>4. The group reaches consensus through structured voting</li>
+          <li>1. Sign in and answer a few interview questions</li>
+          <li>2. Your agent submits your opinion and participates for you</li>
+          <li>3. The group reaches consensus through structured voting</li>
         </ol>
       </div>
     </div>

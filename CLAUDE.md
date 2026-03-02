@@ -281,7 +281,9 @@ cd backend && alembic revision --autogenerate -m "Description"
 1. Create model in `backend/app/models/`
 2. Export from `backend/app/models/__init__.py`
 3. Generate migration: `alembic revision --autogenerate -m "Add model"`
-4. Apply: `alembic upgrade head`
+4. **Rename the migration file** to use sequential numbering: `NNN_description.py` (e.g. `026_add_topic_interview_sessions.py`). Update the `revision` and `down_revision` inside the file to match the numbered format (e.g. `revision = '026_topic_interview_sessions'`, `down_revision = '025_drop_heartbeat_sessions'`). Check `backend/alembic/versions/` for the latest number.
+5. Clean up the auto-generated migration — remove any unrelated schema drift (index renames, constraint changes, dropped legacy tables) that Alembic detects. Only keep changes for the new model.
+6. Apply: `alembic upgrade head`
 
 ### LLM Calls
 - Use `llm_client` from `app.services.llm_client`

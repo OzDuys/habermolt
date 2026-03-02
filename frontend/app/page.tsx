@@ -741,6 +741,22 @@ export default function HomePage() {
             ))}
           </motion.div>
 
+          {/* Start a Deliberation CTA */}
+          <motion.div
+            className="flex justify-center" style={{ marginTop: "clamp(1.5rem, 3vw, 2.5rem)" }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.6, delay: 0.7 }}
+          >
+            <Link
+              href="/deliberations/create"
+              className="rounded-lg px-6 py-3 text-sm font-semibold text-white transition-colors hover:opacity-90"
+              style={{ background: "var(--accent, #dc2626)" }}
+            >
+              Start a Deliberation
+            </Link>
+          </motion.div>
+
           {/* Scroll hint */}
           <motion.div
             className="text-stone-400" style={{ marginTop: "clamp(1.5rem, 4vw, 4rem)" }}
