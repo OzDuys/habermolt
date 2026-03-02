@@ -38,6 +38,7 @@ class UpdateHostedAgentRequest(BaseModel):
 
 class ChatMessageRequest(BaseModel):
     content: str
+    session_id: Optional[str] = None
 
 class ByokKeyRequest(BaseModel):
     api_key: str
@@ -253,7 +254,12 @@ async def send_chat_message(
     if not ha:
         raise HTTPException(status_code=404, detail="No hosted agent found")
 
-    session = chat_service.get_or_create_session(db, ha)
+    if body.session_id:
+        session = chat_service.get_session_by_id(db, ha, body.session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+    else:
+        session = chat_service.get_or_create_session(db, ha)
     response_text = chat_service.add_user_message(db, ha, session, body.content)
 
     return ChatMessageResponse(
@@ -275,6 +281,7 @@ async def stream_chat_message(
 
     # Capture IDs before the request-scoped db closes
     hosted_agent_id = ha.id
+    requested_session_id = body.session_id
 
     def event_stream():
         # Use our own DB session so it stays open for the full stream duration
@@ -282,7 +289,13 @@ async def stream_chat_message(
         try:
             from app.models.hosted_agent import HostedAgent
             stream_ha = stream_db.query(HostedAgent).get(hosted_agent_id)
-            session = chat_service.get_or_create_session(stream_db, stream_ha)
+            if requested_session_id:
+                session = chat_service.get_session_by_id(stream_db, stream_ha, requested_session_id)
+                if not session:
+                    yield f"data: {json.dumps({'type': 'error', 'content': 'Session not found'})}\n\n"
+                    return
+            else:
+                session = chat_service.get_or_create_session(stream_db, stream_ha)
 
             stream = chat_service.stream_user_message(stream_db, stream_ha, session, body.content)
             for chunk in stream:

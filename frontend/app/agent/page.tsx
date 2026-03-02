@@ -243,7 +243,7 @@ function AgentPageContent() {
                 </div>
               </div>
             ) : (
-              <AgentChat messages={messages} setMessages={setMessages} />
+              <AgentChat messages={messages} setMessages={setMessages} activeSessionId={activeSessionId} />
             )}
           </div>
 
@@ -276,9 +276,11 @@ function AgentPageContent() {
 function AgentChat({
   messages,
   setMessages,
+  activeSessionId,
 }: {
   messages: ChatMessage[];
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
+  activeSessionId: string | null;
 }) {
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
@@ -307,7 +309,7 @@ function AgentChat({
       const res = await fetch("/api/hosted-agent/chat/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: content.trim() }),
+        body: JSON.stringify({ content: content.trim(), session_id: activeSessionId }),
       });
 
       if (!res.ok || !res.body) {
