@@ -662,6 +662,7 @@ export default function LiveDeliberationPage() {
   const [activeTab, setActiveTab] = useState<TabId>("consensus");
   const [selectedAgent, setSelectedAgent] = useState<AgentInfo | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const sectionRefs = useRef<Record<TabId, HTMLDivElement | null>>({ consensus: null, statements: null, agents: null });
 
   // Fetch data with polling
   useEffect(() => {
@@ -683,29 +684,35 @@ export default function LiveDeliberationPage() {
     return () => clearInterval(iv);
   }, [id]);
 
-  // Track which snap segment we're on
+  // Track which snap segment we're on via IntersectionObserver
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
-    const onScroll = () => {
-      const segmentH = container.clientHeight;
-      if (segmentH <= 0) return;
-      const index = Math.round(container.scrollTop / segmentH);
-      const clamped = Math.min(index, TABS.length - 1);
-      setActiveTab(TABS[clamped].id);
-    };
-    container.addEventListener("scroll", onScroll, { passive: true });
-    return () => container.removeEventListener("scroll", onScroll);
+    const sections = sectionRefs.current;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
+            const tabId = entry.target.getAttribute("data-tab") as TabId;
+            if (tabId) setActiveTab(tabId);
+          }
+        }
+      },
+      { root: container, threshold: 0.5 }
+    );
+    TABS.forEach((tab) => {
+      const el = sections[tab.id];
+      if (el) observer.observe(el);
+    });
+    return () => observer.disconnect();
   }, [loading]);
 
 
   const scrollToTab = (tabId: TabId) => {
-    const container = scrollContainerRef.current;
-    if (!container) return;
-    const index = TABS.findIndex((t) => t.id === tabId);
-    if (index < 0) return;
+    const el = sectionRefs.current[tabId];
+    if (!el) return;
     setActiveTab(tabId);
-    container.scrollTo({ top: index * container.clientHeight, behavior: "smooth" });
+    el.scrollIntoView({ behavior: "smooth" });
   };
 
   // Build agents
@@ -811,7 +818,7 @@ export default function LiveDeliberationPage() {
         }}>
 
           {/* ═══ CONSENSUS ═══ */}
-          <div style={{
+          <div ref={(el) => { sectionRefs.current.consensus = el; }} data-tab="consensus" style={{
             width: "100%", minHeight: "100%", scrollSnapAlign: "start",
             display: "flex", flexDirection: "column",
             alignItems: "center", justifyContent: "center",
@@ -915,7 +922,7 @@ export default function LiveDeliberationPage() {
           </div>
 
           {/* ═══ STATEMENTS ═══ */}
-          <div style={{
+          <div ref={(el) => { sectionRefs.current.statements = el; }} data-tab="statements" style={{
             width: "100%", minHeight: "100%", scrollSnapAlign: "start",
             display: "flex", flexDirection: "column", alignItems: "center",
             padding: "32px 20px 48px", position: "relative",
@@ -1014,7 +1021,7 @@ export default function LiveDeliberationPage() {
           </div>
 
           {/* ═══ AGENTS ═══ */}
-          <div style={{
+          <div ref={(el) => { sectionRefs.current.agents = el; }} data-tab="agents" style={{
             width: "100%", minHeight: "100%", scrollSnapAlign: "start",
             padding: "32px 24px 80px", position: "relative",
           }}>

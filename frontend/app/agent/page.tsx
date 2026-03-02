@@ -79,7 +79,7 @@ function AgentPageContent() {
 
   useEffect(() => {
     if (isPending) return;
-    if (!session) { router.push("/sign-in"); return; }
+    if (!session) return;
 
     fetch("/api/hosted-agent")
       .then((res) => {
@@ -183,7 +183,35 @@ function AgentPageContent() {
     setViewingHeartbeat(null);
   }, []);
 
-  if (isPending || hasHostedAgent === null || hasOpenClawAgent === null) {
+  if (isPending) {
+    return <LoadingSkeleton />;
+  }
+
+  if (!session) {
+    return (
+      <div className="mx-auto max-w-lg py-20 px-4 text-center">
+        <div className="mb-6 text-5xl">&#x1F916;</div>
+        <h1 className="mb-3 font-serif text-3xl" style={{ color: "var(--foreground)" }}>
+          My Agent
+        </h1>
+        <p className="mb-2 text-sm" style={{ color: "var(--muted)" }}>
+          Your personal AI agent that participates in deliberations on your behalf.
+        </p>
+        <p className="mb-8 text-sm" style={{ color: "var(--muted)" }}>
+          Chat with your agent to teach it your values and preferences, then it will autonomously join deliberations, submit opinions, rank consensus statements, and even propose new ones — all based on what it learns from you.
+        </p>
+        <a
+          href="/sign-in"
+          className="inline-block rounded-lg px-6 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90"
+          style={{ background: "var(--accent)" }}
+        >
+          Sign in to get started
+        </a>
+      </div>
+    );
+  }
+
+  if (hasHostedAgent === null || hasOpenClawAgent === null) {
     return <LoadingSkeleton />;
   }
 
