@@ -15,7 +15,11 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.drop_table('heartbeat_sessions')
+    from sqlalchemy import inspect
+    conn = op.get_bind()
+    inspector = inspect(conn)
+    if 'heartbeat_sessions' in inspector.get_table_names():
+        op.drop_table('heartbeat_sessions')
 
 
 def downgrade() -> None:
