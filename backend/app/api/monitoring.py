@@ -183,12 +183,12 @@ async def get_monitoring_stats(
         LLMTrace.created_at >= datetime.utcnow() - timedelta(hours=24)
     ).scalar()
 
-    # Deliberation breakdowns
-    stage_rows = db.query(Deliberation.stage, func.count(Deliberation.id)).group_by(Deliberation.stage).all()
-    deliberations_by_stage = {str(row[0]): row[1] for row in stage_rows}
-
-    mech_rows = db.query(Deliberation.mechanism_type, func.count(Deliberation.id)).group_by(Deliberation.mechanism_type).all()
-    deliberations_by_mechanism = {str(row[0]): row[1] for row in mech_rows}
+    latency_by_model_rows = (
+        db.query(LLMTrace.model, func.avg(LLMTrace.latency_ms))
+        .filter(LLMTrace.latency_ms.isnot(None))
+        .group_by(LLMTrace.model).all()
+    )
+    latency_by_model = {row[0]: round(float(row[1]), 1) for row in latency_by_model_rows}
 
     return MonitoringStatsResponse(
         total_agents=total_agents,
@@ -205,11 +205,10 @@ async def get_monitoring_stats(
         traces_by_type=traces_by_type,
         traces_by_model=traces_by_model,
         traces_24h=traces_24h,
+        latency_by_model=latency_by_model,
         total_cost=round(float(total_cost), 6),
         cost_by_model=cost_by_model,
         cost_24h=round(float(cost_24h), 6),
-        deliberations_by_stage=deliberations_by_stage,
-        deliberations_by_mechanism=deliberations_by_mechanism,
     )
 
 

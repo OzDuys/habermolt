@@ -18,11 +18,10 @@ interface Stats {
   traces_by_type: Record<string, number>;
   traces_by_model: Record<string, number>;
   traces_24h: number;
+  latency_by_model: Record<string, number>;
   total_cost: number;
   cost_by_model: Record<string, number>;
   cost_24h: number;
-  deliberations_by_stage: Record<string, number>;
-  deliberations_by_mechanism: Record<string, number>;
 }
 
 function getSecret() {
@@ -100,11 +99,8 @@ export default function MonitoringDashboard() {
         {/* Traces by Model */}
         <BreakdownCard title="Traces by Model" data={stats.traces_by_model} />
 
-        {/* Deliberations by Stage */}
-        <BreakdownCard title="Deliberations by Stage" data={stats.deliberations_by_stage} />
-
-        {/* Deliberations by Mechanism */}
-        <BreakdownCard title="Deliberations by Mechanism" data={stats.deliberations_by_mechanism} />
+        {/* Avg Latency by Model */}
+        <LatencyBreakdownCard title="Avg Latency by Model" data={stats.latency_by_model} />
       </div>
 
       {/* Quick Links */}
@@ -220,6 +216,42 @@ function CostBreakdownCard({ title, data }: { title: string; data: Record<string
               <div
                 className="h-full rounded-full"
                 style={{ width: `${(cost / max) * 100}%`, background: "#d97706", opacity: 0.7 }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function LatencyBreakdownCard({ title, data }: { title: string; data: Record<string, number> }) {
+  const entries = Object.entries(data).sort((a, b) => b[1] - a[1]);
+  const max = Math.max(...entries.map(([, v]) => v), 1);
+
+  if (entries.length === 0) {
+    return (
+      <div className="p-5 rounded-xl border" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+        <h3 className="text-sm font-bold mb-3">{title}</h3>
+        <p className="text-xs" style={{ color: "var(--muted)" }}>No data</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-5 rounded-xl border" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+      <h3 className="text-sm font-bold mb-3">{title}</h3>
+      <div className="space-y-2">
+        {entries.map(([key, ms]) => (
+          <div key={key}>
+            <div className="flex justify-between text-xs mb-0.5">
+              <span className="font-mono truncate mr-2">{key}</span>
+              <span className="font-bold tabular-nums">{ms.toFixed(0)}ms</span>
+            </div>
+            <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "var(--border)" }}>
+              <div
+                className="h-full rounded-full"
+                style={{ width: `${(ms / max) * 100}%`, background: "#3b82f6", opacity: 0.7 }}
               />
             </div>
           </div>

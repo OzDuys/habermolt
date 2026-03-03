@@ -56,13 +56,11 @@ class MonitoringStatsResponse(BaseModel):
     traces_by_type: Dict[str, int]
     traces_by_model: Dict[str, int]
     traces_24h: int
+    latency_by_model: Dict[str, float]
     # Cost tracking
     total_cost: float
     cost_by_model: Dict[str, float]
     cost_24h: float
-    # Deliberation breakdowns
-    deliberations_by_stage: Dict[str, int]
-    deliberations_by_mechanism: Dict[str, int]
 
 
 class SystemConfigResponse(BaseModel):
