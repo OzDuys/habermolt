@@ -416,33 +416,15 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
           </button>
         )}
 
-        {/* Backdrop when chat is open */}
-        {open && (
-          <div
-            onClick={() => setOpen(false)}
-            style={{
-              position: "fixed", inset: 0, zIndex: 299,
-              background: "rgba(0,0,0,0.3)", backdropFilter: "blur(2px)",
-            }}
-          />
-        )}
-
         {/* Chat panel */}
         {open && (
           <div style={{
-            position: "fixed",
-            top: "50%", left: "50%",
-            transform: "translate(-50%, -50%)",
-            zIndex: 300,
-            width: "min(92vw, 480px)",
-            maxHeight: "min(80vh, 600px)",
-            borderRadius: 20,
+            position: "fixed", bottom: 24, right: 24, zIndex: 300,
+            width: 370, maxHeight: 520, borderRadius: 16,
             background: "#fff", border: "1px solid rgba(0,0,0,0.1)",
-            boxShadow: "0 16px 48px rgba(0,0,0,0.2)",
+            boxShadow: "0 8px 32px rgba(0,0,0,0.15)",
             display: "flex", flexDirection: "column", overflow: "hidden",
-          }}
-          onClick={(e) => e.stopPropagation()}
-          >
+          }}>
             {/* Header */}
             <div style={{
               padding: "12px 16px", borderBottom: "1px solid rgba(0,0,0,0.06)",
