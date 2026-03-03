@@ -559,12 +559,18 @@ async def get_table_rows(
         columns = [row[0] for row in col_result]
 
         # Determine ordering column
-        order_col = "id"
         if "created_at" in columns:
             order_col = "created_at"
+            order_dir = "DESC"
         elif "submitted_at" in columns:
             order_col = "submitted_at"
-        order_dir = "DESC" if order_col != "id" else "ASC"
+            order_dir = "DESC"
+        elif "id" in columns:
+            order_col = "id"
+            order_dir = "ASC"
+        else:
+            order_col = columns[0]
+            order_dir = "ASC"
 
         offset = (page - 1) * page_size
         rows_result = db.execute(text(

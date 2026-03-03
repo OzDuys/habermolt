@@ -6,7 +6,7 @@ import { api } from "@/lib/api";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import TopicInterviewChat from "@/components/TopicInterviewChat";
-import ShareSection from "@/components/ShareSection";
+import { ShareSection } from "@/components/ShareSection";
 
 const CATEGORIES = [
   "ai", "current-affairs", "geopolitics", "societal",
