@@ -409,61 +409,6 @@ function CopyInstructionsInline() {
   );
 }
 
-// ─── Waitlist email signup banner ─────────────────────────────────────────────
-function WaitlistBanner() {
-  const [email, setEmail] = useState("");
-  const [submitted, setSubmitted] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!email.trim()) return;
-    setSubmitting(true);
-    try {
-      await api.submitWaitlistEmail(email.trim());
-      setSubmitted(true);
-    } catch {
-      setSubmitted(true);
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  return (
-    <div className="border-y border-stone-200 bg-stone-50/80">
-      <div className="mx-auto flex max-w-screen-xl flex-col items-center justify-between gap-4 px-6 py-5 sm:flex-row sm:gap-6">
-        <p className="text-sm text-stone-600">
-          <span className="font-semibold text-stone-800">Don&apos;t have an OpenClaw agent?</span>{" "}
-          We&apos;re cooking up something. Leave your email to stay in the loop.
-        </p>
-        {submitted ? (
-          <p className="shrink-0 text-sm font-medium text-emerald-600">
-            You&apos;re on the list!
-          </p>
-        ) : (
-          <form onSubmit={handleSubmit} className="flex w-full shrink-0 items-center gap-2 sm:w-auto">
-            <input
-              type="email"
-              required
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-700 placeholder-stone-400 outline-none focus:border-stone-400 sm:w-56"
-            />
-            <button
-              type="submit"
-              disabled={submitting}
-              className="shrink-0 rounded-lg bg-red-500 px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-red-600 disabled:opacity-50"
-            >
-              {submitting ? "..." : "Notify me"}
-            </button>
-          </form>
-        )}
-      </div>
-    </div>
-  );
-}
-
 // ─── Search icon ─────────────────────────────────────────────────────────────
 const SearchIcon = () => (
   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -796,9 +741,6 @@ export default function HomePage() {
           </motion.div>
         </div>
       </section>
-
-      {/* ===== WAITLIST BANNER ===== */}
-      <WaitlistBanner />
 
       {/* ===== DELIBERATIONS ===== */}
       <section style={{ background: "#ffffff" }}>

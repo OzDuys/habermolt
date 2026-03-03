@@ -204,48 +204,6 @@ const SEED_QUESTIONS: SeedQuestion[] = [
   },
 ];
 
-const SUGGESTED_NAMES = [
-  "Pinchy",
-  "Claw-dia",
-  "Sir Clawsworth",
-  "The Deliberator",
-  "Clawrence",
-  "Crimson Counsel",
-  "Lobster Libertas",
-  "The Red Delegate",
-  "Snappy Verdict",
-  "Lobstotle",
-  "Shell Shocked",
-  "Coral Debater",
-  "Pinch of Wisdom",
-  "Butter Believer",
-  "The Claw Abides",
-  "Sheldon",
-  "Clawsome",
-  "Red Herring",
-  "Captain Claw",
-  "Snap Decision",
-  "The Crustacean",
-  "Larry Lobster",
-  "Bisque Business",
-  "Reef Thinker",
-  "Thermidor",
-  "Claw & Order",
-  "Crusty Philosopher",
-  "Nipper",
-  "Tail Spin",
-  "Boil Point",
-  "Cheddar Claw",
-  "Lobby McLobface",
-  "Antenna Analyst",
-  "Deep Sea Debater",
-  "Molt Mastermind",
-  "Claw-ver Girl",
-  "The Pinch Hitter",
-  "Admiral Snapper",
-  "Reef Judge",
-  "Scarlet Thinker",
-];
 
 // ─── Color filter for lobster SVG ─────────────────────────────────────────────
 
@@ -1534,27 +1492,6 @@ function NameAgentScene({
   takenNames: string[];
 }) {
   const isTaken = name.trim().length > 0 && takenNames.includes(name.trim().toLowerCase());
-  const availableHardcoded = SUGGESTED_NAMES.filter(
-    (n) => !takenNames.includes(n.toLowerCase())
-  );
-
-  const [generatedNames, setGeneratedNames] = useState<string[]>([]);
-  const [generatingNames, setGeneratingNames] = useState(false);
-
-  // If all hardcoded names are taken, fetch LLM-generated ones
-  useEffect(() => {
-    if (availableHardcoded.length === 0 && generatedNames.length === 0 && !generatingNames) {
-      setGeneratingNames(true);
-      fetch("/api/hosted-agent/generate-names")
-        .then((r) => r.json())
-        .then((names: string[]) => setGeneratedNames(names))
-        .catch(() => {})
-        .finally(() => setGeneratingNames(false));
-    }
-  }, [availableHardcoded.length, generatedNames.length, generatingNames]);
-
-  const availableSuggestions =
-    availableHardcoded.length > 0 ? availableHardcoded : generatedNames;
 
   return (
     <Scene>
@@ -1622,78 +1559,6 @@ function NameAgentScene({
             This name is already taken. Try another one!
           </p>
         )}
-
-        <div
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            gap: 6,
-            justifyContent: "center",
-            marginBottom: 20,
-          }}
-        >
-          {availableSuggestions.map((n) => (
-            <motion.button
-              key={n}
-              onClick={() => onChange(n)}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              style={{
-                background:
-                  name === n ? "#c84a2015" : "rgba(0,0,0,0.03)",
-                border: `1px solid ${name === n ? "#c84a20" : "rgba(0,0,0,0.06)"}`,
-                borderRadius: 99,
-                padding: "5px 12px",
-                fontSize: 12,
-                color: name === n ? "#c84a20" : "#777",
-                cursor: "pointer",
-                fontFamily: "'DM Sans', sans-serif",
-                fontWeight: name === n ? 600 : 400,
-                transition: "all 0.15s",
-              }}
-            >
-              {n}
-            </motion.button>
-          ))}
-          {generatingNames && (
-            <span
-              style={{
-                fontSize: 12,
-                color: "#999",
-                fontFamily: "'DM Sans', sans-serif",
-                padding: "5px 12px",
-              }}
-            >
-              Generating names...
-            </span>
-          )}
-          {!generatingNames && (
-            <motion.button
-              onClick={() => {
-                setGeneratingNames(true);
-                fetch("/api/hosted-agent/generate-names")
-                  .then((r) => r.json())
-                  .then((names: string[]) => setGeneratedNames(names))
-                  .catch(() => {})
-                  .finally(() => setGeneratingNames(false));
-              }}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              style={{
-                background: "none",
-                border: `1px dashed rgba(0,0,0,0.15)`,
-                borderRadius: 99,
-                padding: "5px 12px",
-                fontSize: 12,
-                color: "#999",
-                cursor: "pointer",
-                fontFamily: "'DM Sans', sans-serif",
-              }}
-            >
-              🎲 Suggest more
-            </motion.button>
-          )}
-        </div>
 
         <div style={{ display: "flex", justifyContent: "center" }}>
           <Btn onClick={onNext} disabled={name.trim().length === 0 || isTaken}>
