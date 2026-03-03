@@ -1,7 +1,22 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import TokenUsageBar from "@/components/TokenUsageBar";
+
+const CONFIG_MODELS = [
+  "google/gemini-3-flash-preview",
+  "x-ai/grok-4.1-fast",
+  "openai/gpt-5-mini",
+];
+
+const CONFIG_FREQUENCIES = [
+  { value: "never", label: "Manual only" },
+  { value: "two_hourly", label: "Every 2 hours" },
+  { value: "hourly", label: "Every hour" },
+  { value: "daily", label: "Once a day" },
+  { value: "weekly", label: "Once a week" },
+];
 
 interface HostedAgent {
   id: string;
@@ -33,6 +48,7 @@ interface SessionMessage {
 
 
 export default function HostedAgentDashboard() {
+  const router = useRouter();
   const [agent, setAgent] = useState<HostedAgent | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -213,6 +229,31 @@ export default function HostedAgentDashboard() {
   const handleCancelRebuild = () => {
     setProposedProfile("");
     setRebuildMode(false);
+  };
+
+  const handleConfigUpdate = async (field: string, value: string | boolean) => {
+    setSaving(true);
+    try {
+      const res = await fetch("/api/hosted-agent", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [field]: value }),
+      });
+      const data = await res.json();
+      if (res.ok) setAgent(data);
+    } catch {}
+    finally { setSaving(false); }
+  };
+
+  const handleDeleteAgent = async () => {
+    if (!confirm("This will permanently delete your hosted agent. Continue?")) return;
+    try {
+      const res = await fetch("/api/hosted-agent", { method: "DELETE" });
+      if (res.ok || res.status === 204) {
+        router.push("/profile");
+        router.refresh();
+      }
+    } catch {}
   };
 
   if (loading) {
@@ -458,6 +499,48 @@ export default function HostedAgentDashboard() {
 
         <Section title="Token Usage">
           <TokenUsageBar used={agent.tokens_used_period} limit={agent.token_limit} tier={agent.pricing_tier} />
+        </Section>
+
+        <Section title="Settings">
+          <Field label="Model">
+            <select
+              value={agent.model}
+              onChange={(e) => handleConfigUpdate("model", e.target.value)}
+              disabled={saving}
+              className="rounded-lg border px-2 py-1 text-xs"
+              style={{ borderColor: "var(--border)", background: "var(--background)" }}
+            >
+              {CONFIG_MODELS.map((m) => <option key={m} value={m}>{m}</option>)}
+            </select>
+          </Field>
+          <Field label="Auto-heartbeat">
+            <select
+              value={agent.participation_frequency}
+              onChange={(e) => handleConfigUpdate("participation_frequency", e.target.value)}
+              disabled={saving}
+              className="rounded-lg border px-2 py-1 text-xs"
+              style={{ borderColor: "var(--border)", background: "var(--background)" }}
+            >
+              {CONFIG_FREQUENCIES.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+            </select>
+          </Field>
+          <div className="flex flex-wrap gap-2 pt-1">
+            <button
+              onClick={() => handleConfigUpdate("is_active", !agent.is_active)}
+              disabled={saving}
+              className="rounded-lg border px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-80 disabled:opacity-50"
+              style={{ borderColor: "var(--border)", color: "var(--foreground)" }}
+            >
+              {agent.is_active ? "Pause Agent" : "Resume Agent"}
+            </button>
+            <button
+              onClick={handleDeleteAgent}
+              className="rounded-lg border px-3 py-1.5 text-xs font-medium text-red-600 transition-opacity hover:opacity-80 dark:text-red-400"
+              style={{ borderColor: "var(--border)" }}
+            >
+              Delete Agent
+            </button>
+          </div>
         </Section>
 
         <Section title="Info">
