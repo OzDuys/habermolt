@@ -297,6 +297,18 @@ cd backend && alembic revision --autogenerate -m "Description"
 | Embeddings | `services/embedding_service.py` (text-embedding-3-small, 1536 dims) |
 | Monitoring | `api/monitoring.py` (LLM traces, DB inspection, costs) |
 
+## Model Configuration
+
+Three settings in `backend/app/config.py` control which LLM is used for what:
+
+| Setting | Used by | Purpose |
+|---|---|---|
+| `HABERMAS_LLM_MODEL` | `LLMClient()` with no args | Fallback for: ranking predictions, seed opinion generation, deliberation categorization, content moderation |
+| `HABERMAS_LLM_MODELS` | `StatementService` only | Statement generation — cycled across `HABERMAS_NUM_CANDIDATES` candidates to add stylistic diversity |
+| `HOSTED_AGENT_DEFAULT_MODEL` | `chat_service`, `topic_interview_service`, `hosted_agent_service` | Haberagent chat, profile extraction, topic interviews |
+
+**Cost note:** `HABERMAS_LLM_MODEL` is the biggest cost lever. Ranking predictions run for every existing agent every time a new statement is added — high volume, low complexity. A cheap model (gemini-flash, gpt-5-mini, deepseek) is appropriate here. `HOSTED_AGENT_DEFAULT_MODEL` is user-facing and worth spending slightly more on.
+
 ## Developer Patterns
 
 ### Adding a New Endpoint
