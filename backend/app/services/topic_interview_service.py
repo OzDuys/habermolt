@@ -388,13 +388,25 @@ def stream_message(
 
                 result = _execute_tool(db, agent, deliberation, session, tc["name"], tc["arguments"])
 
+                action_description = result.get("description", "")
+                action_detail = result.get("opinion_text", result.get("profile_text", ""))
+
                 yield ("action_done", {
                     "action": tc["name"],
                     "question": deliberation.question,
                     "result": result,
-                    "description": result.get("description", ""),
-                    "detail": result.get("opinion_text", result.get("profile_text", "")),
+                    "description": action_description,
+                    "detail": action_detail,
                     "tool_call_id": tc["id"],
+                })
+
+                # Persist action to message history so it shows on reload
+                messages.append({
+                    "role": "action",
+                    "action": tc["name"],
+                    "status": "done",
+                    "description": action_description,
+                    "detail": action_detail,
                 })
 
                 llm_messages.append({

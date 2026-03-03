@@ -148,8 +148,13 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
               : (data.interview_history && data.interview_history.length > 0)
                 ? [
                     ...data.interview_history
-                      .filter((m: Record<string, string>) => m.role === "user" || m.role === "assistant")
-                      .map((m: Record<string, string>) => ({ role: m.role as "user" | "assistant", content: m.content })),
+                      .filter((m: Record<string, string>) => m.role === "user" || m.role === "assistant" || m.role === "action")
+                      .map((m: Record<string, string>) => {
+                        if (m.role === "action") {
+                          return { role: "action" as const, action: m.action, status: m.status, description: m.description, detail: m.detail };
+                        }
+                        return { role: m.role as "user" | "assistant", content: m.content };
+                      }),
                     { role: "divider" as const, content: "Now participating" },
                   ]
                 : [];
