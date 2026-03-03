@@ -55,7 +55,7 @@ def create_hosted_agent(
     hashed_key = hash_api_key(plaintext_key)
 
     agent = Agent(
-        name=f"hosted-{display_name}",
+        name=display_name,
         human_name=display_name,
         api_key=hashed_key,
         user_id=user_id,

@@ -6,6 +6,7 @@ import { useSession, signIn } from "@/lib/auth-client";
 import { api } from "@/lib/api";
 import Link from "next/link";
 import TopicInterviewChat from "@/components/TopicInterviewChat";
+import AgentOnboardingModal from "@/components/AgentOnboardingModal";
 import type { InviteInfo } from "@/lib/types";
 
 export default function InvitePage() {
@@ -129,8 +130,14 @@ function InvitePageContent() {
     }
   }, [inviteInfo, session, agentType, code, userAgentId, router]);
 
+  const [showAgentSetupModal, setShowAgentSetupModal] = useState(false);
+
   const handleInterviewComplete = () => {
     setPageState("done");
+    // Prompt agent setup if they don't have a real agent yet
+    if (agentType === "none" || hasDefaultAgent) {
+      setShowAgentSetupModal(true);
+    }
   };
 
   const handleGoogleSignIn = async () => {
@@ -205,6 +212,9 @@ function InvitePageContent() {
   if (pageState === "done" && deliberationId) {
     return (
       <div className="mx-auto max-w-md py-12">
+        {showAgentSetupModal && (
+          <AgentOnboardingModal onDismiss={() => setShowAgentSetupModal(false)} />
+        )}
         <div className="rounded-lg border p-8 text-center" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
           <h2 className="mb-2 font-serif text-xl" style={{ color: "var(--foreground)" }}>
             You&apos;re In!
@@ -221,17 +231,6 @@ function InvitePageContent() {
             >
               View Deliberation
             </Link>
-
-            {/* Prompt to complete onboarding if they have a default agent */}
-            {(hasDefaultAgent || agentType === "none") && (
-              <Link
-                href="/create-agent"
-                className="rounded-lg border px-4 py-2 text-sm font-medium"
-                style={{ borderColor: "var(--border)", color: "var(--foreground)" }}
-              >
-                Complete Your Agent Setup
-              </Link>
-            )}
           </div>
         </div>
       </div>
