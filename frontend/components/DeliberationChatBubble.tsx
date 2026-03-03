@@ -65,6 +65,11 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
     const [mode, setMode] = useState<Mode>(alreadyParticipating ? "participate" : "browse");
     const [sessionId, setSessionId] = useState<string | null>(() => {
       if (typeof window !== "undefined") {
+        if (alreadyParticipating) {
+          // Clear stale topic-interview session IDs
+          sessionStorage.removeItem(`delib_chat_session_${deliberationId}`);
+          return null;
+        }
         return sessionStorage.getItem(`delib_chat_session_${deliberationId}`) || null;
       }
       return null;
@@ -127,7 +132,7 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
             if (typeof window !== "undefined") {
               sessionStorage.setItem(storageKey, data.session_id);
             }
-            const newMessages = (data.history && data.history.length > 0)
+            const chatMessages = (data.history && data.history.length > 0)
               ? data.history.map((m: Record<string, string>) => {
                   if (m.role === "action") {
                     return { role: "action" as const, action: m.action, status: m.status, description: m.description, detail: m.detail };
@@ -135,14 +140,21 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
                   return { role: m.role as "user" | "assistant", content: m.content };
                 })
               : [{ role: "assistant" as const, content: data.greeting }];
-            // Prepend saved interview messages if transitioning from join
+
+            // Build full message list: interview history (from DB) → divider → chat messages
             const saved = interviewMessagesRef.current;
-            if (saved.length > 0) {
-              setMessages([...saved, ...newMessages]);
-              interviewMessagesRef.current = [];
-            } else {
-              setMessages(newMessages);
-            }
+            const interviewMsgs = saved.length > 0
+              ? saved  // Just completed interview (in-memory)
+              : (data.interview_history && data.interview_history.length > 0)
+                ? [
+                    ...data.interview_history
+                      .filter((m: Record<string, string>) => m.role === "user" || m.role === "assistant")
+                      .map((m: Record<string, string>) => ({ role: m.role as "user" | "assistant", content: m.content })),
+                    { role: "divider" as const, content: "Now participating" },
+                  ]
+                : [];
+            interviewMessagesRef.current = [];
+            setMessages([...interviewMsgs, ...chatMessages]);
           })
           .catch(() => {
             setMessages([{ role: "assistant", content: "Sorry, I couldn't connect. Please try again." }]);

@@ -34,6 +34,7 @@ class ChatSessionResponse(BaseModel):
     question: str
     greeting: str
     history: list
+    interview_history: list = []
 
 
 def _require_user_id(req: Request) -> str:
@@ -81,12 +82,24 @@ async def start_chat(
     else:
         greeting = session.messages[0]["content"] if session.messages else ""
 
+    # Load completed topic interview history for this deliberation
+    interview_history = []
+    interview_session = db.query(AgentSession).filter(
+        AgentSession.agent_id == hosted.agent_id,
+        AgentSession.deliberation_id == deliberation.id,
+        AgentSession.session_type == "deliberation_join",
+        AgentSession.status == "completed",
+    ).order_by(AgentSession.created_at.desc()).first()
+    if interview_session and interview_session.messages:
+        interview_history = interview_session.messages
+
     return ChatSessionResponse(
         session_id=str(session.id),
         deliberation_id=str(deliberation.id),
         question=deliberation.question,
         greeting=greeting,
         history=session.messages,
+        interview_history=interview_history,
     )
 
 
