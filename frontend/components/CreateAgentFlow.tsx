@@ -16,6 +16,8 @@ type Phase =
   | "seed-q1"
   | "seed-q2"
   | "seed-q3"
+  | "seed-q4"
+  | "seed-q5"
   | "show-profile"
   | "explain-hlq"
   | "name-agent"
@@ -48,6 +50,8 @@ const ALL_PHASES: Phase[] = [
   "seed-q1",
   "seed-q2",
   "seed-q3",
+  "seed-q4",
+  "seed-q5",
   "show-profile",
   "explain-hlq",
   "name-agent",
@@ -61,6 +65,8 @@ const PART_LABELS: Record<Phase, { part: number; label: string }> = {
   "seed-q1": { part: 2, label: "Learning About You" },
   "seed-q2": { part: 2, label: "Learning About You" },
   "seed-q3": { part: 2, label: "Learning About You" },
+  "seed-q4": { part: 2, label: "Learning About You" },
+  "seed-q5": { part: 2, label: "Learning About You" },
   "show-profile": { part: 3, label: "Your Profile" },
   "explain-hlq": { part: 3, label: "Your Profile" },
   "name-agent": { part: 4, label: "Launch" },
@@ -73,7 +79,9 @@ const BACK_MAP: Partial<Record<Phase, Phase>> = {
   "seed-q1": "pick-deliberations",
   "seed-q2": "seed-q1",
   "seed-q3": "seed-q2",
-  "show-profile": "seed-q3",
+  "seed-q4": "seed-q3",
+  "seed-q5": "seed-q4",
+  "show-profile": "seed-q5",
   "explain-hlq": "show-profile",
   "name-agent": "explain-hlq",
 };
@@ -145,6 +153,52 @@ const SEED_QUESTIONS: SeedQuestion[] = [
         label: "Not at all — let the market decide",
         valueStatement:
           "- Thinks government regulation of AI is unnecessary; prefers market-driven approaches",
+      },
+    ],
+  },
+  {
+    id: "change",
+    prompt: "When society needs to change, do you lean toward...",
+    subtext:
+      "This helps your lobster understand how you weigh stability against progress.",
+    choices: [
+      {
+        label: "Move fast, fix things later",
+        valueStatement:
+          "- Prefers bold, rapid change and is willing to accept short-term disruption for long-term progress",
+      },
+      {
+        label: "Slow and steady wins the race",
+        valueStatement:
+          "- Prefers gradual, incremental change that preserves stability and minimizes risk",
+      },
+      {
+        label: "Depends on what's at stake",
+        valueStatement:
+          "- Speed of change should match the stakes: move fast on urgent issues, go slow where mistakes are costly",
+      },
+    ],
+  },
+  {
+    id: "fairness",
+    prompt: "What matters more when resources are limited?",
+    subtext:
+      "This shapes how your lobster approaches debates about economics, policy, and justice.",
+    choices: [
+      {
+        label: "Equal opportunity for everyone",
+        valueStatement:
+          "- Prioritizes equal opportunity: level the playing field and let people earn their outcomes",
+      },
+      {
+        label: "Help those who need it most",
+        valueStatement:
+          "- Prioritizes equity: direct more resources toward those who are disadvantaged or struggling",
+      },
+      {
+        label: "Reward merit and effort",
+        valueStatement:
+          "- Prioritizes meritocracy: resources should flow to those who contribute the most",
       },
     ],
   },
@@ -867,7 +921,7 @@ function PickDeliberationsScene({
             className="font-handwritten"
             style={{ fontSize: 24, color: "#1a1a1a", margin: "0 0 6px" }}
           >
-            What interests you?
+            Choose a few deliberations that interest you
           </h2>
           <p
             style={{
@@ -1895,12 +1949,16 @@ export default function CreateAgentFlow() {
     "seed-q1": 0,
     "seed-q2": 1,
     "seed-q3": 2,
+    "seed-q4": 3,
+    "seed-q5": 4,
   };
 
   const seedPhaseToNext: Record<string, Phase> = {
     "seed-q1": "seed-q2",
     "seed-q2": "seed-q3",
-    "seed-q3": "show-profile",
+    "seed-q3": "seed-q4",
+    "seed-q4": "seed-q5",
+    "seed-q5": "show-profile",
   };
 
   return (
@@ -1970,7 +2028,9 @@ export default function CreateAgentFlow() {
 
           {(phase === "seed-q1" ||
             phase === "seed-q2" ||
-            phase === "seed-q3") && (
+            phase === "seed-q3" ||
+            phase === "seed-q4" ||
+            phase === "seed-q5") && (
             <motion.div
               key={phase}
               initial={{ opacity: 0, x: 40 }}
