@@ -13,10 +13,10 @@ type Phase =
   | "intro"
   | "explain-agent"
   | "pick-deliberations"
-  | "generating-questions"
   | "seed-q1"
   | "seed-q2"
   | "seed-q3"
+  | "seed-q4"
   | "show-profile"
   | "explain-hlq"
   | "name-agent"
@@ -46,10 +46,10 @@ const ALL_PHASES: Phase[] = [
   "intro",
   "explain-agent",
   "pick-deliberations",
-  "generating-questions",
   "seed-q1",
   "seed-q2",
   "seed-q3",
+  "seed-q4",
   "show-profile",
   "explain-hlq",
   "name-agent",
@@ -60,10 +60,10 @@ const PART_LABELS: Record<Phase, { part: number; label: string }> = {
   intro: { part: 0, label: "" },
   "explain-agent": { part: 1, label: "Meet Your Lobster" },
   "pick-deliberations": { part: 1, label: "Meet Your Lobster" },
-  "generating-questions": { part: 2, label: "Learning About You" },
   "seed-q1": { part: 2, label: "Learning About You" },
   "seed-q2": { part: 2, label: "Learning About You" },
   "seed-q3": { part: 2, label: "Learning About You" },
+  "seed-q4": { part: 2, label: "Learning About You" },
   "show-profile": { part: 3, label: "Your Profile" },
   "explain-hlq": { part: 3, label: "Your Profile" },
   "name-agent": { part: 4, label: "Launch" },
@@ -73,16 +73,57 @@ const PART_LABELS: Record<Phase, { part: number; label: string }> = {
 const BACK_MAP: Partial<Record<Phase, Phase>> = {
   "explain-agent": "intro",
   "pick-deliberations": "explain-agent",
-  "generating-questions": "pick-deliberations",
   "seed-q1": "pick-deliberations",
   "seed-q2": "seed-q1",
   "seed-q3": "seed-q2",
-  "show-profile": "seed-q3",
+  "seed-q4": "seed-q3",
+  "show-profile": "seed-q4",
   "explain-hlq": "show-profile",
   "name-agent": "explain-hlq",
 };
 
+// ─── Static seed questions (same for everyone) ────────────────────────────────
 
+const STATIC_SEED_QUESTIONS: SeedQuestion[] = [
+  {
+    id: "freedom_vs_collective",
+    prompt: "When individual freedom and collective wellbeing conflict, what guides you?",
+    subtext: "This is the most fundamental axis across almost every deliberation topic.",
+    choices: [
+      {
+        label: "Individual rights first",
+        valueStatement: "- I prioritize individual autonomy as the foundation for any policy — collective goals should not override fundamental freedoms without extraordinary justification",
+      },
+      {
+        label: "The collective usually wins",
+        valueStatement: "- I tend to prioritize collective wellbeing over individual preferences — societies thrive when people accept reasonable constraints for the common good",
+      },
+      {
+        label: "Depends on the stakes",
+        valueStatement: "- I weigh individual rights against collective benefit contextually — the severity, reversibility, and distribution of impacts determines where I land",
+      },
+    ],
+  },
+  {
+    id: "change_vs_caution",
+    prompt: "When facing big problems — in tech, politics, society — what's your instinct?",
+    subtext: "Your risk tolerance shapes how you evaluate bold proposals vs. incremental ones.",
+    choices: [
+      {
+        label: "Bold action beats waiting",
+        valueStatement: "- I believe decisive intervention is usually better than cautious inaction — the cost of delay or half-measures is typically underestimated",
+      },
+      {
+        label: "Careful iteration over leaps",
+        valueStatement: "- I prefer incremental, reversible change over sweeping reforms — unintended consequences from moving too fast are a serious and underappreciated risk",
+      },
+      {
+        label: "Reversibility is what matters",
+        valueStatement: "- My appetite for bold change scales with how reversible it is — I'm willing to move fast when mistakes can be corrected, and cautious when they can't",
+      },
+    ],
+  },
+];
 
 // ─── Color filter for lobster SVG ─────────────────────────────────────────────
 
@@ -765,7 +806,7 @@ function PickDeliberationsScene({
             className="font-handwritten"
             style={{ fontSize: 24, color: "#1a1a1a", margin: "0 0 6px" }}
           >
-            Choose a few deliberations that interest you
+            Which ongoing deliberations interest you?
           </h2>
           <p
             style={{
@@ -775,8 +816,7 @@ function PickDeliberationsScene({
               fontFamily: "'DM Sans', sans-serif",
             }}
           >
-            Pick deliberations for your lobster to join first. You can
-            always change these later.
+            This is to give your Lobster a good understanding of your interests.
           </p>
         </div>
 
@@ -801,21 +841,6 @@ function PickDeliberationsScene({
 
         {/* Category pills + sort toggle — matching landing page style */}
         <div className="flex items-center gap-1 overflow-x-auto pb-1 mb-2" style={{ scrollbarWidth: "none" }}>
-          {DELIB_CATEGORIES.map((cat) => (
-            <button
-              key={cat.id}
-              onClick={() => setActiveCategory(activeCategory === cat.id ? "" : cat.id)}
-              className={`relative flex shrink-0 items-center gap-1.5 rounded-full font-medium transition-all ${
-                activeCategory === cat.id
-                  ? "bg-stone-200 text-stone-800"
-                  : "text-stone-600 hover:bg-stone-100 hover:text-stone-800"
-              }`}
-              style={{ padding: "4px 12px", fontSize: 12 }}
-            >
-              {cat.label}
-            </button>
-          ))}
-          <div style={{ width: 1, height: 16, background: "#d6d3d1", flexShrink: 0, margin: "0 4px" }} />
           {(["trending", "recent"] as const).map((s) => (
             <button
               key={s}
@@ -828,6 +853,21 @@ function PickDeliberationsScene({
               style={{ padding: "4px 12px", fontSize: 12 }}
             >
               {s === "trending" ? "🔥 Trending" : "🕐 Recent"}
+            </button>
+          ))}
+          <div style={{ width: 1, height: 16, background: "#d6d3d1", flexShrink: 0, margin: "0 4px" }} />
+          {DELIB_CATEGORIES.map((cat) => (
+            <button
+              key={cat.id}
+              onClick={() => setActiveCategory(activeCategory === cat.id ? "" : cat.id)}
+              className={`relative flex shrink-0 items-center gap-1.5 rounded-full font-medium transition-all ${
+                activeCategory === cat.id
+                  ? "bg-stone-200 text-stone-800"
+                  : "text-stone-600 hover:bg-stone-100 hover:text-stone-800"
+              }`}
+              style={{ padding: "4px 12px", fontSize: 12 }}
+            >
+              {cat.label}
             </button>
           ))}
         </div>
@@ -978,11 +1018,13 @@ function PickDeliberationsScene({
 function SeedQuestionScene({
   question,
   questionIndex,
+  totalQuestions,
   onAnswer,
   initialAnswer,
 }: {
   question: SeedQuestion;
   questionIndex: number;
+  totalQuestions: number;
   onAnswer: (answer: SeedAnswer) => void;
   initialAnswer?: SeedAnswer;
 }) {
@@ -1015,7 +1057,7 @@ function SeedQuestionScene({
               fontFamily: "'DM Sans', sans-serif",
             }}
           >
-            Question {questionIndex + 1} of 3
+            Question {questionIndex + 1} of {totalQuestions}
           </div>
           <h2
             className="font-handwritten"
@@ -1630,16 +1672,15 @@ export default function CreateAgentFlow() {
   const restoredRef = useRef(false);
   const saved = useRef(loadSavedState());
 
-  const [phase, setPhase] = useState<Phase>(
-    saved.current?.phase === "generating-questions" ? "pick-deliberations" : (saved.current?.phase ?? "intro")
-  );
+  const [phase, setPhase] = useState<Phase>(saved.current?.phase ?? "intro");
 
   // Deliberation picking
   const [deliberations, setDeliberations] = useState<Deliberation[]>([]);
   const [selectedDelibIds, setSelectedDelibIds] = useState<string[]>(saved.current?.selectedDelibIds ?? []);
 
-  // Generated seed questions + answers + interests summary
+  // LLM-generated seed questions (2) + loading state
   const [seedQuestions, setSeedQuestions] = useState<SeedQuestion[]>(saved.current?.seedQuestions ?? []);
+  const [llmQuestionsLoading, setLlmQuestionsLoading] = useState(false);
   const [interestsSummary, setInterestsSummary] = useState(saved.current?.interestsSummary ?? "");
   const [seedAnswers, setSeedAnswers] = useState<Record<string, SeedAnswer>>(
     saved.current?.seedAnswers ?? {}
@@ -1666,7 +1707,7 @@ export default function CreateAgentFlow() {
   useEffect(() => {
     if (!restoredRef.current) return;
     // Don't persist transient phases — nothing to resume
-    if (phase === "launch" || phase === "generating-questions") return;
+    if (phase === "launch") return;
     try {
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
         phase,
@@ -1747,17 +1788,23 @@ export default function CreateAgentFlow() {
     setPhase(target);
   }, []);
 
-  const seedPhaseToQuestion: Record<string, number> = {
+  // Index into the combined allSeedQuestions array (static + LLM)
+  const seedPhaseToIndex: Record<string, number> = {
     "seed-q1": 0,
     "seed-q2": 1,
     "seed-q3": 2,
+    "seed-q4": 3,
   };
 
   const seedPhaseToNext: Record<string, Phase> = {
     "seed-q1": "seed-q2",
     "seed-q2": "seed-q3",
-    "seed-q3": "show-profile",
+    "seed-q3": "seed-q4",
+    "seed-q4": "show-profile",
   };
+
+  // Combined questions: 2 static universal + 2 LLM-generated
+  const allSeedQuestions = [...STATIC_SEED_QUESTIONS, ...seedQuestions];
 
   return (
     <div
@@ -1820,7 +1867,9 @@ export default function CreateAgentFlow() {
                 selected={selectedDelibIds}
                 onToggle={toggleDelib}
                 onNext={() => {
-                  setPhase("generating-questions");
+                  // Kick off LLM generation in background while user answers static questions
+                  setLlmQuestionsLoading(true);
+                  setSeedQuestions([]);
                   fetch("/api/hosted-agent/seed-questions", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -1831,96 +1880,93 @@ export default function CreateAgentFlow() {
                       return r.json();
                     })
                     .then((data: { questions: SeedQuestion[]; interests_summary: string }) => {
-                      setSeedQuestions(data.questions);
+                      setSeedQuestions(data.questions.slice(0, 2));
                       setInterestsSummary(data.interests_summary || "");
-                      setPhase("seed-q1");
+                      setLlmQuestionsLoading(false);
                     })
                     .catch(() => {
-                      setPhase("pick-deliberations");
+                      setLlmQuestionsLoading(false);
                     });
+                  setPhase("seed-q1");
                 }}
               />
-            </motion.div>
-          )}
-
-          {phase === "generating-questions" && (
-            <motion.div
-              key="generating-questions"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              style={{ flex: 1, display: "flex" }}
-            >
-              <Scene>
-                <Card style={{ maxWidth: 400, textAlign: "center" }}>
-                  <motion.div
-                    animate={{ y: [0, -6, 0] }}
-                    transition={{ duration: 2, repeat: Infinity }}
-                    style={{ display: "inline-block", marginBottom: 16 }}
-                  >
-                    <GameLobster color={USER_COLOR} size={64} />
-                  </motion.div>
-                  <h2
-                    className="font-handwritten"
-                    style={{ fontSize: 22, color: "#1a1a1a", margin: "0 0 8px" }}
-                  >
-                    Crafting your questions...
-                  </h2>
-                  <p
-                    style={{
-                      fontSize: 13,
-                      color: "#888",
-                      fontFamily: "'DM Sans', sans-serif",
-                      margin: "0 0 16px",
-                    }}
-                  >
-                    Based on the topics you picked, your lobster is preparing a few
-                    questions to learn about your values.
-                  </p>
-                  <motion.div
-                    animate={{ rotate: 360 }}
-                    transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                    style={{
-                      width: 20,
-                      height: 20,
-                      border: "2.5px solid #c84a20",
-                      borderTopColor: "transparent",
-                      borderRadius: "50%",
-                      margin: "0 auto",
-                    }}
-                  />
-                </Card>
-              </Scene>
             </motion.div>
           )}
 
           {(phase === "seed-q1" ||
             phase === "seed-q2" ||
-            phase === "seed-q3") &&
-            seedQuestions.length > 0 && (
-            <motion.div
-              key={phase}
-              initial={{ opacity: 0, x: 40 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -40 }}
-              style={{ flex: 1, display: "flex" }}
-            >
-              <SeedQuestionScene
-                question={seedQuestions[seedPhaseToQuestion[phase]]}
-                questionIndex={seedPhaseToQuestion[phase]}
-                initialAnswer={
-                  seedAnswers[seedQuestions[seedPhaseToQuestion[phase]].id]
-                }
-                onAnswer={(ans) => {
-                  handleSeedAnswer(
-                    seedQuestions[seedPhaseToQuestion[phase]].id,
-                    ans
-                  );
-                  setPhase(seedPhaseToNext[phase]);
-                }}
-              />
-            </motion.div>
-          )}
+            phase === "seed-q3" ||
+            phase === "seed-q4") && (() => {
+            const idx = seedPhaseToIndex[phase];
+            const question = allSeedQuestions[idx];
+            const isLlmQuestion = idx >= 2;
+
+            // Show loading spinner if we've reached an LLM question before it's ready
+            if (isLlmQuestion && llmQuestionsLoading) {
+              return (
+                <motion.div
+                  key="llm-loading"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  style={{ flex: 1, display: "flex" }}
+                >
+                  <Scene>
+                    <Card style={{ maxWidth: 400, textAlign: "center" }}>
+                      <motion.div
+                        animate={{ y: [0, -6, 0] }}
+                        transition={{ duration: 2, repeat: Infinity }}
+                        style={{ display: "inline-block", marginBottom: 16 }}
+                      >
+                        <GameLobster color={USER_COLOR} size={64} />
+                      </motion.div>
+                      <h2
+                        className="font-handwritten"
+                        style={{ fontSize: 22, color: "#1a1a1a", margin: "0 0 8px" }}
+                      >
+                        Preparing your questions...
+                      </h2>
+                      <motion.div
+                        animate={{ rotate: 360 }}
+                        transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                        style={{
+                          width: 20,
+                          height: 20,
+                          border: "2.5px solid #c84a20",
+                          borderTopColor: "transparent",
+                          borderRadius: "50%",
+                          margin: "0 auto",
+                        }}
+                      />
+                    </Card>
+                  </Scene>
+                </motion.div>
+              );
+            }
+
+            if (!question) return null;
+
+            return (
+              <motion.div
+                key={phase}
+                initial={{ opacity: 0, x: 40 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -40 }}
+                style={{ flex: 1, display: "flex" }}
+              >
+                <SeedQuestionScene
+                  question={question}
+                  questionIndex={idx}
+                  totalQuestions={4}
+                  initialAnswer={seedAnswers[question.id]}
+                  onAnswer={(ans) => {
+                    handleSeedAnswer(question.id, ans);
+                    setPhase(seedPhaseToNext[phase]);
+                  }}
+                />
+              </motion.div>
+            );
+          })()}
 
           {phase === "show-profile" && (
             <motion.div

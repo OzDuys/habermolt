@@ -177,7 +177,7 @@ async def generate_seed_questions(
     body: SeedQuestionsRequest,
     db: Session = Depends(get_db),
 ):
-    """Generate 3 seed value-mapping questions tailored to the user's selected deliberation topics."""
+    """Generate 2 seed value-mapping questions tailored to the user's selected deliberation topics."""
     if not body.deliberation_ids:
         raise HTTPException(status_code=400, detail="No deliberation IDs provided")
 
@@ -190,30 +190,34 @@ async def generate_seed_questions(
     topics = "\n".join(f"- {d.question}" for d in delibs)
 
     client = LLMClient()
-    prompt = f"""The user has selected these deliberation topics they care about:
+    prompt = f"""The user is setting up an AI deliberation agent. They selected these topics they care about:
 
 {topics}
 
-Generate exactly 3 quick multiple-choice questions that will help an AI agent understand the user's values and positions relevant to these topics. Each question should:
-- Be a short, conversational "are you more X or Y?" style question
-- Have exactly 3 choices
-- Each choice maps to a value statement (a markdown bullet point starting with "- ")
-- Have a brief subtext explaining why this question matters
+Generate exactly 2 focused multiple-choice questions to reveal this user's specific positions on these topics. The agent will use these answers when participating in real deliberations on their behalf.
 
-Also write a 1-2 sentence summary of what kinds of topics and themes this person is interested in, based on the deliberations they chose.
+Requirements:
+- Probe concrete tensions or tradeoffs within these specific topic areas (e.g. if topics are about AI regulation, ask about open-source vs. closed models, or liability frameworks — not generic "freedom vs safety")
+- Questions must be specific enough that the answer meaningfully predicts how someone would vote on real proposals in these areas
+- 3 choices per question — each a distinct, defensible position that real people hold
+- Each choice is a value statement the agent can cite and reason from in deliberations
+- Keep prompts concise and direct (under 15 words)
+- Avoid: generic left/right framing, obvious "right answers", overlap with broad values like individual vs. collective or caution vs. bold action
 
-Return valid JSON only, no markdown fences. Format:
+Also write a 2-3 sentence summary of the specific concerns and tensions likely to matter most to this user. Be precise — name actual issues and stakeholders, not just category labels.
+
+Return valid JSON only, no markdown fences:
 {{
-  "interests_summary": "A short summary of the user's interests based on their selected topics.",
+  "interests_summary": "Specific summary of the user's likely concerns based on their chosen topics.",
   "questions": [
     {{
-      "id": "short_id",
-      "prompt": "The question text",
-      "subtext": "Why this helps",
+      "id": "short_snake_case_id",
+      "prompt": "The question text (under 15 words)",
+      "subtext": "One sentence on what position this reveals.",
       "choices": [
-        {{"label": "Short choice label", "valueStatement": "- Full value statement for the agent's profile"}},
-        {{"label": "Short choice label", "valueStatement": "- Full value statement for the agent's profile"}},
-        {{"label": "Short choice label", "valueStatement": "- Full value statement for the agent's profile"}}
+        {{"label": "Short label (3-5 words)", "valueStatement": "- Full value statement the agent can use in deliberations"}},
+        {{"label": "Short label (3-5 words)", "valueStatement": "- Full value statement the agent can use in deliberations"}},
+        {{"label": "Short label (3-5 words)", "valueStatement": "- Full value statement the agent can use in deliberations"}}
       ]
     }}
   ]
@@ -242,7 +246,7 @@ Return valid JSON only, no markdown fences. Format:
         questions = parsed.get("questions", [])
         interests_summary = parsed.get("interests_summary", "")
 
-    return {"questions": questions[:3], "interests_summary": interests_summary}
+    return {"questions": questions[:2], "interests_summary": interests_summary}
 
 
 @router.post("", status_code=201)
