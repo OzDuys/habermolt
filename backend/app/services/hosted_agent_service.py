@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from cryptography.fernet import Fernet
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -50,13 +51,17 @@ def create_hosted_agent(
     if existing_agent:
         raise ValueError("User already has an OpenClaw agent linked. Unlink it first to create a hosted agent.")
 
+    # Look up the human's real name from the better-auth user table
+    row = db.execute(text('SELECT name FROM "user" WHERE id = :uid'), {"uid": user_id}).fetchone()
+    human_name = row[0] if row and row[0] else display_name
+
     # Create shadow Agent record
     plaintext_key = generate_api_key()
     hashed_key = hash_api_key(plaintext_key)
 
     agent = Agent(
         name=display_name,
-        human_name=display_name,
+        human_name=human_name,
         api_key=hashed_key,
         user_id=user_id,
     )
