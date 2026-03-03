@@ -73,7 +73,7 @@ class ContinuousDeliberationService:
         self.submit_opinion(deliberation, creator_agent, initial_opinion)
 
         # Generate seed opinions (synthetic diverse perspectives)
-        seed_opinions = await self._generate_seed_opinions(question, creator_opinion=initial_opinion)
+        seed_opinions = await self._generate_seed_opinions(question, creator_opinion=initial_opinion, deliberation_id=deliberation.id)
 
         # Always include the creator's real opinion so the LLM has substantive input
         if initial_opinion.strip() not in seed_opinions:
@@ -134,7 +134,7 @@ class ContinuousDeliberationService:
         self.db.refresh(deliberation)
 
         # Generate seed opinions (synthetic diverse perspectives)
-        seed_opinions = await self._generate_seed_opinions(question, creator_opinion=initial_opinion)
+        seed_opinions = await self._generate_seed_opinions(question, creator_opinion=initial_opinion, deliberation_id=deliberation.id)
 
         if initial_opinion.strip() not in seed_opinions:
             seed_opinions.insert(0, initial_opinion.strip())
@@ -161,7 +161,7 @@ class ContinuousDeliberationService:
         )
         return deliberation
 
-    async def _generate_seed_opinions(self, question: str, creator_opinion: str = None) -> List[str]:
+    async def _generate_seed_opinions(self, question: str, creator_opinion: str = None, deliberation_id=None) -> List[str]:
         """Generate synthetic diverse opinions to seed statement generation.
 
         Retries up to 3 times if the LLM call fails or returns unparseable output.
@@ -199,7 +199,7 @@ class ContinuousDeliberationService:
 
         max_attempts = 3
         for attempt in range(max_attempts):
-            client.set_trace_context(trace_type="seed_opinion")
+            client.set_trace_context(trace_type="seed_opinion", deliberation_id=deliberation_id)
             response = await asyncio.to_thread(
                 client.sample_text, prompt, temperature=0.9
             )

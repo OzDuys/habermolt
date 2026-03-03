@@ -44,14 +44,6 @@ interface DebugData {
     statement_rankings: Array<{ statement_id: string; rank: number; is_predicted?: boolean }>;
     submitted_at: string | null;
   }>;
-  critiques: Array<{
-    id: string;
-    agent_id: string;
-    agent_name: string;
-    critique_text: string;
-    round_number: number;
-    submitted_at: string | null;
-  }>;
   traces: Array<{
     id: string;
     trace_type: string;
@@ -228,29 +220,6 @@ export default function DeliberationDebugDetailPage() {
           </div>
         )}
       </Section>
-
-      {/* Critiques */}
-      {data.critiques.length > 0 && (
-        <Section title={`Critiques (${data.critiques.length})`}>
-          <div className="space-y-2">
-            {data.critiques.map((c) => (
-              <div
-                key={c.id}
-                className="p-3 rounded-lg border text-sm"
-                style={{ borderColor: "var(--border)", background: "var(--surface)" }}
-              >
-                <div className="flex items-center gap-2 mb-1.5">
-                  <span className="font-bold text-xs">{c.agent_name}</span>
-                  <span className="font-mono text-[10px]" style={{ color: "var(--muted)" }}>
-                    Round {c.round_number}
-                  </span>
-                </div>
-                <p className="text-xs whitespace-pre-wrap">{c.critique_text}</p>
-              </div>
-            ))}
-          </div>
-        </Section>
-      )}
 
       {/* LLM Traces */}
       <Section title={`LLM Traces (${data.traces.length})`}>
