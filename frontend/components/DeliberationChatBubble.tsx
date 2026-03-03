@@ -83,6 +83,18 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
     const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const pendingJoinRef = useRef(false);
 
+    // Sync mode when alreadyParticipating changes (e.g. data loads async)
+    useEffect(() => {
+      if (alreadyParticipating && mode !== "participate") {
+        setMode("participate");
+        setSessionId(null);
+        if (typeof window !== "undefined") {
+          sessionStorage.removeItem(storageKey);
+        }
+        setMessages([]);
+      }
+    }, [alreadyParticipating]);
+
     // Expose triggerJoin to parent
     useImperativeHandle(ref, () => ({
       triggerJoin: () => {
