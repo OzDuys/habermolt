@@ -8,8 +8,12 @@ interface DeliberationChatProps {
 }
 
 interface Message {
-  role: "user" | "assistant";
-  content: string;
+  role: "user" | "assistant" | "action";
+  content?: string;
+  action?: string;
+  status?: string;
+  description?: string;
+  detail?: string;
 }
 
 interface ActionEvent {
@@ -54,10 +58,12 @@ export default function DeliberationChat({ deliberationId, deliberationQuestion 
         setSessionId(data.session_id);
         // Restore history or just the greeting
         if (data.history && data.history.length > 0) {
-          setMessages(data.history.map((m: { role: string; content: string }) => ({
-            role: m.role as "user" | "assistant",
-            content: m.content,
-          })));
+          setMessages(data.history.map((m: Record<string, string>) => {
+            if (m.role === "action") {
+              return { role: "action" as const, action: m.action, status: m.status, description: m.description, detail: m.detail };
+            }
+            return { role: m.role as "user" | "assistant", content: m.content };
+          }));
         } else {
           setMessages([{ role: "assistant", content: data.greeting }]);
         }
@@ -232,23 +238,35 @@ export default function DeliberationChat({ deliberationId, deliberationQuestion 
                 Loading...
               </div>
             )}
-            {messages.map((msg, i) => (
-              <div
-                key={i}
-                style={{
-                  alignSelf: msg.role === "user" ? "flex-end" : "flex-start",
-                  maxWidth: "85%",
-                  padding: "8px 12px",
-                  borderRadius: msg.role === "user" ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
-                  background: msg.role === "user" ? "#c84a20" : "rgba(0,0,0,0.04)",
-                  color: msg.role === "user" ? "#fff" : "#333",
-                  fontSize: 13, lineHeight: 1.5,
-                  whiteSpace: "pre-wrap", wordBreak: "break-word",
-                }}
-              >
-                {msg.content}
-              </div>
-            ))}
+            {messages.map((msg, i) =>
+              msg.role === "action" ? (
+                <div key={i} style={{
+                  display: "flex", alignItems: "center", gap: 6,
+                  padding: "6px 10px", borderRadius: 8,
+                  background: msg.status === "error" ? "#fee" : "#1a8a5010",
+                  fontSize: 11, color: msg.status === "error" ? "#c00" : "#1a8a50",
+                }}>
+                  {msg.status === "error" ? "✗" : "✓"} {actionLabel(msg.action || "")}
+                  {msg.description && <span style={{ color: "#999" }}>— {msg.description}</span>}
+                </div>
+              ) : (
+                <div
+                  key={i}
+                  style={{
+                    alignSelf: msg.role === "user" ? "flex-end" : "flex-start",
+                    maxWidth: "85%",
+                    padding: "8px 12px",
+                    borderRadius: msg.role === "user" ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
+                    background: msg.role === "user" ? "#c84a20" : "rgba(0,0,0,0.04)",
+                    color: msg.role === "user" ? "#fff" : "#333",
+                    fontSize: 13, lineHeight: 1.5,
+                    whiteSpace: "pre-wrap", wordBreak: "break-word",
+                  }}
+                >
+                  {msg.content}
+                </div>
+              )
+            )}
 
             {/* Action indicators */}
             {currentActions.map((a, i) => (

@@ -281,6 +281,7 @@ def stream_message(
     )
 
     full_response_parts = []
+    completed_actions = []  # Track actions for persistence
 
     try:
         while True:
@@ -331,14 +332,21 @@ def stream_message(
 
                 result = _execute_tool(db, agent, deliberation, tc["name"], tc["arguments"])
 
-                yield ("action_done", {
+                action_event = {
                     "action": tc["name"],
-                    "question": deliberation.question,
-                    "result": result,
                     "description": result.get("description", ""),
                     "detail": result.get("detail", ""),
+                    "status": "error" if "error" in result else "done",
+                }
+
+                yield ("action_done", {
+                    **action_event,
+                    "question": deliberation.question,
+                    "result": result,
                     "tool_call_id": tc["id"],
                 })
+
+                completed_actions.append(action_event)
 
                 llm_messages.append({
                     "role": "tool",
@@ -356,6 +364,10 @@ def stream_message(
         response_text = "".join(full_response_parts)
         if not response_text:
             response_text = "I'm sorry, I had trouble processing that. Could you try again?"
+
+        # Persist completed actions before the assistant text
+        for action in completed_actions:
+            messages.append({"role": "action", **action})
 
         messages.append({"role": "assistant", "content": response_text})
         session.messages = messages
