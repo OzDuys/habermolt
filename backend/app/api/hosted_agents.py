@@ -82,6 +82,12 @@ class ChatSessionSummary(BaseModel):
 class RerankRequest(BaseModel):
     rankings: list  # [{statement_id, rank}]
 
+class RebuildProfileRequest(BaseModel):
+    session_ids: list[str] = []  # empty = all sessions
+
+class DownloadSessionsRequest(BaseModel):
+    session_ids: list[str]
+
 
 # --- Auth helper (same pattern as agents.py) ---
 
@@ -511,6 +517,160 @@ async def rerank_statements(
         return {"status": "ok"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+# --- Profile rebuild & transcript download ---
+
+REBUILD_PROFILE_PROMPT = """\
+You are rebuilding a user profile for a democratic deliberation platform called Habermolt.
+The profile is used by an AI agent to represent this person's values and opinions in group
+discussions on various topics.
+
+## Current Profile
+{current_profile}
+
+## Active Deliberations This Person Participates In
+{deliberation_context}
+
+## Chat Transcripts (newest first)
+{transcripts}
+
+## Instructions
+Produce an updated user profile in markdown. Follow these rules strictly:
+
+1. PRESERVE everything from the current profile that is not contradicted by newer transcripts
+2. ADD new values, opinions, and positions revealed in the transcripts
+3. UPDATE positions where the user has clearly changed their mind — later sessions override earlier ones
+4. ORGANIZE into clear thematic sections (e.g., "Core Values", "AI & Technology", "Governance", etc.)
+5. USE the person's own words and phrasing where possible — do not editorialize or soften
+6. BE CONCISE but comprehensive — every claim must be grounded in something the user actually said
+7. NOTE apparent contradictions briefly rather than silently resolving them
+8. WEIGHT positions expressed repeatedly across multiple sessions higher than one-off remarks
+
+Output ONLY the profile markdown. No preamble, no explanation, no wrapping code fences."""
+
+
+@router.post("/me/profile/rebuild")
+async def rebuild_profile(body: RebuildProfileRequest, req: Request, db: Session = Depends(get_db)):
+    """Use LLM to rebuild agent profile from chat transcripts + deliberation context."""
+    user_id = _require_user_id(req)
+    ha = hosted_agent_service.get_hosted_agent_by_user(db, user_id)
+    if not ha:
+        raise HTTPException(status_code=404, detail="No hosted agent found")
+
+    from app.models.agent_session import AgentSession
+    from app.models.opinion import Opinion
+
+    # Fetch sessions (selected or all, capped at 20 newest)
+    query = db.query(AgentSession).filter(
+        AgentSession.agent_id == ha.agent_id,
+        AgentSession.session_type == "general",
+    )
+    if body.session_ids:
+        query = query.filter(AgentSession.id.in_(body.session_ids))
+    sessions = query.order_by(AgentSession.created_at.desc()).limit(20).all()
+
+    if not sessions:
+        raise HTTPException(status_code=400, detail="No chat sessions found to rebuild from.")
+
+    # Format transcripts (newest first)
+    transcripts = "\n---\n".join(
+        chat_service.format_session_as_markdown(s) for s in sessions
+    )
+
+    # Fetch deliberation context: questions + agent's opinions
+    opinions = (
+        db.query(Opinion, Deliberation)
+        .join(Deliberation, Opinion.deliberation_id == Deliberation.id)
+        .filter(Opinion.agent_id == ha.agent_id)
+        .all()
+    )
+    if opinions:
+        delib_lines = []
+        for opinion, delib in opinions:
+            cats = ", ".join(delib.categories) if delib.categories else "uncategorized"
+            delib_lines.append(f"- **Topic:** {delib.question}\n  **Categories:** {cats}\n  **Their opinion:** {opinion.opinion_text}")
+        deliberation_context = "\n".join(delib_lines)
+    else:
+        deliberation_context = "(No deliberation participation yet)"
+
+    current_profile = ha.user_profile or "(No existing profile)"
+
+    prompt = REBUILD_PROFILE_PROMPT.format(
+        current_profile=current_profile,
+        deliberation_context=deliberation_context,
+        transcripts=transcripts,
+    )
+
+    client = LLMClient(model_name=settings.HOSTED_AGENT_DEFAULT_MODEL)
+    client.set_trace_context(
+        trace_type="profile_rebuild",
+        hosted_agent_id=ha.id,
+        agent_id=ha.agent_id,
+    )
+    proposed = client.sample_text(prompt=prompt, max_tokens=4096, temperature=0.5)
+
+    if not proposed.strip():
+        raise HTTPException(status_code=500, detail="Failed to generate profile. Please try again.")
+
+    return {
+        "proposed_profile": proposed.strip(),
+        "sessions_used": len(sessions),
+        "current_profile": ha.user_profile or "",
+    }
+
+
+@router.get("/me/chat/{session_id}/download")
+async def download_session(session_id: str, req: Request, db: Session = Depends(get_db)):
+    """Download a single chat session as markdown."""
+    user_id = _require_user_id(req)
+    ha = hosted_agent_service.get_hosted_agent_by_user(db, user_id)
+    if not ha:
+        raise HTTPException(status_code=404, detail="No hosted agent found")
+    session = chat_service.get_session_by_id(db, ha, session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Chat session not found")
+
+    from fastapi.responses import Response
+    content = chat_service.format_session_as_markdown(session)
+    date_str = session.created_at.strftime("%Y-%m-%d") if session.created_at else "unknown"
+    filename = f"transcript-{date_str}.md"
+    return Response(
+        content=content,
+        media_type="text/markdown",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.post("/me/chat/download")
+async def download_sessions(body: DownloadSessionsRequest, req: Request, db: Session = Depends(get_db)):
+    """Download multiple chat sessions as a single markdown file."""
+    user_id = _require_user_id(req)
+    ha = hosted_agent_service.get_hosted_agent_by_user(db, user_id)
+    if not ha:
+        raise HTTPException(status_code=404, detail="No hosted agent found")
+
+    from app.models.agent_session import AgentSession
+    from fastapi.responses import Response
+
+    sessions = (
+        db.query(AgentSession)
+        .filter(
+            AgentSession.agent_id == ha.agent_id,
+            AgentSession.id.in_(body.session_ids),
+        )
+        .order_by(AgentSession.created_at.desc())
+        .all()
+    )
+
+    content = "\n\n---\n\n".join(
+        chat_service.format_session_as_markdown(s) for s in sessions
+    )
+    return Response(
+        content=f"# Chat Transcripts\n\n{content}",
+        media_type="text/markdown",
+        headers={"Content-Disposition": 'attachment; filename="transcripts.md"'},
+    )
 
 
 # --- Cron heartbeat ---

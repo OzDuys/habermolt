@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import TokenUsageBar from "@/components/TokenUsageBar";
 
 interface HostedAgent {
@@ -19,6 +19,17 @@ interface HostedAgent {
   created_at: string;
 }
 
+interface SessionSummary {
+  id: string;
+  topic: string | null;
+  message_count: number;
+  created_at: string;
+}
+
+interface SessionMessage {
+  role: string;
+  content?: string;
+}
 
 const MODELS = [
   "google/gemini-2.5-flash",
@@ -44,6 +55,19 @@ export default function HostedAgentDashboard({ onDeleted }: { onDeleted?: () => 
   const [profileMarkdown, setProfileMarkdown] = useState("");
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileDraft, setProfileDraft] = useState("");
+
+  // Transcripts state
+  const [sessions, setSessions] = useState<SessionSummary[]>([]);
+  const [expandedSession, setExpandedSession] = useState<string | null>(null);
+  const [expandedMessages, setExpandedMessages] = useState<SessionMessage[]>([]);
+  const [selectedSessions, setSelectedSessions] = useState<Set<string>>(new Set());
+
+  // Rebuild state
+  const [rebuilding, setRebuilding] = useState(false);
+  const [rebuildMode, setRebuildMode] = useState(false);
+  const [proposedProfile, setProposedProfile] = useState("");
+  const [rebuildTab, setRebuildTab] = useState<"current" | "proposed">("proposed");
+
   useEffect(() => {
     fetchAgent();
   }, []);
@@ -58,6 +82,7 @@ export default function HostedAgentDashboard({ onDeleted }: { onDeleted?: () => 
       setAgent(data);
       setNotFound(false);
       fetchProfile();
+      fetchSessions();
     } catch { setError("Failed to load agent."); }
     finally { setLoading(false); }
   };
@@ -68,6 +93,16 @@ export default function HostedAgentDashboard({ onDeleted }: { onDeleted?: () => 
       if (res.ok) {
         const data = await res.json();
         setProfileMarkdown(data.profile_markdown || "");
+      }
+    } catch {}
+  };
+
+  const fetchSessions = async () => {
+    try {
+      const res = await fetch("/api/hosted-agent/chat/history");
+      if (res.ok) {
+        const data = await res.json();
+        setSessions(data);
       }
     } catch {}
   };
@@ -119,16 +154,118 @@ export default function HostedAgentDashboard({ onDeleted }: { onDeleted?: () => 
     finally { setSaving(false); }
   };
 
+  const toggleExpand = async (sessionId: string) => {
+    if (expandedSession === sessionId) {
+      setExpandedSession(null);
+      return;
+    }
+    setExpandedSession(sessionId);
+    try {
+      const res = await fetch(`/api/hosted-agent/chat/${sessionId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setExpandedMessages(data.messages || []);
+      }
+    } catch {}
+  };
+
+  const toggleSelect = (sessionId: string) => {
+    setSelectedSessions(prev => {
+      const next = new Set(prev);
+      if (next.has(sessionId)) next.delete(sessionId);
+      else next.add(sessionId);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedSessions.size === sessions.length) {
+      setSelectedSessions(new Set());
+    } else {
+      setSelectedSessions(new Set(sessions.map(s => s.id)));
+    }
+  };
+
+  const handleDownloadSession = (sessionId: string) => {
+    window.open(`/api/hosted-agent/chat/${sessionId}/download`, "_blank");
+  };
+
+  const handleDownloadSelected = async () => {
+    if (selectedSessions.size === 0) return;
+    const res = await fetch("/api/hosted-agent/chat/download", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session_ids: Array.from(selectedSessions) }),
+    });
+    if (res.ok) {
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "transcripts.md";
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+  };
+
+  const handleRebuild = async () => {
+    setRebuilding(true);
+    setError("");
+    try {
+      const sessionIds = selectedSessions.size > 0 ? Array.from(selectedSessions) : [];
+      const res = await fetch("/api/hosted-agent/profile/rebuild", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_ids: sessionIds }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        setError(data.detail || "Failed to rebuild profile.");
+        return;
+      }
+      const data = await res.json();
+      setProposedProfile(data.proposed_profile);
+      setRebuildTab("proposed");
+      setRebuildMode(false); // exit selection mode, show preview
+    } catch {
+      setError("Failed to rebuild profile. Please try again.");
+    } finally {
+      setRebuilding(false);
+    }
+  };
+
+  const handleAcceptRebuild = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch("/api/hosted-agent/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profile_markdown: proposedProfile }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setProfileMarkdown(data.profile_markdown);
+        setProposedProfile("");
+        setRebuildTab("proposed");
+      }
+    } catch {}
+    finally { setSaving(false); }
+  };
+
+  const handleCancelRebuild = () => {
+    setProposedProfile("");
+    setRebuildMode(false);
+  };
+
   if (loading) {
     return <div className="py-8 text-center text-sm" style={{ color: "var(--muted)" }}>Loading...</div>;
   }
 
-  // Agent creation now happens at /create-agent
   if (notFound) return null;
-
   if (!agent) return null;
 
-  // === AGENT DASHBOARD ===
+  const hasProposal = proposedProfile.length > 0;
+
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
@@ -155,8 +292,47 @@ export default function HostedAgentDashboard({ onDeleted }: { onDeleted?: () => 
       )}
 
       <div className="space-y-4">
+        {/* Profile Section */}
         <Section title="Your Profile">
-          {profileMarkdown ? (
+          {hasProposal ? (
+            <div>
+              <div className="mb-3 flex gap-1">
+                <button
+                  onClick={() => setRebuildTab("current")}
+                  className={`rounded-lg px-3 py-1 text-xs font-medium transition-opacity ${rebuildTab === "current" ? "text-white" : ""}`}
+                  style={{ background: rebuildTab === "current" ? "var(--accent)" : "var(--border)" }}
+                >
+                  Current
+                </button>
+                <button
+                  onClick={() => setRebuildTab("proposed")}
+                  className={`rounded-lg px-3 py-1 text-xs font-medium transition-opacity ${rebuildTab === "proposed" ? "text-white" : ""}`}
+                  style={{ background: rebuildTab === "proposed" ? "var(--accent)" : "var(--border)" }}
+                >
+                  Proposed
+                </button>
+              </div>
+              {rebuildTab === "current" ? (
+                <pre className="whitespace-pre-wrap text-xs" style={{ color: "var(--foreground)" }}>{profileMarkdown || "(empty)"}</pre>
+              ) : (
+                <textarea
+                  value={proposedProfile}
+                  onChange={(e) => setProposedProfile(e.target.value)}
+                  className="w-full rounded-lg border p-3 font-mono text-xs"
+                  style={{ borderColor: "var(--border)", background: "var(--background)", minHeight: "200px" }}
+                  rows={14}
+                />
+              )}
+              <div className="mt-2 flex gap-2">
+                <button onClick={handleAcceptRebuild} disabled={saving} className="rounded-lg px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50" style={{ background: "var(--accent)" }}>
+                  {saving ? "Saving..." : "Accept Profile"}
+                </button>
+                <button onClick={handleCancelRebuild} className="rounded-lg border px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-80" style={{ borderColor: "var(--border)" }}>
+                  Discard
+                </button>
+              </div>
+            </div>
+          ) : profileMarkdown ? (
             editingProfile ? (
               <div>
                 <textarea
@@ -178,19 +354,149 @@ export default function HostedAgentDashboard({ onDeleted }: { onDeleted?: () => 
             ) : (
               <div>
                 <pre className="whitespace-pre-wrap text-xs" style={{ color: "var(--foreground)" }}>{profileMarkdown}</pre>
-                <button
-                  onClick={() => { setProfileDraft(profileMarkdown); setEditingProfile(true); }}
-                  className="mt-2 rounded-lg border px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-80"
-                  style={{ borderColor: "var(--border)" }}
-                >
-                  Edit Profile
-                </button>
+                <div className="mt-2 flex gap-2">
+                  <button
+                    onClick={() => { setProfileDraft(profileMarkdown); setEditingProfile(true); }}
+                    className="rounded-lg border px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-80"
+                    style={{ borderColor: "var(--border)" }}
+                  >
+                    Edit Profile
+                  </button>
+                  <button
+                    onClick={() => { setRebuildMode(true); setSelectedSessions(new Set(sessions.map(s => s.id))); }}
+                    className="rounded-lg border px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-80"
+                    style={{ borderColor: "var(--border)" }}
+                    disabled={sessions.length === 0}
+                  >
+                    Rebuild from Transcripts
+                  </button>
+                </div>
               </div>
             )
           ) : (
-            <p className="text-xs" style={{ color: "var(--muted)" }}>No profile yet. Chat with your agent to build your profile.</p>
+            <div>
+              <p className="text-xs" style={{ color: "var(--muted)" }}>No profile yet. Chat with your agent to build your profile.</p>
+              {sessions.length > 0 && (
+                <button
+                  onClick={() => { setRebuildMode(true); setSelectedSessions(new Set(sessions.map(s => s.id))); }}
+                  className="mt-2 rounded-lg border px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-80"
+                  style={{ borderColor: "var(--border)" }}
+                >
+                  Rebuild from Transcripts
+                </button>
+              )}
+            </div>
           )}
         </Section>
+
+        {/* Transcripts Section */}
+        {sessions.length > 0 && (
+          <Section title="Chat Transcripts">
+            {/* Rebuild action bar */}
+            {rebuildMode && (
+              <div className="mb-3 flex items-center justify-between rounded-lg p-2" style={{ background: "var(--background)" }}>
+                <span className="text-xs" style={{ color: "var(--muted)" }}>
+                  {selectedSessions.size} of {sessions.length} selected
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleRebuild}
+                    disabled={rebuilding || selectedSessions.size === 0}
+                    className="rounded-lg px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                    style={{ background: "var(--accent)" }}
+                  >
+                    {rebuilding ? "Analyzing transcripts..." : `Rebuild from ${selectedSessions.size} transcript${selectedSessions.size !== 1 ? "s" : ""}`}
+                  </button>
+                  <button
+                    onClick={() => { setRebuildMode(false); setSelectedSessions(new Set()); }}
+                    className="rounded-lg border px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-80"
+                    style={{ borderColor: "var(--border)" }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Controls */}
+            <div className="mb-2 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                {rebuildMode && (
+                  <label className="flex items-center gap-1.5 text-xs cursor-pointer" style={{ color: "var(--muted)" }}>
+                    <input
+                      type="checkbox"
+                      checked={selectedSessions.size === sessions.length}
+                      onChange={toggleSelectAll}
+                      className="rounded"
+                    />
+                    Select all
+                  </label>
+                )}
+              </div>
+              {selectedSessions.size > 0 && !rebuildMode && (
+                <button
+                  onClick={handleDownloadSelected}
+                  className="text-xs font-medium transition-opacity hover:opacity-80"
+                  style={{ color: "var(--accent)" }}
+                >
+                  Download selected ({selectedSessions.size})
+                </button>
+              )}
+            </div>
+
+            {/* Session list */}
+            <div className="space-y-1">
+              {sessions.map((s) => (
+                <div key={s.id}>
+                  <div
+                    className="flex items-center gap-2 rounded-lg p-2 text-xs transition-colors hover:opacity-80 cursor-pointer"
+                    style={{ background: expandedSession === s.id ? "var(--background)" : "transparent" }}
+                  >
+                    {rebuildMode && (
+                      <input
+                        type="checkbox"
+                        checked={selectedSessions.has(s.id)}
+                        onChange={() => toggleSelect(s.id)}
+                        className="rounded"
+                      />
+                    )}
+                    <div className="flex-1" onClick={() => toggleExpand(s.id)}>
+                      <span style={{ color: "var(--foreground)" }}>{s.topic || "General chat"}</span>
+                      <span className="ml-2" style={{ color: "var(--muted)" }}>
+                        {new Date(s.created_at).toLocaleDateString()} · {s.message_count} messages
+                      </span>
+                    </div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleDownloadSession(s.id); }}
+                      className="text-xs transition-opacity hover:opacity-80"
+                      style={{ color: "var(--muted)" }}
+                      title="Download"
+                    >
+                      ↓
+                    </button>
+                  </div>
+                  {expandedSession === s.id && (
+                    <div className="ml-4 mb-2 rounded-lg border p-3 text-xs space-y-2" style={{ borderColor: "var(--border)", background: "var(--background)" }}>
+                      {expandedMessages
+                        .filter((m) => (m.role === "user" || m.role === "assistant") && m.content)
+                        .map((m, i) => (
+                          <div key={i}>
+                            <span className="font-semibold" style={{ color: m.role === "user" ? "var(--accent)" : "var(--muted)" }}>
+                              {m.role === "user" ? "You" : "Agent"}:
+                            </span>{" "}
+                            <span style={{ color: "var(--foreground)" }}>{m.content}</span>
+                          </div>
+                        ))}
+                      {expandedMessages.filter(m => (m.role === "user" || m.role === "assistant") && m.content).length === 0 && (
+                        <span style={{ color: "var(--muted)" }}>Empty session</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </Section>
+        )}
 
         <Section title="Configuration">
           <Field label="Name">{agent.display_name}</Field>

@@ -448,6 +448,28 @@ def _extract_profile_update(text: str) -> tuple[str, Optional[str]]:
     return clean_text, profile_text
 
 
+def format_session_as_markdown(session: AgentSession) -> str:
+    """Format a chat session as readable markdown for export/rebuild."""
+    lines = []
+    date_str = session.created_at.strftime("%Y-%m-%d %H:%M") if session.created_at else "Unknown date"
+    topic = session.topic or "General chat"
+    lines.append(f"## {topic} — {date_str}")
+    lines.append("")
+
+    for msg in (session.messages or []):
+        role = msg.get("role", "")
+        content = msg.get("content", "")
+        if role == "user" and content:
+            lines.append(f"**Human:** {content}")
+            lines.append("")
+        elif role == "assistant" and content:
+            lines.append(f"**Agent:** {content}")
+            lines.append("")
+        # Skip tool calls, tool results, and action messages
+
+    return "\n".join(lines)
+
+
 def add_agent_message(
     db: Session,
     hosted_agent: HostedAgent,
