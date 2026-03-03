@@ -482,18 +482,21 @@ function ThumbButton({
       whileTap={{ scale: 0.9 }}
       onClick={onClick}
       style={{
-        width: 40, height: 40, borderRadius: 12,
-        border: active ? "1.5px solid rgba(200,74,32,0.3)" : "1.5px solid rgba(0,0,0,0.06)",
-        background: active ? "rgba(200,74,32,0.08)" : "rgba(255,255,255,0.5)",
+        width: 28, height: 28, borderRadius: 8,
+        border: active ? "1.5px solid rgba(200,74,32,0.3)" : "1.5px solid rgba(0,0,0,0.08)",
+        background: active ? "rgba(200,74,32,0.08)" : "rgba(255,255,255,0.6)",
         cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-        fontSize: 18, transition: "all 0.2s",
+        transition: "all 0.2s",
       }}
     >
-      <span style={{
-        display: "inline-block",
-        transform: isUp ? "none" : "scaleY(-1)",
-        filter: active ? "none" : "grayscale(1) opacity(0.4)",
-      }}>👍</span>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+        stroke={active ? "#c84a20" : "#aaa"} strokeWidth="2"
+        strokeLinecap="round" strokeLinejoin="round"
+        style={{ transform: isUp ? "none" : "rotate(180deg)" }}
+      >
+        <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3H14z" />
+        <path d="M7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3" />
+      </svg>
     </motion.button>
   );
 }
@@ -598,7 +601,6 @@ function ConsensusRatingWidget({
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }}
       transition={{ delay: 0.5 }}
-      style={{ width: "100%", marginTop: 12 }}
     >
       {consensusChanged && (
         <div style={{
@@ -610,10 +612,11 @@ function ConsensusRatingWidget({
         </div>
       )}
 
-      {/* Thumbs row */}
+      {/* Thumbs — pinned to bottom-right of parent card */}
       {!expanded && (
         <div style={{
-          display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8,
+          position: "absolute", bottom: 14, right: 16,
+          display: "flex", alignItems: "center", gap: 5,
         }}>
           {existing && !consensusChanged && (
             <span style={{ fontSize: 11, color: "#999" }}>rated</span>
@@ -1013,7 +1016,7 @@ export default function LiveDeliberationPage() {
                 {winner.title && (
                   <div style={{ fontSize: 15, fontWeight: 700, color: "#1a1a1a", marginBottom: 10 }}>{winner.title}</div>
                 )}
-                <p style={{ fontSize: "clamp(14px, 2vw, 16px)", fontWeight: 500, color: "#333", lineHeight: 1.75, margin: 0 }}>
+                <p style={{ fontSize: "clamp(14px, 2vw, 16px)", fontWeight: 500, color: "#333", lineHeight: 1.75, margin: "0 0 28px 0" }}>
                   {winner.statement_text}
                 </p>
                 {/* Rating thumbs — bottom right of card */}
