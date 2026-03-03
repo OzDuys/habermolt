@@ -13,7 +13,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from app.models.hosted_agent import HostedAgent
-from app.models.interview_session import HostedAgentChatSession
+from app.models.agent_session import AgentSession
 from app.services.hosted_agent_service import get_llm_client
 from app.services.agent_tools import get_tool_schemas, execute_tool
 
@@ -80,16 +80,19 @@ def get_or_create_session(
     db: Session,
     hosted_agent: HostedAgent,
     topic: str = None,
-) -> HostedAgentChatSession:
+) -> AgentSession:
     """Get the most recent session if it has no messages yet, otherwise create a new one.
 
     Every user interaction starts a fresh session (like ChatGPT). Empty sessions
     are reused to avoid creating orphans when the page loads without chatting.
     """
     session = (
-        db.query(HostedAgentChatSession)
-        .filter(HostedAgentChatSession.hosted_agent_id == hosted_agent.id)
-        .order_by(HostedAgentChatSession.created_at.desc())
+        db.query(AgentSession)
+        .filter(
+            AgentSession.agent_id == hosted_agent.agent_id,
+            AgentSession.session_type == "general",
+        )
+        .order_by(AgentSession.created_at.desc())
         .first()
     )
     # Reuse the latest session only if it's still empty (no messages yet)
@@ -103,9 +106,11 @@ def _create_session(
     db: Session,
     hosted_agent: HostedAgent,
     topic: str = None,
-) -> HostedAgentChatSession:
-    session = HostedAgentChatSession(
-        hosted_agent_id=hosted_agent.id,
+) -> AgentSession:
+    session = AgentSession(
+        agent_id=hosted_agent.agent_id,
+        user_id=hosted_agent.user_id,
+        session_type="general",
         topic=topic,
         messages=[],
     )
@@ -115,39 +120,45 @@ def _create_session(
     return session
 
 
-def get_current_session(db: Session, hosted_agent: HostedAgent) -> Optional[HostedAgentChatSession]:
-    """Get the most recent session."""
+def get_current_session(db: Session, hosted_agent: HostedAgent) -> Optional[AgentSession]:
+    """Get the most recent general chat session."""
     return (
-        db.query(HostedAgentChatSession)
-        .filter(HostedAgentChatSession.hosted_agent_id == hosted_agent.id)
-        .order_by(HostedAgentChatSession.created_at.desc())
+        db.query(AgentSession)
+        .filter(
+            AgentSession.agent_id == hosted_agent.agent_id,
+            AgentSession.session_type == "general",
+        )
+        .order_by(AgentSession.created_at.desc())
         .first()
     )
 
 
-def get_session_by_id(db: Session, hosted_agent: HostedAgent, session_id: str) -> Optional[HostedAgentChatSession]:
+def get_session_by_id(db: Session, hosted_agent: HostedAgent, session_id: str) -> Optional[AgentSession]:
     """Get a specific chat session by ID, scoped to the hosted agent."""
     return (
-        db.query(HostedAgentChatSession)
+        db.query(AgentSession)
         .filter(
-            HostedAgentChatSession.id == session_id,
-            HostedAgentChatSession.hosted_agent_id == hosted_agent.id,
+            AgentSession.id == session_id,
+            AgentSession.agent_id == hosted_agent.agent_id,
         )
         .first()
     )
 
 
-def get_all_sessions(db: Session, hosted_agent: HostedAgent) -> list[HostedAgentChatSession]:
-    """Get all chat sessions for a hosted agent."""
+def get_all_sessions(db: Session, hosted_agent: HostedAgent) -> list[AgentSession]:
+    """Get all general chat sessions for a hosted agent."""
     return (
-        db.query(HostedAgentChatSession)
-        .filter(HostedAgentChatSession.hosted_agent_id == hosted_agent.id)
-        .order_by(HostedAgentChatSession.created_at.desc())
+        db.query(AgentSession)
+        .filter(
+            AgentSession.agent_id == hosted_agent.agent_id,
+            AgentSession.session_type == "general",
+        )
+        .order_by(AgentSession.created_at.desc())
         .all()
     )
 
 
-def _build_system_prompt(hosted_agent: HostedAgent, session: HostedAgentChatSession) -> str:
+def _build_system_prompt(hosted_agent: HostedAgent, session: AgentSession) -> str:
     """Build the system prompt with context."""
     context_parts = []
 
@@ -187,7 +198,7 @@ def _build_llm_messages(system_prompt: str, conversation: list[dict]) -> list[di
 def add_user_message(
     db: Session,
     hosted_agent: HostedAgent,
-    session: HostedAgentChatSession,
+    session: AgentSession,
     user_content: str,
 ) -> str:
     """Add a user message with tool calling, return assistant text response."""
@@ -256,7 +267,7 @@ def add_user_message(
 def stream_user_message(
     db: Session,
     hosted_agent: HostedAgent,
-    session: HostedAgentChatSession,
+    session: AgentSession,
     user_content: str,
 ):
     """Stream a user message response with tool calling support.
@@ -442,7 +453,7 @@ def add_agent_message(
     hosted_agent: HostedAgent,
     content: str,
     topic: str = None,
-) -> HostedAgentChatSession:
+) -> AgentSession:
     """Add an agent-initiated message to the latest chat session (or create one).
 
     Used by the heartbeat runner to post messages like interview requests,
@@ -462,7 +473,7 @@ def add_agent_message(
 def get_initial_greeting(
     db: Session,
     hosted_agent: HostedAgent,
-    session: HostedAgentChatSession,
+    session: AgentSession,
 ) -> str:
     """Generate the first message from the agent and store it in the session."""
     system_prompt = _build_system_prompt(hosted_agent, session)

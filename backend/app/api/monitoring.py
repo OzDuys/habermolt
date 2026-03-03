@@ -22,7 +22,7 @@ from app.database import get_db
 from app.models import (
     Agent, Deliberation, Opinion, Statement, Ranking,
     PlatformFeedback, LLMTrace, AgentRequestLog, WaitlistEmail,
-    HostedAgent, HostedAgentChatSession, Notification, ModerationLog,
+    HostedAgent, AgentSession, Notification, ModerationLog,
 )
 from app.schemas.monitoring import (
     LLMTraceResponse, LLMTraceListResponse,
@@ -47,7 +47,7 @@ TABLE_MAP = {
     "agent_request_logs": AgentRequestLog,
     "waitlist_emails": WaitlistEmail,
     "hosted_agents": HostedAgent,
-    "hosted_agent_chat_sessions": HostedAgentChatSession,
+    "agent_sessions": AgentSession,
     "notifications": Notification,
     "moderation_logs": ModerationLog,
 }

@@ -15,7 +15,7 @@ from app.config import settings
 from app.database import get_db, SessionLocal
 from app.models import Agent, Deliberation
 from app.models.hosted_agent import HostedAgent
-from app.models.interview_session import HostedAgentChatSession
+from app.models.agent_session import AgentSession
 from app.services import deliberation_chat_service
 
 logger = logging.getLogger(__name__)
@@ -101,9 +101,9 @@ async def send_chat_message(
     user_id = _require_user_id(req)
     hosted = _find_hosted_agent(db, user_id)
 
-    session = db.query(HostedAgentChatSession).filter(
-        HostedAgentChatSession.id == session_id,
-        HostedAgentChatSession.hosted_agent_id == hosted.id,
+    session = db.query(AgentSession).filter(
+        AgentSession.id == session_id,
+        AgentSession.agent_id == hosted.agent_id,
     ).first()
     if not session:
         raise HTTPException(status_code=404, detail="Chat session not found.")
@@ -115,7 +115,7 @@ async def send_chat_message(
     def event_stream():
         stream_db = SessionLocal()
         try:
-            stream_session = stream_db.query(HostedAgentChatSession).get(session_id_val)
+            stream_session = stream_db.query(AgentSession).get(session_id_val)
             stream_agent = stream_db.query(Agent).get(agent_id_val)
             stream_delib = stream_db.query(Deliberation).get(deliberation_id_val)
 

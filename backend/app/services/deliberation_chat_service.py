@@ -1,7 +1,7 @@
 """
 Deliberation Chat Service — ongoing chat for deliberation participants.
 
-Uses HostedAgentChatSession with deliberation_id set. Unlike the topic interview
+Uses AgentSession with deliberation_id set. Unlike the topic interview
 (one-time, focused on extracting an opinion), this is an ongoing assistant
 that helps participants update opinions, rerank statements, and propose consensus.
 """
@@ -15,7 +15,7 @@ from sqlalchemy import and_
 from app.config import settings
 from app.models import Agent, Deliberation, Opinion, Statement, Ranking
 from app.models.hosted_agent import HostedAgent
-from app.models.interview_session import HostedAgentChatSession
+from app.models.agent_session import AgentSession
 from app.services.continuous_deliberation_service import ContinuousDeliberationService
 from app.services.llm_client import LLMClient
 
@@ -191,20 +191,23 @@ def _build_context(db: Session, agent: Agent, deliberation: Deliberation) -> dic
 
 def get_or_create_session(
     db: Session, hosted_agent: HostedAgent, deliberation: Deliberation,
-) -> HostedAgentChatSession:
+) -> AgentSession:
     """Get existing deliberation chat session or create a new one."""
-    existing = db.query(HostedAgentChatSession).filter(
+    existing = db.query(AgentSession).filter(
         and_(
-            HostedAgentChatSession.hosted_agent_id == hosted_agent.id,
-            HostedAgentChatSession.deliberation_id == deliberation.id,
+            AgentSession.agent_id == hosted_agent.agent_id,
+            AgentSession.deliberation_id == deliberation.id,
+            AgentSession.session_type == "deliberation_chat",
         )
     ).first()
     if existing:
         return existing
 
-    session = HostedAgentChatSession(
-        hosted_agent_id=hosted_agent.id,
+    session = AgentSession(
+        agent_id=hosted_agent.agent_id,
+        user_id=hosted_agent.user_id,
         deliberation_id=deliberation.id,
+        session_type="deliberation_chat",
         topic=f"deliberation:{deliberation.id}",
         messages=[],
     )
@@ -248,7 +251,7 @@ def stream_message(
     db: Session,
     agent: Agent,
     deliberation: Deliberation,
-    session: HostedAgentChatSession,
+    session: AgentSession,
     user_content: str,
 ):
     """Stream a deliberation chat turn with tool calling support.

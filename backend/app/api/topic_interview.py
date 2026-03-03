@@ -18,7 +18,7 @@ from app.database import get_db, SessionLocal
 from app.models import Agent, Deliberation
 from app.models.hosted_agent import HostedAgent
 from app.models.deliberation_member import DeliberationMember
-from app.models.topic_interview_session import TopicInterviewSession
+from app.models.agent_session import AgentSession
 from app.services import topic_interview_service, hosted_agent_service
 
 logger = logging.getLogger(__name__)
@@ -93,11 +93,12 @@ async def start_interview(
         raise HTTPException(status_code=404, detail="Deliberation not found.")
 
     # Check if there's already an active session for this agent + deliberation
-    existing = db.query(TopicInterviewSession).filter(
+    existing = db.query(AgentSession).filter(
         and_(
-            TopicInterviewSession.agent_id == agent.id,
-            TopicInterviewSession.deliberation_id == deliberation.id,
-            TopicInterviewSession.status == "active",
+            AgentSession.agent_id == agent.id,
+            AgentSession.deliberation_id == deliberation.id,
+            AgentSession.session_type == "deliberation_join",
+            AgentSession.status == "active",
         )
     ).first()
     if existing:
@@ -168,11 +169,12 @@ async def join_and_start_interview(
             db.commit()
 
     # Check if there's already an active session
-    existing_session = db.query(TopicInterviewSession).filter(
+    existing_session = db.query(AgentSession).filter(
         and_(
-            TopicInterviewSession.agent_id == agent.id,
-            TopicInterviewSession.deliberation_id == deliberation.id,
-            TopicInterviewSession.status == "active",
+            AgentSession.agent_id == agent.id,
+            AgentSession.deliberation_id == deliberation.id,
+            AgentSession.session_type == "deliberation_join",
+            AgentSession.status == "active",
         )
     ).first()
     if existing_session:
@@ -221,7 +223,7 @@ async def send_interview_message(
     def event_stream():
         stream_db = SessionLocal()
         try:
-            stream_session = stream_db.query(TopicInterviewSession).get(session_id_val)
+            stream_session = stream_db.query(AgentSession).get(session_id_val)
             stream_agent = stream_db.query(Agent).get(agent_id_val)
             stream_delib = stream_db.query(Deliberation).get(deliberation_id_val)
 

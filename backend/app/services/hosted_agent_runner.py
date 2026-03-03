@@ -23,7 +23,7 @@ from app.models import (
     Ranking,
     Statement,
 )
-from app.models.interview_session import HostedAgentChatSession
+from app.models.agent_session import AgentSession
 from app.models.deliberation_member import DeliberationMember
 from app.models.hosted_agent import HostedAgent
 from app.services.hosted_agent_service import (
@@ -323,13 +323,16 @@ def run_single_hosted_agent(db: Session, hosted_agent: HostedAgent) -> dict:
     sanitized_actions = json.loads(json.dumps(structured_actions, default=str))
 
     session = (
-        db.query(HostedAgentChatSession)
-        .filter(HostedAgentChatSession.hosted_agent_id == hosted_agent.id)
-        .order_by(HostedAgentChatSession.created_at.desc())
+        db.query(AgentSession)
+        .filter(
+            AgentSession.agent_id == hosted_agent.agent_id,
+            AgentSession.session_type == "general",
+        )
+        .order_by(AgentSession.created_at.desc())
         .first()
     )
     if not session:
-        session = HostedAgentChatSession(hosted_agent_id=hosted_agent.id, messages=[])
+        session = AgentSession(agent_id=hosted_agent.agent_id, user_id=hosted_agent.user_id, session_type="general", messages=[])
         db.add(session)
         db.flush()
 
@@ -460,13 +463,16 @@ def run_single_hosted_agent_stream(db: Session, hosted_agent: HostedAgent):
 
     # Get or create a chat session to store heartbeat actions
     session = (
-        db.query(HostedAgentChatSession)
-        .filter(HostedAgentChatSession.hosted_agent_id == hosted_agent.id)
-        .order_by(HostedAgentChatSession.created_at.desc())
+        db.query(AgentSession)
+        .filter(
+            AgentSession.agent_id == hosted_agent.agent_id,
+            AgentSession.session_type == "general",
+        )
+        .order_by(AgentSession.created_at.desc())
         .first()
     )
     if not session:
-        session = HostedAgentChatSession(hosted_agent_id=hosted_agent.id, messages=[])
+        session = AgentSession(agent_id=hosted_agent.agent_id, user_id=hosted_agent.user_id, session_type="general", messages=[])
         db.add(session)
         db.flush()
 

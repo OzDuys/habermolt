@@ -54,12 +54,6 @@ class HostedAgent(Base):
 
     # Relationships
     agent = relationship("Agent", backref="hosted_agent", uselist=False)
-    chat_sessions = relationship(
-        "HostedAgentChatSession",
-        back_populates="hosted_agent",
-        cascade="all, delete-orphan",
-        order_by="HostedAgentChatSession.created_at.desc()",
-    )
 
     def __repr__(self) -> str:
         return f"<HostedAgent(display_name='{self.display_name}', tier='{self.pricing_tier}')>"

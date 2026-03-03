@@ -16,11 +16,10 @@ from app.models.waitlist import WaitlistEmail
 from app.models.agent_rating import AgentRating
 from app.models.consensus_rating import ConsensusRating
 from app.models.hosted_agent import HostedAgent
-from app.models.interview_session import HostedAgentChatSession
+from app.models.agent_session import AgentSession
 from app.models.notification import Notification
 from app.models.deliberation_member import DeliberationMember
 from app.models.moderation_log import ModerationLog
-from app.models.topic_interview_session import TopicInterviewSession
 
 __all__ = [
     "Agent",
@@ -36,9 +35,8 @@ __all__ = [
     "AgentRating",
     "ConsensusRating",
     "HostedAgent",
-    "HostedAgentChatSession",
+    "AgentSession",
     "Notification",
     "DeliberationMember",
     "ModerationLog",
-    "TopicInterviewSession",
 ]

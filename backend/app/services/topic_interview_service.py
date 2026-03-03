@@ -23,7 +23,7 @@ from sqlalchemy import and_, func
 from app.config import settings
 from app.models import Agent, Deliberation, DeliberationStage, Opinion, Statement
 from app.models.hosted_agent import HostedAgent
-from app.models.topic_interview_session import TopicInterviewSession
+from app.models.agent_session import AgentSession
 from app.services.continuous_deliberation_service import ContinuousDeliberationService
 from app.services.llm_client import LLMClient
 
@@ -155,12 +155,13 @@ def create_session(
     agent: Agent,
     deliberation: Deliberation,
     user_id: str,
-) -> TopicInterviewSession:
+) -> AgentSession:
     """Create a new topic interview session."""
-    session = TopicInterviewSession(
+    session = AgentSession(
         agent_id=agent.id,
         deliberation_id=deliberation.id,
         user_id=user_id,
+        session_type="deliberation_join",
         messages=[],
         status="active",
     )
@@ -170,11 +171,11 @@ def create_session(
     return session
 
 
-def get_session(db: Session, session_id: str, user_id: str) -> Optional[TopicInterviewSession]:
+def get_session(db: Session, session_id: str, user_id: str) -> Optional[AgentSession]:
     """Get a session by ID, scoped to a user."""
-    return db.query(TopicInterviewSession).filter(
-        TopicInterviewSession.id == session_id,
-        TopicInterviewSession.user_id == user_id,
+    return db.query(AgentSession).filter(
+        AgentSession.id == session_id,
+        AgentSession.user_id == user_id,
     ).first()
 
 
@@ -182,7 +183,7 @@ def generate_greeting(
     db: Session,
     agent: Agent,
     deliberation: Deliberation,
-    session: TopicInterviewSession,
+    session: AgentSession,
 ) -> str:
     """Generate the initial greeting message for the interview."""
     profile_context = _get_profile_context(db, agent)
@@ -220,7 +221,7 @@ def stream_message(
     db: Session,
     agent: Agent,
     deliberation: Deliberation,
-    session: TopicInterviewSession,
+    session: AgentSession,
     user_content: str,
 ):
     """Stream a topic interview turn with tool calling support.
@@ -339,7 +340,7 @@ def _execute_tool(
     db: Session,
     agent: Agent,
     deliberation: Deliberation,
-    session: TopicInterviewSession,
+    session: AgentSession,
     tool_name: str,
     arguments: dict,
 ) -> dict:
@@ -360,7 +361,7 @@ def _exec_submit_opinion(
     db: Session,
     agent: Agent,
     deliberation: Deliberation,
-    session: TopicInterviewSession,
+    session: AgentSession,
     opinion_text: str,
 ) -> dict:
     """Submit opinion and trigger post-interview actions (seed statements, ranking, consensus)."""
