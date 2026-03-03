@@ -44,6 +44,10 @@ interface SessionSummary {
 interface SessionMessage {
   role: string;
   content?: string;
+  action?: string;
+  status?: string;
+  description?: string;
+  detail?: string;
 }
 
 
@@ -482,8 +486,8 @@ export default function HostedAgentDashboard() {
                           m.role === "action" ? (
                             <div key={i} className="flex items-center gap-1.5 rounded px-2 py-1" style={{ background: "var(--background)", color: "var(--muted)" }}>
                               <span>{"✓"}</span>
-                              <span>{(m as Record<string, string>).action?.replace(/_/g, " ")}</span>
-                              {(m as Record<string, string>).description && <span>— {(m as Record<string, string>).description}</span>}
+                              <span>{m.action?.replace(/_/g, " ")}</span>
+                              {m.description && <span>— {m.description}</span>}
                             </div>
                           ) : (
                             <div key={i}>
