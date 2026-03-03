@@ -168,6 +168,83 @@ async def generate_names(db: Session = Depends(get_db)):
     return names[:8]
 
 
+class SeedQuestionsRequest(BaseModel):
+    deliberation_ids: list[str]
+
+
+@router.post("/seed-questions")
+async def generate_seed_questions(
+    body: SeedQuestionsRequest,
+    db: Session = Depends(get_db),
+):
+    """Generate 3 seed value-mapping questions tailored to the user's selected deliberation topics."""
+    if not body.deliberation_ids:
+        raise HTTPException(status_code=400, detail="No deliberation IDs provided")
+
+    delibs = db.query(Deliberation).filter(
+        Deliberation.id.in_(body.deliberation_ids)
+    ).all()
+    if not delibs:
+        raise HTTPException(status_code=404, detail="No deliberations found")
+
+    topics = "\n".join(f"- {d.question}" for d in delibs)
+
+    client = LLMClient()
+    prompt = f"""The user has selected these deliberation topics they care about:
+
+{topics}
+
+Generate exactly 3 quick multiple-choice questions that will help an AI agent understand the user's values and positions relevant to these topics. Each question should:
+- Be a short, conversational "are you more X or Y?" style question
+- Have exactly 3 choices
+- Each choice maps to a value statement (a markdown bullet point starting with "- ")
+- Have a brief subtext explaining why this question matters
+
+Also write a 1-2 sentence summary of what kinds of topics and themes this person is interested in, based on the deliberations they chose.
+
+Return valid JSON only, no markdown fences. Format:
+{{
+  "interests_summary": "A short summary of the user's interests based on their selected topics.",
+  "questions": [
+    {{
+      "id": "short_id",
+      "prompt": "The question text",
+      "subtext": "Why this helps",
+      "choices": [
+        {{"label": "Short choice label", "valueStatement": "- Full value statement for the agent's profile"}},
+        {{"label": "Short choice label", "valueStatement": "- Full value statement for the agent's profile"}},
+        {{"label": "Short choice label", "valueStatement": "- Full value statement for the agent's profile"}}
+      ]
+    }}
+  ]
+}}"""
+
+    result = client.sample_text(prompt=prompt, temperature=0.7, max_tokens=1500)
+
+    # Parse JSON from response (strip markdown fences if present)
+    text = result.strip()
+    if text.startswith("```"):
+        text = text.split("\n", 1)[1]
+        if text.endswith("```"):
+            text = text[:-3]
+        text = text.strip()
+
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=500, detail="Failed to parse generated questions")
+
+    # Handle both formats: wrapper object or bare array
+    if isinstance(parsed, list):
+        questions = parsed
+        interests_summary = ""
+    else:
+        questions = parsed.get("questions", [])
+        interests_summary = parsed.get("interests_summary", "")
+
+    return {"questions": questions[:3], "interests_summary": interests_summary}
+
+
 @router.post("", status_code=201)
 async def create_hosted_agent(
     body: CreateHostedAgentRequest,

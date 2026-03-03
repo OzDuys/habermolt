@@ -13,11 +13,10 @@ type Phase =
   | "intro"
   | "explain-agent"
   | "pick-deliberations"
+  | "generating-questions"
   | "seed-q1"
   | "seed-q2"
   | "seed-q3"
-  | "seed-q4"
-  | "seed-q5"
   | "show-profile"
   | "explain-hlq"
   | "name-agent"
@@ -47,11 +46,10 @@ const ALL_PHASES: Phase[] = [
   "intro",
   "explain-agent",
   "pick-deliberations",
+  "generating-questions",
   "seed-q1",
   "seed-q2",
   "seed-q3",
-  "seed-q4",
-  "seed-q5",
   "show-profile",
   "explain-hlq",
   "name-agent",
@@ -62,11 +60,10 @@ const PART_LABELS: Record<Phase, { part: number; label: string }> = {
   intro: { part: 0, label: "" },
   "explain-agent": { part: 1, label: "Meet Your Lobster" },
   "pick-deliberations": { part: 1, label: "Meet Your Lobster" },
+  "generating-questions": { part: 2, label: "Learning About You" },
   "seed-q1": { part: 2, label: "Learning About You" },
   "seed-q2": { part: 2, label: "Learning About You" },
   "seed-q3": { part: 2, label: "Learning About You" },
-  "seed-q4": { part: 2, label: "Learning About You" },
-  "seed-q5": { part: 2, label: "Learning About You" },
   "show-profile": { part: 3, label: "Your Profile" },
   "explain-hlq": { part: 3, label: "Your Profile" },
   "name-agent": { part: 4, label: "Launch" },
@@ -76,133 +73,15 @@ const PART_LABELS: Record<Phase, { part: number; label: string }> = {
 const BACK_MAP: Partial<Record<Phase, Phase>> = {
   "explain-agent": "intro",
   "pick-deliberations": "explain-agent",
+  "generating-questions": "pick-deliberations",
   "seed-q1": "pick-deliberations",
   "seed-q2": "seed-q1",
   "seed-q3": "seed-q2",
-  "seed-q4": "seed-q3",
-  "seed-q5": "seed-q4",
-  "show-profile": "seed-q5",
+  "show-profile": "seed-q3",
   "explain-hlq": "show-profile",
   "name-agent": "explain-hlq",
 };
 
-const SEED_QUESTIONS: SeedQuestion[] = [
-  {
-    id: "tech",
-    prompt: "When it comes to new technology, are you more...",
-    subtext:
-      "This helps your lobster navigate discussions about AI, automation, and innovation.",
-    choices: [
-      {
-        label: "Excited about possibilities",
-        valueStatement:
-          "- Generally optimistic about new technology and leans toward embracing it early",
-      },
-      {
-        label: "Cautious about risks",
-        valueStatement:
-          "- Approaches new technology cautiously and prioritizes safety and established evidence",
-      },
-      {
-        label: "It depends on the tech",
-        valueStatement:
-          "- Views on new technology are context-dependent: weighs potential benefits against specific risks case by case",
-      },
-    ],
-  },
-  {
-    id: "governance",
-    prompt: "In group decisions, do you think...",
-    subtext:
-      "This shapes how your lobster thinks about fairness and democratic processes.",
-    choices: [
-      {
-        label: "The majority should rule",
-        valueStatement:
-          "- Believes majority rule is generally the right approach for group decisions",
-      },
-      {
-        label: "Minorities need stronger protections",
-        valueStatement:
-          "- Believes minority rights and protections should constrain majority decisions",
-      },
-      {
-        label: "It needs careful balancing",
-        valueStatement:
-          "- Thinks majority decisions and minority protections should be carefully balanced",
-      },
-    ],
-  },
-  {
-    id: "regulation",
-    prompt: "Quick gut check: governments should regulate AI...",
-    subtext:
-      "This helps across many deliberations about technology, governance, and society.",
-    choices: [
-      {
-        label: "Heavily — safety first",
-        valueStatement:
-          "- Believes AI should be subject to strong government regulation",
-      },
-      {
-        label: "Lightly — don't stifle innovation",
-        valueStatement:
-          "- Prefers light-touch regulation that allows AI development to proceed freely",
-      },
-      {
-        label: "Not at all — let the market decide",
-        valueStatement:
-          "- Thinks government regulation of AI is unnecessary; prefers market-driven approaches",
-      },
-    ],
-  },
-  {
-    id: "change",
-    prompt: "When society needs to change, do you lean toward...",
-    subtext:
-      "This helps your lobster understand how you weigh stability against progress.",
-    choices: [
-      {
-        label: "Move fast, fix things later",
-        valueStatement:
-          "- Prefers bold, rapid change and is willing to accept short-term disruption for long-term progress",
-      },
-      {
-        label: "Slow and steady wins the race",
-        valueStatement:
-          "- Prefers gradual, incremental change that preserves stability and minimizes risk",
-      },
-      {
-        label: "Depends on what's at stake",
-        valueStatement:
-          "- Speed of change should match the stakes: move fast on urgent issues, go slow where mistakes are costly",
-      },
-    ],
-  },
-  {
-    id: "fairness",
-    prompt: "What matters more when resources are limited?",
-    subtext:
-      "This shapes how your lobster approaches debates about economics, policy, and justice.",
-    choices: [
-      {
-        label: "Equal opportunity for everyone",
-        valueStatement:
-          "- Prioritizes equal opportunity: level the playing field and let people earn their outcomes",
-      },
-      {
-        label: "Help those who need it most",
-        valueStatement:
-          "- Prioritizes equity: direct more resources toward those who are disadvantaged or struggling",
-      },
-      {
-        label: "Reward merit and effort",
-        valueStatement:
-          "- Prioritizes meritocracy: resources should flow to those who contribute the most",
-      },
-    ],
-  },
-];
 
 
 // ─── Color filter for lobster SVG ─────────────────────────────────────────────
@@ -621,19 +500,27 @@ function NetworkBackground() {
 
 // ─── Utility ──────────────────────────────────────────────────────────────────
 
-function composeProfile(answers: Record<string, SeedAnswer>): string {
+function composeProfile(answers: Record<string, SeedAnswer>, interestsSummary = ""): string {
+  const sections: string[] = [];
+
+  if (interestsSummary) {
+    sections.push(`# Interests\n\n${interestsSummary}`);
+  }
+
   const lines = Object.values(answers).flatMap(({ valueStatement, elaboration }) =>
     elaboration
       ? [valueStatement, `  - In my own words: "${elaboration}"`]
       : [valueStatement]
   );
-  if (lines.length === 0) return "";
-  return `# My Values
+  if (lines.length > 0) {
+    sections.push(`# My Values
 
 These are my initial values, bootstrapped from a short questionnaire. My lobster should use these as a starting point and refine them through conversation.
 
-${lines.join("\n")}
-`;
+${lines.join("\n")}`);
+  }
+
+  return sections.join("\n\n");
 }
 
 // ─── Scene: Intro ─────────────────────────────────────────────────────────────
@@ -1718,23 +1605,52 @@ function LaunchScene({
 
 // ─── Main Orchestrator ────────────────────────────────────────────────────────
 
+const STORAGE_KEY = "create_agent_flow_state";
+
+interface SavedFlowState {
+  phase: Phase;
+  selectedDelibIds: string[];
+  seedQuestions: SeedQuestion[];
+  interestsSummary: string;
+  seedAnswers: Record<string, SeedAnswer>;
+  editedProfile: string;
+  agentName: string;
+}
+
+function loadSavedState(): SavedFlowState | null {
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && ALL_PHASES.includes(parsed.phase)) return parsed;
+  } catch { /* ignore */ }
+  return null;
+}
+
 export default function CreateAgentFlow() {
-  const [phase, setPhase] = useState<Phase>("intro");
+  const restoredRef = useRef(false);
+  const saved = useRef(loadSavedState());
+
+  const [phase, setPhase] = useState<Phase>(
+    saved.current?.phase === "generating-questions" ? "pick-deliberations" : (saved.current?.phase ?? "intro")
+  );
 
   // Deliberation picking
   const [deliberations, setDeliberations] = useState<Deliberation[]>([]);
-  const [selectedDelibIds, setSelectedDelibIds] = useState<string[]>([]);
+  const [selectedDelibIds, setSelectedDelibIds] = useState<string[]>(saved.current?.selectedDelibIds ?? []);
 
-  // Seed answers
+  // Generated seed questions + answers + interests summary
+  const [seedQuestions, setSeedQuestions] = useState<SeedQuestion[]>(saved.current?.seedQuestions ?? []);
+  const [interestsSummary, setInterestsSummary] = useState(saved.current?.interestsSummary ?? "");
   const [seedAnswers, setSeedAnswers] = useState<Record<string, SeedAnswer>>(
-    {}
+    saved.current?.seedAnswers ?? {}
   );
 
   // Editable profile (set when entering show-profile, editable by user)
-  const [editedProfile, setEditedProfile] = useState("");
+  const [editedProfile, setEditedProfile] = useState(saved.current?.editedProfile ?? "");
 
   // Agent name
-  const [agentName, setAgentName] = useState("");
+  const [agentName, setAgentName] = useState(saved.current?.agentName ?? "");
 
   // Launch state
   const [creating, setCreating] = useState(false);
@@ -1743,6 +1659,27 @@ export default function CreateAgentFlow() {
 
   // Taken agent names (for filtering suggestions)
   const [takenNames, setTakenNames] = useState<string[]>([]);
+
+  // Mark restored after first render
+  useEffect(() => { restoredRef.current = true; }, []);
+
+  // Save state to sessionStorage whenever it changes
+  useEffect(() => {
+    if (!restoredRef.current) return;
+    // Don't persist transient phases — nothing to resume
+    if (phase === "launch" || phase === "generating-questions") return;
+    try {
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
+        phase,
+        selectedDelibIds,
+        seedQuestions,
+        interestsSummary,
+        seedAnswers,
+        editedProfile,
+        agentName,
+      }));
+    } catch { /* ignore */ }
+  }, [phase, selectedDelibIds, seedQuestions, interestsSummary, seedAnswers, editedProfile, agentName]);
 
   // Fetch deliberations and taken names on mount
   useEffect(() => {
@@ -1789,7 +1726,7 @@ export default function CreateAgentFlow() {
       }
 
       // Upload bootstrapped profile (use user-edited version if available)
-      const profile = editedProfile || composeProfile(seedAnswers);
+      const profile = editedProfile || composeProfile(seedAnswers, interestsSummary);
       if (profile) {
         await fetch("/api/hosted-agent/profile", {
           method: "PUT",
@@ -1800,6 +1737,7 @@ export default function CreateAgentFlow() {
 
       setCreating(false);
       setCreated(true);
+      try { sessionStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Something went wrong.");
       setCreating(false);
@@ -1814,16 +1752,12 @@ export default function CreateAgentFlow() {
     "seed-q1": 0,
     "seed-q2": 1,
     "seed-q3": 2,
-    "seed-q4": 3,
-    "seed-q5": 4,
   };
 
   const seedPhaseToNext: Record<string, Phase> = {
     "seed-q1": "seed-q2",
     "seed-q2": "seed-q3",
-    "seed-q3": "seed-q4",
-    "seed-q4": "seed-q5",
-    "seed-q5": "show-profile",
+    "seed-q3": "show-profile",
   };
 
   return (
@@ -1886,16 +1820,85 @@ export default function CreateAgentFlow() {
                 deliberations={deliberations}
                 selected={selectedDelibIds}
                 onToggle={toggleDelib}
-                onNext={() => setPhase("seed-q1")}
+                onNext={() => {
+                  setPhase("generating-questions");
+                  fetch("/api/hosted-agent/seed-questions", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ deliberation_ids: selectedDelibIds }),
+                  })
+                    .then((r) => {
+                      if (!r.ok) throw new Error("Failed to generate questions");
+                      return r.json();
+                    })
+                    .then((data: { questions: SeedQuestion[]; interests_summary: string }) => {
+                      setSeedQuestions(data.questions);
+                      setInterestsSummary(data.interests_summary || "");
+                      setPhase("seed-q1");
+                    })
+                    .catch(() => {
+                      setPhase("pick-deliberations");
+                    });
+                }}
               />
+            </motion.div>
+          )}
+
+          {phase === "generating-questions" && (
+            <motion.div
+              key="generating-questions"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              style={{ flex: 1, display: "flex" }}
+            >
+              <Scene>
+                <Card style={{ maxWidth: 400, textAlign: "center" }}>
+                  <motion.div
+                    animate={{ y: [0, -6, 0] }}
+                    transition={{ duration: 2, repeat: Infinity }}
+                    style={{ display: "inline-block", marginBottom: 16 }}
+                  >
+                    <GameLobster color={USER_COLOR} size={64} />
+                  </motion.div>
+                  <h2
+                    className="font-handwritten"
+                    style={{ fontSize: 22, color: "#1a1a1a", margin: "0 0 8px" }}
+                  >
+                    Crafting your questions...
+                  </h2>
+                  <p
+                    style={{
+                      fontSize: 13,
+                      color: "#888",
+                      fontFamily: "'DM Sans', sans-serif",
+                      margin: "0 0 16px",
+                    }}
+                  >
+                    Based on the topics you picked, your lobster is preparing a few
+                    questions to learn about your values.
+                  </p>
+                  <motion.div
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                    style={{
+                      width: 20,
+                      height: 20,
+                      border: "2.5px solid #c84a20",
+                      borderTopColor: "transparent",
+                      borderRadius: "50%",
+                      margin: "0 auto",
+                    }}
+                  />
+                </Card>
+              </Scene>
             </motion.div>
           )}
 
           {(phase === "seed-q1" ||
             phase === "seed-q2" ||
-            phase === "seed-q3" ||
-            phase === "seed-q4" ||
-            phase === "seed-q5") && (
+            phase === "seed-q3") &&
+            seedQuestions.length > 0 && (
             <motion.div
               key={phase}
               initial={{ opacity: 0, x: 40 }}
@@ -1904,14 +1907,14 @@ export default function CreateAgentFlow() {
               style={{ flex: 1, display: "flex" }}
             >
               <SeedQuestionScene
-                question={SEED_QUESTIONS[seedPhaseToQuestion[phase]]}
+                question={seedQuestions[seedPhaseToQuestion[phase]]}
                 questionIndex={seedPhaseToQuestion[phase]}
                 initialAnswer={
-                  seedAnswers[SEED_QUESTIONS[seedPhaseToQuestion[phase]].id]
+                  seedAnswers[seedQuestions[seedPhaseToQuestion[phase]].id]
                 }
                 onAnswer={(ans) => {
                   handleSeedAnswer(
-                    SEED_QUESTIONS[seedPhaseToQuestion[phase]].id,
+                    seedQuestions[seedPhaseToQuestion[phase]].id,
                     ans
                   );
                   setPhase(seedPhaseToNext[phase]);
@@ -1929,7 +1932,7 @@ export default function CreateAgentFlow() {
               style={{ flex: 1, display: "flex" }}
             >
               <ShowProfileScene
-                profile={editedProfile || composeProfile(seedAnswers)}
+                profile={editedProfile || composeProfile(seedAnswers, interestsSummary)}
                 onChange={(val) => setEditedProfile(val)}
                 onNext={() => setPhase("explain-hlq")}
               />
