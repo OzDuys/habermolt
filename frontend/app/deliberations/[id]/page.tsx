@@ -598,13 +598,13 @@ function ConsensusRatingWidget({
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }}
       transition={{ delay: 0.5 }}
-      style={{ maxWidth: 540, width: "100%", marginTop: 16 }}
+      style={{ width: "100%", marginTop: 12 }}
     >
       {consensusChanged && (
         <div style={{
-          padding: "10px 16px", borderRadius: 12, marginBottom: 8,
+          padding: "8px 12px", borderRadius: 10, marginBottom: 8,
           background: "#fef3c7", border: "1px solid #f59e0b30",
-          fontSize: 12, color: "#92400e", lineHeight: 1.5,
+          fontSize: 11, color: "#92400e", lineHeight: 1.4,
         }}>
           The consensus has changed since you last rated — consider re-rating.
         </div>
@@ -613,13 +613,13 @@ function ConsensusRatingWidget({
       {/* Thumbs row */}
       {!expanded && (
         <div style={{
-          display: "flex", alignItems: "center", justifyContent: "center", gap: 12,
+          display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8,
         }}>
+          {existing && !consensusChanged && (
+            <span style={{ fontSize: 11, color: "#999" }}>rated</span>
+          )}
           <ThumbButton direction="up" active={activeThumb === "up"} onClick={() => handleThumb("up")} />
           <ThumbButton direction="down" active={activeThumb === "down"} onClick={() => handleThumb("down")} />
-          {existing && !consensusChanged && (
-            <span style={{ fontSize: 11, color: "#999", marginLeft: 4 }}>rated · tap to update</span>
-          )}
         </div>
       )}
 
@@ -947,18 +947,7 @@ export default function LiveDeliberationPage() {
             display: "flex", flexDirection: "column",
             alignItems: "center", justifyContent: "center",
             padding: "60px 20px 48px",
-            position: "relative",
           }}>
-            {/* Share button — top right, always visible */}
-            <div style={{ position: "absolute", top: 20, right: 20, zIndex: 10 }}>
-              <ShareButton
-                url={d.is_private && d.invite_code
-                  ? `${typeof window !== "undefined" ? window.location.origin : ""}/invite/${d.invite_code}`
-                  : `${typeof window !== "undefined" ? window.location.origin : ""}/deliberations/${id}`
-                }
-              />
-            </div>
-
             <motion.h1
               initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1, duration: 0.6, ease: [0.19, 1, 0.22, 1] }}
@@ -1011,6 +1000,15 @@ export default function LiveDeliberationPage() {
                       Live
                     </span>
                   )}
+                  {/* Share icon — top right of card */}
+                  <div style={{ marginLeft: "auto" }}>
+                    <ShareButton
+                      url={d.is_private && d.invite_code
+                        ? `${typeof window !== "undefined" ? window.location.origin : ""}/invite/${d.invite_code}`
+                        : `${typeof window !== "undefined" ? window.location.origin : ""}/deliberations/${id}`
+                      }
+                    />
+                  </div>
                 </div>
                 {winner.title && (
                   <div style={{ fontSize: 15, fontWeight: 700, color: "#1a1a1a", marginBottom: 10 }}>{winner.title}</div>
@@ -1018,15 +1016,9 @@ export default function LiveDeliberationPage() {
                 <p style={{ fontSize: "clamp(14px, 2vw, 16px)", fontWeight: 500, color: "#333", lineHeight: 1.75, margin: 0 }}>
                   {winner.statement_text}
                 </p>
+                {/* Rating thumbs — bottom right of card */}
+                <ConsensusRatingWidget deliberationId={id} winnerId={winner.id} />
               </motion.div>
-            )}
-
-            {/* Consensus rating */}
-            {winner && (
-              <ConsensusRatingWidget
-                deliberationId={id}
-                winnerId={winner.id}
-              />
             )}
 
             {/* Join deliberation CTA */}
