@@ -716,7 +716,6 @@ function ExplainAgentScene({ onNext }: { onNext: () => void }) {
 // ─── Scene: Pick Deliberations ────────────────────────────────────────────────
 
 const DELIB_CATEGORIES: { id: string; label: string }[] = [
-  { id: "all", label: "All" },
   { id: "ai", label: "AI" },
   { id: "current-affairs", label: "Current Affairs" },
   { id: "geopolitics", label: "Geopolitics" },
@@ -743,14 +742,14 @@ function PickDeliberationsScene({
   onNext: () => void;
 }) {
   const [search, setSearch] = useState("");
-  const [activeCategory, setActiveCategory] = useState("all");
+  const [activeCategory, setActiveCategory] = useState("");
   const [sort, setSort] = useState<DelibSort>("trending");
 
   const filtered = deliberations
     .filter((d) => d.question.toLowerCase().includes(search.toLowerCase()))
     .filter(
       (d) =>
-        activeCategory === "all" ||
+        !activeCategory ||
         (d.categories ?? []).includes(activeCategory)
     )
     .sort((a, b) => {
@@ -805,7 +804,7 @@ function PickDeliberationsScene({
           {DELIB_CATEGORIES.map((cat) => (
             <button
               key={cat.id}
-              onClick={() => setActiveCategory(cat.id)}
+              onClick={() => setActiveCategory(activeCategory === cat.id ? "" : cat.id)}
               className={`relative flex shrink-0 items-center gap-1.5 rounded-full font-medium transition-all ${
                 activeCategory === cat.id
                   ? "bg-stone-200 text-stone-800"
@@ -1589,13 +1588,13 @@ function LaunchScene({
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.9 }}
-          style={{ display: "flex", gap: 10, justifyContent: "center" }}
+          style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}
         >
-          <Link href="/agent">
-            <Btn>Chat with {agentName} →</Btn>
+          <Link href="/">
+            <Btn>Explore deliberations →</Btn>
           </Link>
-          <Link href="/profile">
-            <Btn color="#666">Go to profile</Btn>
+          <Link href="/deliberations/create">
+            <Btn color="#666">Start a deliberation</Btn>
           </Link>
         </motion.div>
       </Card>

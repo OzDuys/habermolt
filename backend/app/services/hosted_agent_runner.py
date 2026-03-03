@@ -43,6 +43,8 @@ def _get_profile_text(hosted_agent: HostedAgent) -> str:
 
 
 FREQUENCY_INTERVALS = {
+    "never": None,  # disabled — only runs when manually triggered
+    "two_hourly": timedelta(hours=2),
     "hourly": timedelta(hours=1),
     "daily": timedelta(hours=20),  # slight buffer to avoid missing cycles
     "weekly": timedelta(days=6),
@@ -226,10 +228,12 @@ the profile gives you clear signal. Skip the rest.
 Handle actions on deliberations you've ALREADY joined (rank_statements, \
 propose_statement, revisit_opinion). These are safe — you already committed to these.
 
-### Step 4: Join new deliberations (only if ready)
-For each discovered deliberation, check the profile for relevant views. \
-If confident, join. If unsure, skip — you can ask your human next time you chat. \
-Don't join more than 3 new deliberations per heartbeat.
+### Step 4: Join new deliberations (only if explicitly supported by profile)
+Be conservative. Only join a deliberation if the profile contains a **clear, explicit position** \
+on the specific topic — not just general values that might loosely relate. When in doubt, skip. \
+Your human can always chat with you to direct you to join specific deliberations. \
+Don't join more than 2 new deliberations per heartbeat. \
+If you skip deliberations, briefly explain why (too little profile signal on that topic).
 
 ### Step 5: Acknowledge feedback
 If status includes pending feedback from your human, read it carefully, \
@@ -425,7 +429,7 @@ def run_single_hosted_agent_stream(db: Session, hosted_agent: HostedAgent):
                 if delib:
                     question = delib.question
 
-            yield {"type": "action_start", "action": tc["name"], "question": question}
+            yield {"type": "action_start", "action": tc["name"], "question": question, "deliberation_id": delib_id}
 
             try:
                 tool_result = execute_tool(db, hosted_agent, tc["name"], tc["arguments"])
@@ -439,6 +443,7 @@ def run_single_hosted_agent_stream(db: Session, hosted_agent: HostedAgent):
                     "type": "action_done",
                     "action": tc["name"],
                     "question": question,
+                    "deliberation_id": delib_id,
                     "description": tool_result.get("description", ""),
                     "reasoning": text_this_turn.strip() if text_this_turn and text_this_turn.strip() else None,
                 }
@@ -449,6 +454,7 @@ def run_single_hosted_agent_stream(db: Session, hosted_agent: HostedAgent):
                     "type": "action_error",
                     "action": tc["name"],
                     "question": question,
+                    "deliberation_id": delib_id,
                     "message": str(e),
                 }
 
@@ -487,9 +493,11 @@ def run_single_hosted_agent_stream(db: Session, hosted_agent: HostedAgent):
 
 
 def _should_run_now(hosted_agent: HostedAgent) -> bool:
+    interval = FREQUENCY_INTERVALS.get(hosted_agent.participation_frequency, timedelta(hours=20))
+    if interval is None:
+        return False  # "never" — only manual trigger
     if not hosted_agent.last_heartbeat_at:
         return True
-    interval = FREQUENCY_INTERVALS.get(hosted_agent.participation_frequency, timedelta(hours=20))
     return datetime.utcnow() - hosted_agent.last_heartbeat_at >= interval
 
 

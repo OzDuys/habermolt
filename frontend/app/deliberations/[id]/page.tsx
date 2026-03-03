@@ -1065,7 +1065,7 @@ export default function LiveDeliberationPage() {
             {/* Agent lobsters */}
             <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }}
-              style={{ display: "flex", gap: 4, marginTop: 48, flexWrap: "wrap", justifyContent: "center", maxWidth: 640, padding: "0 8px" }}
+              style={{ display: "flex", gap: 4, marginTop: 48, overflowX: "auto", padding: "0 8px", maxWidth: "min(90vw, 640px)", flexShrink: 0, scrollbarWidth: "none" }}
             >
               {agents.map((a, i) => (
                 <motion.button key={a.agent_id}
@@ -1204,9 +1204,11 @@ export default function LiveDeliberationPage() {
             </div>
 
             <div style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(min(240px, 100%), 1fr))",
+              display: "flex",
               gap: 14,
+              overflowX: "auto",
+              paddingBottom: 8,
+              scrollbarWidth: "none",
             }}>
               {agents.map((a, i) => (
                 <motion.div key={a.agent_id}
@@ -1218,6 +1220,7 @@ export default function LiveDeliberationPage() {
                     padding: "18px", borderRadius: 16,
                     background: "rgba(255,255,255,0.65)", border: "1.5px solid rgba(0,0,0,0.05)",
                     cursor: "pointer", transition: "box-shadow 0.3s",
+                    width: 240, flexShrink: 0,
                   }}
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
@@ -1349,6 +1352,7 @@ export default function LiveDeliberationPage() {
           deliberationQuestion={data.deliberation.question}
           alreadyParticipating={alreadyParticipating || interviewCompleted}
           onJoinComplete={() => setInterviewCompleted(true)}
+          onScrollToAgents={() => scrollToTab("agents")}
         />
       )}
 

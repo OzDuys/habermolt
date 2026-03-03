@@ -33,6 +33,7 @@ interface DeliberationChatBubbleProps {
   deliberationQuestion: string;
   alreadyParticipating: boolean;
   onJoinComplete?: () => void;
+  onScrollToAgents?: () => void;
 }
 
 const SETUP_STEPS = [
@@ -58,10 +59,16 @@ function actionLabel(action: string): string {
 type Mode = "browse" | "join" | "participate";
 
 const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, DeliberationChatBubbleProps>(
-  function DeliberationChatBubble({ deliberationId, deliberationQuestion, alreadyParticipating, onJoinComplete }, ref) {
+  function DeliberationChatBubble({ deliberationId, deliberationQuestion, alreadyParticipating, onJoinComplete, onScrollToAgents }, ref) {
+    const storageKey = `delib_chat_session_${deliberationId}`;
     const [open, setOpen] = useState(false);
     const [mode, setMode] = useState<Mode>(alreadyParticipating ? "participate" : "browse");
-    const [sessionId, setSessionId] = useState<string | null>(null);
+    const [sessionId, setSessionId] = useState<string | null>(() => {
+      if (typeof window !== "undefined") {
+        return sessionStorage.getItem(`delib_chat_session_${deliberationId}`) || null;
+      }
+      return null;
+    });
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState("");
     const [sending, setSending] = useState(false);
@@ -104,6 +111,9 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
             if (!res.ok) throw new Error("Failed to start chat");
             const data = await res.json();
             setSessionId(data.session_id);
+            if (typeof window !== "undefined") {
+              sessionStorage.setItem(storageKey, data.session_id);
+            }
             if (data.history && data.history.length > 0) {
               setMessages(data.history.map((m: Record<string, string>) => {
                 if (m.role === "action") {
@@ -131,6 +141,9 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
             if (!res.ok) throw new Error("Failed to start session");
             const data = await res.json();
             setSessionId(data.session_id);
+            if (typeof window !== "undefined") {
+              sessionStorage.setItem(storageKey, data.session_id);
+            }
             // Restore full message history if resuming an existing session
             if (data.messages && data.messages.length > 0) {
               setMessages(data.messages.map((m: Record<string, string>) => ({
@@ -225,10 +238,15 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
     // Transition to participate mode after join completes
     const handleJoinCompleted = useCallback(() => {
       onJoinComplete?.();
+      // Scroll to agents section to show the user's opinion after a delay
+      setTimeout(() => { onScrollToAgents?.(); }, 3000);
       // Transition to participate mode after a short delay
       setTimeout(() => {
         setMode("participate");
-        setSessionId(null); // Will trigger new session init for deliberation-chat
+        setSessionId(null);
+        if (typeof window !== "undefined") {
+          sessionStorage.removeItem(storageKey);
+        } // Will trigger new session init for deliberation-chat
         setMessages((prev) => [
           ...prev,
           { role: "divider", content: "Now participating" },
@@ -398,15 +416,33 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
           </button>
         )}
 
+        {/* Backdrop when chat is open */}
+        {open && (
+          <div
+            onClick={() => setOpen(false)}
+            style={{
+              position: "fixed", inset: 0, zIndex: 299,
+              background: "rgba(0,0,0,0.3)", backdropFilter: "blur(2px)",
+            }}
+          />
+        )}
+
         {/* Chat panel */}
         {open && (
           <div style={{
-            position: "fixed", bottom: 24, right: 24, zIndex: 300,
-            width: 370, maxHeight: 520, borderRadius: 16,
+            position: "fixed",
+            top: "50%", left: "50%",
+            transform: "translate(-50%, -50%)",
+            zIndex: 300,
+            width: "min(92vw, 480px)",
+            maxHeight: "min(80vh, 600px)",
+            borderRadius: 20,
             background: "#fff", border: "1px solid rgba(0,0,0,0.1)",
-            boxShadow: "0 8px 32px rgba(0,0,0,0.15)",
+            boxShadow: "0 16px 48px rgba(0,0,0,0.2)",
             display: "flex", flexDirection: "column", overflow: "hidden",
-          }}>
+          }}
+          onClick={(e) => e.stopPropagation()}
+          >
             {/* Header */}
             <div style={{
               padding: "12px 16px", borderBottom: "1px solid rgba(0,0,0,0.06)",
@@ -553,6 +589,25 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
 
               <div ref={messagesEndRef} />
             </div>
+
+            {/* Submit Opinion CTA — shown after first user message while in browse mode */}
+            {mode === "browse" && messages.filter(m => m.role === "user").length >= 1 && !sending && sessionId && (
+              <div style={{
+                padding: "8px 12px", borderTop: "1px solid rgba(0,0,0,0.06)",
+                background: "rgba(200,74,32,0.03)",
+              }}>
+                <button
+                  onClick={() => injectJoinMessage()}
+                  style={{
+                    width: "100%", padding: "10px 16px", borderRadius: 10, border: "none",
+                    background: "#c84a20", color: "#fff", fontSize: 13, fontWeight: 600,
+                    cursor: "pointer", letterSpacing: -0.2,
+                  }}
+                >
+                  Submit My Opinion →
+                </button>
+              </div>
+            )}
 
             {/* Input */}
             {!chatDisabled && (

@@ -31,19 +31,8 @@ interface SessionMessage {
   content?: string;
 }
 
-const MODELS = [
-  "google/gemini-3-flash-preview",
-  "x-ai/grok-4.1-fast",
-  "openai/gpt-5-mini",
-];
 
-const FREQUENCIES = [
-  { value: "hourly", label: "Every hour" },
-  { value: "daily", label: "Once a day" },
-  { value: "weekly", label: "Once a week" },
-];
-
-export default function HostedAgentDashboard({ onDeleted }: { onDeleted?: () => void }) {
+export default function HostedAgentDashboard() {
   const [agent, setAgent] = useState<HostedAgent | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -104,36 +93,6 @@ export default function HostedAgentDashboard({ onDeleted }: { onDeleted?: () => 
         setSessions(data);
       }
     } catch {}
-  };
-
-  const handleUpdate = async (field: string, value: string | boolean) => {
-    setSaving(true);
-    try {
-      const res = await fetch("/api/hosted-agent", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ [field]: value }),
-      });
-      const data = await res.json();
-      if (res.ok) setAgent(data);
-    } catch {}
-    finally { setSaving(false); }
-  };
-
-  const handleDelete = async () => {
-    if (!confirm("This will permanently delete your hosted agent. Continue?")) return;
-    try {
-      const res = await fetch("/api/hosted-agent", { method: "DELETE" });
-      if (!res.ok && res.status !== 204) {
-        setError("Failed to delete agent. Please try again.");
-        return;
-      }
-      setAgent(null);
-      setNotFound(true);
-      onDeleted?.();
-    } catch {
-      setError("Failed to delete agent. Please try again.");
-    }
   };
 
   const handleSaveProfile = async () => {
@@ -497,35 +456,6 @@ export default function HostedAgentDashboard({ onDeleted }: { onDeleted?: () => 
           </Section>
         )}
 
-        <Section title="Configuration">
-          <Field label="Name">{agent.display_name}</Field>
-          <Field label="Model">
-            <select
-              value={agent.model}
-              onChange={(e) => handleUpdate("model", e.target.value)}
-              className="rounded-lg border px-2 py-1 text-sm"
-              style={{ borderColor: "var(--border)", background: "var(--background)" }}
-            >
-              {MODELS.map((m) => <option key={m} value={m}>{m}</option>)}
-            </select>
-          </Field>
-          <Field label="Frequency">
-            <select
-              value={agent.participation_frequency}
-              onChange={(e) => handleUpdate("participation_frequency", e.target.value)}
-              className="rounded-lg border px-2 py-1 text-sm"
-              style={{ borderColor: "var(--border)", background: "var(--background)" }}
-            >
-              {FREQUENCIES.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
-            </select>
-          </Field>
-          <Field label="Tier">
-            <span className="inline-block rounded-full px-2 py-0.5 text-xs font-medium uppercase" style={{ background: "var(--surface-dim, var(--border))" }}>
-              {agent.pricing_tier}
-            </span>
-          </Field>
-        </Section>
-
         <Section title="Token Usage">
           <TokenUsageBar used={agent.tokens_used_period} limit={agent.token_limit} tier={agent.pricing_tier} />
         </Section>
@@ -535,24 +465,6 @@ export default function HostedAgentDashboard({ onDeleted }: { onDeleted?: () => 
           <Field label="Last heartbeat">{agent.last_heartbeat_at ? new Date(agent.last_heartbeat_at).toLocaleString() : "Never"}</Field>
           <Field label="Created">{new Date(agent.created_at).toLocaleDateString()}</Field>
         </Section>
-
-        <div className="flex flex-wrap gap-2 pt-2">
-          <button
-            onClick={() => handleUpdate("is_active", !agent.is_active)}
-            className="rounded-lg border px-3 py-1.5 text-sm font-medium transition-opacity hover:opacity-80"
-            style={{ borderColor: "var(--border)" }}
-            disabled={saving}
-          >
-            {agent.is_active ? "Pause Agent" : "Resume Agent"}
-          </button>
-          <button
-            onClick={handleDelete}
-            className="rounded-lg border px-3 py-1.5 text-sm font-medium text-red-600 transition-opacity hover:opacity-80 dark:text-red-400"
-            style={{ borderColor: "var(--border)" }}
-          >
-            Delete Agent
-          </button>
-        </div>
       </div>
     </div>
   );

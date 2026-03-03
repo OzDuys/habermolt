@@ -139,13 +139,13 @@ async def start_interview(
     if not deliberation:
         raise HTTPException(status_code=404, detail="Deliberation not found.")
 
-    # Check if there's already an active session for this agent + deliberation
+    # Check if there's already an in-progress session for this agent + deliberation
     existing = db.query(AgentSession).filter(
         and_(
             AgentSession.agent_id == agent.id,
             AgentSession.deliberation_id == deliberation.id,
             AgentSession.session_type == "deliberation_join",
-            AgentSession.status == "active",
+            AgentSession.status.in_(["active", "opinion_submitted", "setup_running"]),
         )
     ).first()
     if existing:
@@ -217,13 +217,13 @@ async def join_and_start_interview(
             db.add(member)
             db.commit()
 
-    # Check if there's already an active session
+    # Check if there's already an in-progress session
     existing_session = db.query(AgentSession).filter(
         and_(
             AgentSession.agent_id == agent.id,
             AgentSession.deliberation_id == deliberation.id,
             AgentSession.session_type == "deliberation_join",
-            AgentSession.status == "active",
+            AgentSession.status.in_(["active", "opinion_submitted", "setup_running"]),
         )
     ).first()
     if existing_session:
@@ -233,6 +233,8 @@ async def join_and_start_interview(
             question=deliberation.question,
             greeting=existing_session.messages[0]["content"] if existing_session.messages else "",
             status=existing_session.status,
+            messages=existing_session.messages,
+            setup_progress=existing_session.setup_progress,
         )
 
     session = topic_interview_service.create_session(db, agent, deliberation, user_id)

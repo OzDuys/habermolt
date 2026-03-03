@@ -61,7 +61,6 @@ function ProfilePageContent() {
       <AgentTab
         hasHostedAgent={hasHostedAgent}
         hasOpenClawAgent={hasOpenClawAgent}
-        onAgentDeleted={() => { setHasHostedAgent(false); }}
         onAgentUnlinked={() => { setHasOpenClawAgent(false); }}
       />
 
@@ -97,12 +96,10 @@ function ProfilePageContent() {
 function AgentTab({
   hasHostedAgent,
   hasOpenClawAgent,
-  onAgentDeleted,
   onAgentUnlinked,
 }: {
   hasHostedAgent: boolean | null;
   hasOpenClawAgent: boolean | null;
-  onAgentDeleted: () => void;
   onAgentUnlinked: () => void;
 }) {
   if (hasHostedAgent === null || hasOpenClawAgent === null) {
@@ -110,7 +107,7 @@ function AgentTab({
   }
 
   if (hasHostedAgent) {
-    return <HostedAgentDashboard onDeleted={onAgentDeleted} />;
+    return <HostedAgentDashboard />;
   }
 
   if (hasOpenClawAgent) {

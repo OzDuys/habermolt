@@ -11,6 +11,7 @@ import AgentActivitySection from "@/components/profile/AgentActivitySection";
 interface ActionItem {
   type: string;
   deliberation: string;
+  deliberationId?: string;
   status: "running" | "done" | "error";
   detail?: string;
   reasoning?: string;
@@ -239,6 +240,13 @@ function AgentPageContent() {
         </>
       )}
 
+      {/* Agent Configuration — hosted agents only */}
+      {hasHostedAgent && chatReady && (
+        <div className="mb-8">
+          <AgentConfigPanel />
+        </div>
+      )}
+
       {/* Activity — shown for both hosted and OpenClaw agents */}
       <div>
         <h2 className="mb-4 text-xl font-bold" style={{ color: "var(--foreground)" }}>
@@ -360,7 +368,7 @@ function AgentChat({
                 return [...prev, {
                   role: "action",
                   content: "",
-                  actions: [{ type: event.action, deliberation: event.question || "", status: "running" }],
+                  actions: [{ type: event.action, deliberation: event.question || "", deliberationId: event.deliberation_id || undefined, status: "running" }],
                 }];
               });
             } else if (event.type === "action_done") {
@@ -372,7 +380,7 @@ function AgentChat({
                   updated[msgIdx] = {
                     role: "action",
                     content: "",
-                    actions: [{ type: event.action, deliberation: event.question || "", status: "done", detail: event.detail || "", reasoning: event.reasoning || "" }],
+                    actions: [{ type: event.action, deliberation: event.question || "", deliberationId: event.deliberation_id || undefined, status: "done", detail: event.detail || "", reasoning: event.reasoning || "" }],
                   };
                   return updated;
                 }
@@ -524,7 +532,7 @@ function AgentChat({
                 return [...prev, {
                   role: "action",
                   content: "",
-                  actions: [{ type: event.action, deliberation: event.question || "", status: "running" }],
+                  actions: [{ type: event.action, deliberation: event.question || "", deliberationId: event.deliberation_id || undefined, status: "running" }],
                 }];
               });
             } else if (event.type === "action_done") {
@@ -536,7 +544,7 @@ function AgentChat({
                   updated[msgIdx] = {
                     role: "action",
                     content: "",
-                    actions: [{ type: event.action, deliberation: event.question || "", status: "done", reasoning: event.reasoning || "" }],
+                    actions: [{ type: event.action, deliberation: event.question || "", deliberationId: event.deliberation_id || undefined, status: "done", reasoning: event.reasoning || "" }],
                   };
                   return updated;
                 }
@@ -670,7 +678,7 @@ function AgentChat({
             className={`rounded-lg border px-3 py-2 text-lg transition-opacity hover:opacity-80 disabled:opacity-50 ${runningHeartbeat ? "animate-pulse" : ""}`}
             style={{ borderColor: "var(--border)" }}
           >
-            &#x2764;&#xFE0F;
+            🚀
           </button>
         </div>
       </div>
@@ -685,7 +693,7 @@ const ACTION_ICONS: Record<string, string> = {
   propose_statement: "\uD83D\uDCDD",
   ask_before_acting: "\uD83D\uDCAC",
   checking: "\uD83D\uDD0D",
-  run_heartbeat: "\u2764\uFE0F",
+  run_heartbeat: "\uD83D\uDE80",
   get_agent_status: "\uD83D\uDCCA",
   update_profile: "\u2705",
   unknown: "\u26A1",
@@ -724,9 +732,15 @@ function ActionCard({ action }: { action: ActionItem }) {
               {ACTION_LABELS[action.type] || action.type}
             </span>
             {action.deliberation && action.type !== "checking" && (
-              <p className="text-xs truncate" style={{ color: "var(--foreground)" }}>
-                {action.deliberation}
-              </p>
+              action.deliberationId ? (
+                <Link href={`/deliberations/${action.deliberationId}`} className="text-xs truncate block hover:underline" style={{ color: "var(--accent)" }}>
+                  {action.deliberation}
+                </Link>
+              ) : (
+                <p className="text-xs truncate" style={{ color: "var(--foreground)" }}>
+                  {action.deliberation}
+                </p>
+              )
             )}
           </div>
           <span className="shrink-0 text-xs flex items-center gap-1">
@@ -764,6 +778,165 @@ function ActionCard({ action }: { action: ActionItem }) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+const CONFIG_MODELS = [
+  "google/gemini-3-flash-preview",
+  "x-ai/grok-4.1-fast",
+  "openai/gpt-5-mini",
+];
+
+const CONFIG_FREQUENCIES = [
+  { value: "never", label: "Manual only" },
+  { value: "two_hourly", label: "Every 2 hours" },
+  { value: "hourly", label: "Every hour" },
+  { value: "daily", label: "Once a day" },
+  { value: "weekly", label: "Once a week" },
+];
+
+interface AgentConfig {
+  display_name: string;
+  model: string;
+  participation_frequency: string;
+  pricing_tier: string;
+  is_active: boolean;
+  paused_reason: string | null;
+  tokens_used_period: number;
+  token_limit: number | null;
+  last_heartbeat_at: string | null;
+}
+
+function AgentConfigPanel() {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [config, setConfig] = useState<AgentConfig | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!open || config) return;
+    fetch("/api/hosted-agent")
+      .then((r) => r.json())
+      .then((d) => { if (!d.detail) setConfig(d); })
+      .catch(() => {});
+  }, [open, config]);
+
+  const handleUpdate = async (field: string, value: string | boolean) => {
+    setSaving(true);
+    try {
+      const res = await fetch("/api/hosted-agent", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [field]: value }),
+      });
+      const data = await res.json();
+      if (res.ok) setConfig(data);
+    } catch {}
+    finally { setSaving(false); }
+  };
+
+  const handleDelete = async () => {
+    if (!confirm("This will permanently delete your hosted agent. Continue?")) return;
+    try {
+      const res = await fetch("/api/hosted-agent", { method: "DELETE" });
+      if (res.ok || res.status === 204) {
+        router.push("/profile");
+      }
+    } catch {}
+  };
+
+  return (
+    <div className="rounded-xl border" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between px-4 py-3 text-sm font-medium"
+        style={{ color: "var(--foreground)" }}
+      >
+        <span>Agent Settings</span>
+        <span style={{ color: "var(--muted)", fontSize: "0.7rem" }}>{open ? "▾" : "▸"}</span>
+      </button>
+
+      {open && (
+        <div className="border-t px-4 pb-4 pt-3 space-y-3" style={{ borderColor: "var(--border)" }}>
+          {!config ? (
+            <p className="text-xs" style={{ color: "var(--muted)" }}>Loading...</p>
+          ) : (
+            <>
+              <ConfigRow label="Model">
+                <select
+                  value={config.model}
+                  onChange={(e) => handleUpdate("model", e.target.value)}
+                  disabled={saving}
+                  className="rounded-lg border px-2 py-1 text-xs"
+                  style={{ borderColor: "var(--border)", background: "var(--background)" }}
+                >
+                  {CONFIG_MODELS.map((m) => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </ConfigRow>
+
+              <ConfigRow label="Auto-heartbeat">
+                <select
+                  value={config.participation_frequency}
+                  onChange={(e) => handleUpdate("participation_frequency", e.target.value)}
+                  disabled={saving}
+                  className="rounded-lg border px-2 py-1 text-xs"
+                  style={{ borderColor: "var(--border)", background: "var(--background)" }}
+                >
+                  {CONFIG_FREQUENCIES.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+                </select>
+              </ConfigRow>
+
+              <ConfigRow label="Status">
+                <span
+                  className="inline-block rounded-full px-2 py-0.5 text-xs font-medium"
+                  style={{
+                    background: config.is_active ? "rgba(34,197,94,0.15)" : "rgba(234,179,8,0.15)",
+                    color: config.is_active ? "rgb(21,128,61)" : "rgb(133,77,14)",
+                  }}
+                >
+                  {config.is_active ? "Active" : (config.paused_reason === "token_limit" ? "Token limit" : "Paused")}
+                </span>
+              </ConfigRow>
+
+              {config.last_heartbeat_at && (
+                <ConfigRow label="Last heartbeat">
+                  <span className="text-xs" style={{ color: "var(--muted)" }}>
+                    {new Date(config.last_heartbeat_at).toLocaleString()}
+                  </span>
+                </ConfigRow>
+              )}
+
+              <div className="flex flex-wrap gap-2 pt-1">
+                <button
+                  onClick={() => handleUpdate("is_active", !config.is_active)}
+                  disabled={saving}
+                  className="rounded-lg border px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-80 disabled:opacity-50"
+                  style={{ borderColor: "var(--border)", color: "var(--foreground)" }}
+                >
+                  {config.is_active ? "Pause" : "Resume"}
+                </button>
+                <button
+                  onClick={handleDelete}
+                  className="rounded-lg border px-3 py-1.5 text-xs font-medium text-red-600 transition-opacity hover:opacity-80 dark:text-red-400"
+                  style={{ borderColor: "var(--border)" }}
+                >
+                  Delete Agent
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ConfigRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between text-sm">
+      <span className="text-xs" style={{ color: "var(--muted)" }}>{label}</span>
+      {children}
     </div>
   );
 }

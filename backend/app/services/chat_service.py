@@ -343,11 +343,12 @@ def stream_user_message(
             # Execute each tool call
             for tc in tool_calls_this_turn:
                 # Get deliberation question for display
-                question = _get_tool_display_question(db, tc)
+                question, delib_id = _get_tool_display_question(db, tc)
 
                 yield ("action_start", {
                     "action": tc["name"],
                     "question": question,
+                    "deliberation_id": delib_id,
                     "tool_call_id": tc["id"],
                     "reasoning": text_this_turn,
                 })
@@ -357,6 +358,7 @@ def stream_user_message(
                 yield ("action_done", {
                     "action": tc["name"],
                     "question": question,
+                    "deliberation_id": delib_id,
                     "result": result,
                     "description": result.get("description", ""),
                     "detail": _extract_tool_detail(tc["name"], result),
@@ -414,16 +416,19 @@ def _extract_tool_detail(tool_name: str, result: dict) -> str:
     return result.get("description", "")
 
 
-def _get_tool_display_question(db: Session, tool_call: dict) -> str:
-    """Extract a display-friendly question/description for a tool call."""
+def _get_tool_display_question(db: Session, tool_call: dict) -> tuple[str, str | None]:
+    """Extract a display-friendly question and deliberation_id for a tool call.
+
+    Returns (question_text, deliberation_id).
+    """
     args = tool_call.get("arguments", {})
     delib_id = args.get("deliberation_id")
     if delib_id:
         from app.models import Deliberation
         delib = db.query(Deliberation).filter(Deliberation.id == delib_id).first()
         if delib:
-            return delib.question
-    return ""
+            return delib.question, str(delib.id)
+    return "", None
 
 
 def _extract_profile_update(text: str) -> tuple[str, Optional[str]]:
