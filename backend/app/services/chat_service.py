@@ -146,12 +146,12 @@ def get_session_by_id(db: Session, hosted_agent: HostedAgent, session_id: str) -
 
 
 def get_all_sessions(db: Session, hosted_agent: HostedAgent) -> list[AgentSession]:
-    """Get all general chat sessions for a hosted agent."""
+    """Get all chat sessions for a hosted agent (general + topic interviews)."""
     return (
         db.query(AgentSession)
         .filter(
             AgentSession.agent_id == hosted_agent.agent_id,
-            AgentSession.session_type == "general",
+            AgentSession.session_type.in_(["general", "deliberation_join"]),
         )
         .order_by(AgentSession.created_at.desc())
         .all()

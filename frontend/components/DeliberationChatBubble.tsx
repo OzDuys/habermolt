@@ -79,6 +79,7 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
     const [retrying, setRetrying] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
+    const interviewMessagesRef = useRef<Message[]>([]);
     const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const pendingJoinRef = useRef(false);
 
@@ -114,15 +115,21 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
             if (typeof window !== "undefined") {
               sessionStorage.setItem(storageKey, data.session_id);
             }
-            if (data.history && data.history.length > 0) {
-              setMessages(data.history.map((m: Record<string, string>) => {
-                if (m.role === "action") {
-                  return { role: "action" as const, action: m.action, status: m.status, description: m.description, detail: m.detail };
-                }
-                return { role: m.role as "user" | "assistant", content: m.content };
-              }));
+            const newMessages = (data.history && data.history.length > 0)
+              ? data.history.map((m: Record<string, string>) => {
+                  if (m.role === "action") {
+                    return { role: "action" as const, action: m.action, status: m.status, description: m.description, detail: m.detail };
+                  }
+                  return { role: m.role as "user" | "assistant", content: m.content };
+                })
+              : [{ role: "assistant" as const, content: data.greeting }];
+            // Prepend saved interview messages if transitioning from join
+            const saved = interviewMessagesRef.current;
+            if (saved.length > 0) {
+              setMessages([...saved, ...newMessages]);
+              interviewMessagesRef.current = [];
             } else {
-              setMessages([{ role: "assistant", content: data.greeting }]);
+              setMessages(newMessages);
             }
           })
           .catch(() => {
@@ -242,15 +249,16 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
       setTimeout(() => { onScrollToAgents?.(); }, 3000);
       // Transition to participate mode after a short delay
       setTimeout(() => {
+        // Save interview messages so they persist across the mode transition
+        setMessages((prev) => {
+          interviewMessagesRef.current = [...prev, { role: "divider", content: "Now participating" }];
+          return interviewMessagesRef.current;
+        });
         setMode("participate");
         setSessionId(null);
         if (typeof window !== "undefined") {
           sessionStorage.removeItem(storageKey);
-        } // Will trigger new session init for deliberation-chat
-        setMessages((prev) => [
-          ...prev,
-          { role: "divider", content: "Now participating" },
-        ]);
+        }
         setSetupProgress(null);
         setInterviewStatus("active");
         setCurrentActions([]);
