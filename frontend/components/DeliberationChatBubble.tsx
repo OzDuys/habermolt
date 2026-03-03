@@ -572,25 +572,6 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Submit Opinion CTA — shown after first user message while in browse mode */}
-            {mode === "browse" && messages.filter(m => m.role === "user").length >= 1 && !sending && sessionId && (
-              <div style={{
-                padding: "8px 12px", borderTop: "1px solid rgba(0,0,0,0.06)",
-                background: "rgba(200,74,32,0.03)",
-              }}>
-                <button
-                  onClick={() => injectJoinMessage()}
-                  style={{
-                    width: "100%", padding: "10px 16px", borderRadius: 10, border: "none",
-                    background: "#c84a20", color: "#fff", fontSize: 13, fontWeight: 600,
-                    cursor: "pointer", letterSpacing: -0.2,
-                  }}
-                >
-                  Submit My Opinion →
-                </button>
-              </div>
-            )}
-
             {/* Input */}
             {!chatDisabled && (
               <div style={{
