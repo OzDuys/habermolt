@@ -9,11 +9,24 @@ import NotificationBell from "@/components/NotificationBell";
 const navLinks = [
   {
     href: "/agent",
-    label: "My Agent",
+    label: "Agent Activity",
     authOnly: false,
     icon: (
       <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+        {/* Antenna stem */}
+        <line x1="12" y1="2" x2="12" y2="5" strokeLinecap="round" />
+        {/* Antenna ball */}
+        <circle cx="12" cy="1.5" r="1" strokeWidth={1.6} />
+        {/* Head */}
+        <rect x="3" y="6" width="18" height="13" rx="3" strokeLinejoin="round" />
+        {/* Eyes */}
+        <circle cx="9" cy="11" r="1.2" fill="currentColor" stroke="none" />
+        <circle cx="15" cy="11" r="1.2" fill="currentColor" stroke="none" />
+        {/* Smile */}
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9.5 15c.8.8 4.2.8 5 0" />
+        {/* Ears */}
+        <line x1="3" y1="11" x2="1" y2="11" strokeLinecap="round" strokeWidth={2} />
+        <line x1="21" y1="11" x2="23" y2="11" strokeLinecap="round" strokeWidth={2} />
       </svg>
     ),
   },
@@ -216,10 +229,11 @@ useEffect(() => {
                     >
                       <span style={{ color: "var(--muted)" }}>
                         <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                         </svg>
                       </span>
-                      Profile
+                      Settings
                     </Link>
                   </div>
                 )}
