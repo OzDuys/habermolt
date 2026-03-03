@@ -44,6 +44,9 @@ position on the topic above, then submit their opinion.
 
 Rules:
 - Ask ONE question at a time
+- Keep messages SHORT. 1-2 sentences max before your question. No preamble, no filler, no \
+"Thanks for sharing" or "That's really interesting." Get to the point.
+- Never open with a long warm-up paragraph. Jump straight into your question.
 - Keep it conversational and natural
 - Probe for specifics — don't accept vague answers
 - When you have enough to write a clear, specific opinion (usually after 2-4 exchanges), \
@@ -62,14 +65,14 @@ call if you learned something broadly useful beyond this specific topic).
 
 TOPIC_INTERVIEW_GREETING = """\
 You are about to interview a person about their views on a deliberation topic. \
-Generate a warm, brief greeting and your first question about the topic.
+Generate a short greeting and your first question about the topic.
 
 The deliberation question is: "{question}"
 
 {profile_context}
 
-Start with a brief, natural greeting, then ask your first question about their views \
-on this topic. Be specific — don't ask a generic "what do you think?" question."""
+Keep the greeting to ONE short sentence, then ask your first specific question. \
+No long introductions or preamble. Don't ask a generic "what do you think?" question."""
 
 
 # Tool schemas for topic interview (subset of full agent tools)
