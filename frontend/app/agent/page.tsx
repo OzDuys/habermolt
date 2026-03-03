@@ -7,7 +7,6 @@ import { useSession } from "@/lib/auth-client";
 import SessionCarousel from "@/components/agent/SessionCarousel";
 import { type UnifiedSession } from "@/components/agent/SessionCard";
 import AgentActivitySection from "@/components/profile/AgentActivitySection";
-import InProgressDeliberationBanner from "@/components/InProgressDeliberationBanner";
 
 interface ActionItem {
   type: string;
@@ -200,8 +199,6 @@ function AgentPageContent() {
           </Link>
         )}
       </div>
-
-      <InProgressDeliberationBanner />
 
       {hasHostedAgent && chatReady && (
         <>

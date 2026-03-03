@@ -57,6 +57,7 @@ class ActiveSessionResponse(BaseModel):
     status: Optional[str] = None
     setup_progress: Optional[dict] = None
     messages: Optional[list] = None
+    is_private: Optional[bool] = None
 
 
 # --- Auth helper ---
@@ -112,6 +113,7 @@ async def get_active_session(
         status=session.status,
         setup_progress=session.setup_progress,
         messages=session.messages,
+        is_private=deliberation.is_private if deliberation else None,
     )
 
 
@@ -344,3 +346,24 @@ async def retry_setup(
 
     topic_interview_service.retry_setup(db, session)
     return {"status": "retrying"}
+
+
+@router.post("/{session_id}/dismiss")
+async def dismiss_session(
+    session_id: str,
+    req: Request,
+    db: Session = Depends(get_db),
+):
+    """Dismiss an in-progress interview session so the user can start fresh."""
+    user_id = _require_user_id(req)
+
+    session = topic_interview_service.get_session(db, session_id, user_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Interview session not found.")
+
+    if session.status == "completed":
+        raise HTTPException(status_code=400, detail="Cannot dismiss a completed session.")
+
+    session.status = "dismissed"
+    db.commit()
+    return {"status": "dismissed"}

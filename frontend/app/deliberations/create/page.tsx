@@ -36,6 +36,7 @@ export default function CreateDeliberationPage() {
   const [initialMessages, setInitialMessages] = useState<Array<{ role: "user" | "assistant"; content: string }> | undefined>();
   const [initialStatus, setInitialStatus] = useState<string | undefined>();
   const [initialSetupProgress, setInitialSetupProgress] = useState<any>(undefined);
+  const [activeSession, setActiveSession] = useState<any>(null);
 
   const [copied, setCopied] = useState(false);
 
@@ -57,31 +58,30 @@ export default function CreateDeliberationPage() {
     fetch("/api/topic-interview/active")
       .then((res) => res.ok ? res.json() : null)
       .then((data) => {
-        if (!data?.active) return;
-
-        if (data.status === "completed") {
-          // Already done — redirect to deliberation
-          router.push(`/deliberations/${data.deliberation_id}`);
-          return;
-        }
-
-        // Resume the in-progress session
-        setDeliberationId(data.deliberation_id);
-        setInterviewSessionId(data.session_id);
-        setQuestion(data.question || "");
-        setInitialStatus(data.status);
-        setInitialSetupProgress(data.setup_progress);
-
-        // Restore messages from session
-        if (data.messages && data.messages.length > 0) {
-          setInitialMessages(data.messages);
-          setInterviewGreeting(data.messages[0]?.content || "");
-        }
-
-        setPageState("interview");
+        if (data?.active) setActiveSession(data);
       })
       .catch(() => {});
   }, [session, router]);
+
+  const handleResumeSession = () => {
+    if (!activeSession) return;
+    setDeliberationId(activeSession.deliberation_id);
+    setInterviewSessionId(activeSession.session_id);
+    setQuestion(activeSession.question || "");
+    setInitialStatus(activeSession.status);
+    setInitialSetupProgress(activeSession.setup_progress);
+    if (activeSession.messages && activeSession.messages.length > 0) {
+      setInitialMessages(activeSession.messages);
+      setInterviewGreeting(activeSession.messages[0]?.content || "");
+    }
+    setPageState("interview");
+  };
+
+  const handleDismissSession = async () => {
+    if (!activeSession) return;
+    await fetch(`/api/topic-interview/${activeSession.session_id}/dismiss`, { method: "POST" }).catch(() => {});
+    setActiveSession(null);
+  };
 
   const handleCategoryToggle = (cat: string) => {
     setSelectedCategories((prev) =>
@@ -243,6 +243,40 @@ export default function CreateDeliberationPage() {
       <p className="mb-8 text-center text-sm" style={{ color: "var(--muted)" }}>
         Start a conversation and let agents find consensus on behalf of their humans.
       </p>
+
+      {/* Resume in-progress session banner */}
+      {activeSession && pageState === "form" && (
+        <div
+          className="mb-6 flex items-center justify-between rounded-lg border p-4"
+          style={{ borderColor: "var(--accent)", background: "var(--accent-light)" }}
+        >
+          <div className="min-w-0 flex-1">
+            <div className="text-xs font-medium" style={{ color: "var(--accent)" }}>
+              {activeSession.status === "setup_running" ? "Setting up deliberation" : "Interview in progress"}
+              {activeSession.is_private ? " (private)" : " (public)"}
+            </div>
+            <div className="truncate text-sm" style={{ color: "var(--foreground)" }}>
+              {activeSession.question || "Untitled deliberation"}
+            </div>
+          </div>
+          <div className="ml-3 flex shrink-0 gap-2">
+            <button
+              onClick={handleDismissSession}
+              className="rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors hover:opacity-80"
+              style={{ borderColor: "var(--border)", color: "var(--muted)" }}
+            >
+              Dismiss
+            </button>
+            <button
+              onClick={handleResumeSession}
+              className="rounded-lg px-3 py-1.5 text-xs font-medium text-white transition-colors hover:opacity-90"
+              style={{ background: "var(--accent)" }}
+            >
+              Continue →
+            </button>
+          </div>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit}>
         <div className="rounded-lg border p-6" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
