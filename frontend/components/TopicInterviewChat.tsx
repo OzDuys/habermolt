@@ -15,36 +15,113 @@ interface ActionEvent {
   status?: "running" | "done" | "error";
 }
 
+interface SetupProgress {
+  current_step: string;
+  completed_steps: string[];
+  error: string | null;
+}
+
 interface TopicInterviewChatProps {
   deliberationId: string;
   sessionId: string;
   greeting: string;
+  initialMessages?: Message[];
+  initialStatus?: string;
+  initialSetupProgress?: SetupProgress | null;
   onComplete?: () => void;
 }
+
+const SETUP_STEPS = [
+  { key: "opinion_submitted", label: "Opinion submitted" },
+  { key: "seed_statements", label: "Generating consensus statements" },
+  { key: "ranking", label: "Ranking statements" },
+  { key: "proposing", label: "Proposing consensus" },
+  { key: "completed", label: "Done" },
+];
 
 export default function TopicInterviewChat({
   deliberationId,
   sessionId,
   greeting,
+  initialMessages,
+  initialStatus,
+  initialSetupProgress,
   onComplete,
 }: TopicInterviewChatProps) {
-  const [messages, setMessages] = useState<Message[]>([
-    { role: "assistant", content: greeting },
-  ]);
+  const [messages, setMessages] = useState<Message[]>(
+    initialMessages && initialMessages.length > 0
+      ? initialMessages
+      : [{ role: "assistant", content: greeting }]
+  );
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
-  const [interviewStatus, setInterviewStatus] = useState<string>("active");
+  const [interviewStatus, setInterviewStatus] = useState<string>(initialStatus || "active");
   const [currentActions, setCurrentActions] = useState<ActionEvent[]>([]);
+  const [setupProgress, setSetupProgress] = useState<SetupProgress | null>(initialSetupProgress || null);
+  const [retrying, setRetrying] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, currentActions]);
+  }, [messages, currentActions, setupProgress]);
 
   useEffect(() => {
-    if (!sending) inputRef.current?.focus();
-  }, [sending]);
+    if (!sending && interviewStatus === "active") inputRef.current?.focus();
+  }, [sending, interviewStatus]);
+
+  // Poll for setup progress when in setup_running state
+  useEffect(() => {
+    if (interviewStatus !== "setup_running") {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+      return;
+    }
+
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/topic-interview/${sessionId}/status`);
+        if (!res.ok) return;
+        const data = await res.json();
+        setSetupProgress(data.setup_progress);
+        if (data.status === "completed") {
+          setInterviewStatus("completed");
+          onComplete?.();
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    // Poll immediately, then every 2s
+    poll();
+    pollRef.current = setInterval(poll, 2000);
+
+    return () => {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+    };
+  }, [interviewStatus, sessionId, onComplete]);
+
+  const handleRetry = async () => {
+    setRetrying(true);
+    try {
+      const res = await fetch(`/api/topic-interview/${sessionId}/retry-setup`, { method: "POST" });
+      if (res.ok) {
+        setSetupProgress((prev) => prev ? { ...prev, error: null } : prev);
+        // Polling will pick up the new status
+      }
+    } catch {
+      // ignore
+    } finally {
+      setRetrying(false);
+    }
+  };
 
   const sendMessage = useCallback(async () => {
     const text = input.trim();
@@ -121,6 +198,7 @@ export default function TopicInterviewChat({
               if (event.status === "completed") {
                 onComplete?.();
               }
+              // setup_running will trigger the polling useEffect
             } else if (event.type === "error") {
               setMessages((prev) => [
                 ...prev,
@@ -150,6 +228,8 @@ export default function TopicInterviewChat({
   };
 
   const isCompleted = interviewStatus === "completed";
+  const isSetupRunning = interviewStatus === "setup_running";
+  const chatDisabled = isCompleted || isSetupRunning;
 
   return (
     <div className="flex flex-col rounded-lg border" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
@@ -188,7 +268,7 @@ export default function TopicInterviewChat({
           </div>
         )}
 
-        {/* Action indicators */}
+        {/* Action indicators (from SSE stream) */}
         {currentActions.length > 0 && (
           <div className="space-y-2 pl-2">
             {currentActions.map((action, i) => (
@@ -209,6 +289,48 @@ export default function TopicInterviewChat({
           </div>
         )}
 
+        {/* Setup progress (from polling) */}
+        {isSetupRunning && setupProgress && (
+          <div className="space-y-2 pl-2">
+            <div className="text-xs font-medium" style={{ color: "var(--muted)" }}>
+              Setting up your deliberation...
+            </div>
+            {SETUP_STEPS.map((step) => {
+              const completed = setupProgress.completed_steps?.includes(step.key);
+              const isCurrent = setupProgress.current_step === step.key && !completed;
+              if (!completed && !isCurrent) return null;
+              return (
+                <div
+                  key={step.key}
+                  className="flex items-center gap-2 rounded-lg border px-3 py-2 text-xs"
+                  style={{ borderColor: "var(--border)", background: "var(--surface-dim)" }}
+                >
+                  <span>{completed ? "\u2713" : "\u23F3"}</span>
+                  <span style={{ color: "var(--foreground)" }}>{step.label}</span>
+                </div>
+              );
+            })}
+            {setupProgress.error && (
+              <div className="space-y-2">
+                <div
+                  className="rounded-lg border px-3 py-2 text-xs"
+                  style={{ borderColor: "var(--error, #dc2626)", color: "var(--error, #dc2626)" }}
+                >
+                  Setup failed: {setupProgress.error}
+                </div>
+                <button
+                  onClick={handleRetry}
+                  disabled={retrying}
+                  className="rounded-lg px-3 py-1.5 text-xs font-medium text-white transition-colors disabled:opacity-50"
+                  style={{ background: "var(--accent)" }}
+                >
+                  {retrying ? "Retrying..." : "Retry"}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Completion banner */}
         {isCompleted && (
           <div
@@ -223,7 +345,7 @@ export default function TopicInterviewChat({
       </div>
 
       {/* Input */}
-      {!isCompleted && (
+      {!chatDisabled && (
         <div className="border-t p-3" style={{ borderColor: "var(--border)" }}>
           <div className="flex gap-2">
             <textarea

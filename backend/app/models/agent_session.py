@@ -22,10 +22,11 @@ class AgentSession(Base):
     deliberation_id = Column(UUID(as_uuid=True), ForeignKey("deliberations.id"), nullable=True, index=True)
 
     session_type = Column(String, nullable=False)  # onboarding, deliberation_join, deliberation_chat, general
-    status = Column(String, default="active", nullable=False)  # active, opinion_submitted, completed
+    status = Column(String, default="active", nullable=False)  # active, opinion_submitted, setup_running, completed
     topic = Column(String, nullable=True)
 
     messages = Column(JSONB, nullable=False, default=list)
+    setup_progress = Column(JSONB, nullable=True)  # {"current_step": "...", "completed_steps": [...], "error": null}
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     def __repr__(self) -> str:

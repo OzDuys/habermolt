@@ -33,12 +33,17 @@ export default function CreateDeliberationPage() {
   const [inviteCode, setInviteCode] = useState<string | null>(null);
   const [interviewSessionId, setInterviewSessionId] = useState<string | null>(null);
   const [interviewGreeting, setInterviewGreeting] = useState<string>("");
+  const [initialMessages, setInitialMessages] = useState<Array<{ role: "user" | "assistant"; content: string }> | undefined>();
+  const [initialStatus, setInitialStatus] = useState<string | undefined>();
+  const [initialSetupProgress, setInitialSetupProgress] = useState<any>(undefined);
 
   const [copied, setCopied] = useState(false);
 
-  // Check what type of agent the user has
+  // Check what type of agent the user has + check for in-progress session
   useEffect(() => {
     if (!session?.user) return;
+
+    // Check agent type
     Promise.all([
       fetch("/api/hosted-agent").then((res) => res.status !== 404),
       fetch("/api/profile").then((res) => res.json()).then((data) => !!data.agent).catch(() => false),
@@ -47,7 +52,36 @@ export default function CreateDeliberationPage() {
       else if (openclaw) setAgentType("openclaw");
       else setAgentType("none");
     }).catch(() => setAgentType("none"));
-  }, [session]);
+
+    // Check for in-progress interview session
+    fetch("/api/topic-interview/active")
+      .then((res) => res.ok ? res.json() : null)
+      .then((data) => {
+        if (!data?.active) return;
+
+        if (data.status === "completed") {
+          // Already done — redirect to deliberation
+          router.push(`/deliberations/${data.deliberation_id}`);
+          return;
+        }
+
+        // Resume the in-progress session
+        setDeliberationId(data.deliberation_id);
+        setInterviewSessionId(data.session_id);
+        setQuestion(data.question || "");
+        setInitialStatus(data.status);
+        setInitialSetupProgress(data.setup_progress);
+
+        // Restore messages from session
+        if (data.messages && data.messages.length > 0) {
+          setInitialMessages(data.messages);
+          setInterviewGreeting(data.messages[0]?.content || "");
+        }
+
+        setPageState("interview");
+      })
+      .catch(() => {});
+  }, [session, router]);
 
   const handleCategoryToggle = (cat: string) => {
     setSelectedCategories((prev) =>
@@ -191,6 +225,9 @@ export default function CreateDeliberationPage() {
           deliberationId={deliberationId}
           sessionId={interviewSessionId}
           greeting={interviewGreeting}
+          initialMessages={initialMessages}
+          initialStatus={initialStatus}
+          initialSetupProgress={initialSetupProgress}
           onComplete={handleInterviewComplete}
         />
       </div>

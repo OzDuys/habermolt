@@ -13,6 +13,7 @@ After the interview extracts an opinion, it programmatically:
 
 import json
 import logging
+import threading
 from datetime import datetime
 from typing import Optional
 from uuid import UUID
@@ -21,6 +22,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_, func
 
 from app.config import settings
+from app.database import SessionLocal
 from app.models import Agent, Deliberation, DeliberationStage, Opinion, Statement
 from app.models.hosted_agent import HostedAgent
 from app.models.agent_session import AgentSession
@@ -364,53 +366,160 @@ def _exec_submit_opinion(
     session: AgentSession,
     opinion_text: str,
 ) -> dict:
-    """Submit opinion and trigger post-interview actions (seed statements, ranking, consensus)."""
+    """Submit opinion and kick off background setup (seed statements, ranking, consensus)."""
     service = ContinuousDeliberationService(db)
 
-    # Submit the opinion
+    # Submit the opinion (fast)
     try:
         service.submit_opinion(deliberation, agent, opinion_text)
     except ValueError as e:
         return {"error": str(e)}
 
-    # Update session status
-    session.status = "opinion_submitted"
-    db.commit()
-
-    # If this agent is the creator and deliberation has no statements yet,
-    # generate seed statements in the background
+    # Determine what background work is needed
     is_creator = deliberation.created_by_agent_id == agent.id
     has_statements = db.query(Statement).filter(
         Statement.deliberation_id == deliberation.id
     ).first() is not None
+    needs_seed = is_creator and not has_statements
 
-    if is_creator and not has_statements:
-        try:
-            import asyncio
-            try:
-                loop = asyncio.get_event_loop()
-            except RuntimeError:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-            loop.run_until_complete(
-                _generate_seed_statements(db, deliberation, opinion_text)
-            )
-        except Exception as e:
-            logger.error(f"Seed statement generation failed: {e}", exc_info=True)
-
-    # Now do ranking and propose consensus
-    _do_ranking_for_agent(db, agent, deliberation)
-    _do_propose_for_agent(db, agent, deliberation)
-
-    session.status = "completed"
+    # Update session status and initialize progress tracking
+    session.status = "setup_running"
+    session.setup_progress = {
+        "current_step": "seed_statements" if needs_seed else "ranking",
+        "completed_steps": ["opinion_submitted"],
+        "error": None,
+    }
     db.commit()
+
+    # Capture IDs for the background thread (can't use ORM objects across threads)
+    session_id = session.id
+    agent_id = agent.id
+    deliberation_id = deliberation.id
+
+    # Launch background thread
+    thread = threading.Thread(
+        target=_run_setup_background,
+        args=(session_id, agent_id, deliberation_id, opinion_text, needs_seed),
+        daemon=True,
+    )
+    thread.start()
 
     return {
         "action": "submit_opinion",
         "description": f"Opinion submitted for '{deliberation.question[:50]}'",
         "opinion_text": opinion_text,
-        "status": "completed",
+        "status": "setup_running",
     }
+
+
+def _run_setup_background(
+    session_id: UUID,
+    agent_id: UUID,
+    deliberation_id: UUID,
+    opinion_text: str,
+    needs_seed: bool,
+):
+    """Background thread: generate seed statements, rank, and propose consensus."""
+    db = SessionLocal()
+    try:
+        session = db.query(AgentSession).get(session_id)
+        agent = db.query(Agent).get(agent_id)
+        deliberation = db.query(Deliberation).get(deliberation_id)
+
+        if not all([session, agent, deliberation]):
+            logger.error(f"Background setup: missing objects for session {session_id}")
+            return
+
+        def _update_progress(current_step: str, completed_step: str = None):
+            progress = dict(session.setup_progress or {})
+            progress["current_step"] = current_step
+            if completed_step:
+                steps = list(progress.get("completed_steps", []))
+                steps.append(completed_step)
+                progress["completed_steps"] = steps
+            session.setup_progress = progress
+            db.commit()
+
+        # Step 1: Generate seed statements (if creator)
+        if needs_seed:
+            try:
+                import asyncio
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    loop.run_until_complete(
+                        _generate_seed_statements(db, deliberation, opinion_text)
+                    )
+                finally:
+                    loop.close()
+            except Exception as e:
+                logger.error(f"Seed statement generation failed: {e}", exc_info=True)
+            _update_progress("ranking", "seed_statements")
+
+        # Step 2: Rank statements
+        _do_ranking_for_agent(db, agent, deliberation)
+        _update_progress("proposing", "ranking")
+
+        # Step 3: Propose consensus
+        _do_propose_for_agent(db, agent, deliberation)
+        _update_progress("completed", "proposing")
+
+        # Mark session complete
+        session.status = "completed"
+        progress = dict(session.setup_progress or {})
+        progress["current_step"] = "completed"
+        progress["completed_steps"] = list(progress.get("completed_steps", [])) + ["completed"]
+        session.setup_progress = progress
+        db.commit()
+
+        logger.info(f"Background setup completed for session {session_id}")
+
+    except Exception as e:
+        logger.error(f"Background setup failed for session {session_id}: {e}", exc_info=True)
+        try:
+            session = db.query(AgentSession).get(session_id)
+            if session:
+                progress = dict(session.setup_progress or {})
+                progress["error"] = str(e)
+                session.setup_progress = progress
+                db.commit()
+        except Exception:
+            logger.error(f"Failed to update error status for session {session_id}", exc_info=True)
+    finally:
+        db.close()
+
+
+def retry_setup(db: Session, session: AgentSession):
+    """Retry a failed background setup from where it left off."""
+    progress = session.setup_progress or {}
+    if not progress.get("error"):
+        return
+
+    completed = set(progress.get("completed_steps", []))
+    needs_seed = "seed_statements" not in completed and progress.get("current_step") != "ranking"
+
+    # Get the opinion text from the deliberation
+    opinion = db.query(Opinion).filter(
+        and_(Opinion.deliberation_id == session.deliberation_id, Opinion.agent_id == session.agent_id)
+    ).order_by(Opinion.version.desc()).first()
+    opinion_text = opinion.opinion_text if opinion else ""
+
+    # Clear error and restart
+    progress["error"] = None
+    session.setup_progress = progress
+    session.status = "setup_running"
+    db.commit()
+
+    session_id = session.id
+    agent_id = session.agent_id
+    deliberation_id = session.deliberation_id
+
+    thread = threading.Thread(
+        target=_run_setup_background,
+        args=(session_id, agent_id, deliberation_id, opinion_text, needs_seed),
+        daemon=True,
+    )
+    thread.start()
 
 
 def _exec_update_profile(db: Session, agent: Agent, profile_text: str) -> dict:

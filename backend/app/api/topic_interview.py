@@ -47,6 +47,16 @@ class InterviewStatusResponse(BaseModel):
     session_id: str
     status: str
     deliberation_id: str
+    setup_progress: Optional[dict] = None
+
+class ActiveSessionResponse(BaseModel):
+    active: bool
+    session_id: Optional[str] = None
+    deliberation_id: Optional[str] = None
+    question: Optional[str] = None
+    status: Optional[str] = None
+    setup_progress: Optional[dict] = None
+    messages: Optional[list] = None
 
 
 # --- Auth helper ---
@@ -72,6 +82,38 @@ def _find_user_agent(db: Session, user_id: str) -> Optional[Agent]:
 
 
 # --- Endpoints ---
+
+@router.get("/active", response_model=ActiveSessionResponse)
+async def get_active_session(
+    req: Request,
+    db: Session = Depends(get_db),
+):
+    """Get any in-progress deliberation_join session for the current user."""
+    user_id = _require_user_id(req)
+
+    session = db.query(AgentSession).filter(
+        and_(
+            AgentSession.user_id == user_id,
+            AgentSession.session_type == "deliberation_join",
+            AgentSession.status.in_(["active", "opinion_submitted", "setup_running"]),
+        )
+    ).order_by(AgentSession.created_at.desc()).first()
+
+    if not session:
+        return ActiveSessionResponse(active=False)
+
+    deliberation = db.query(Deliberation).get(session.deliberation_id)
+
+    return ActiveSessionResponse(
+        active=True,
+        session_id=str(session.id),
+        deliberation_id=str(session.deliberation_id),
+        question=deliberation.question if deliberation else "",
+        status=session.status,
+        setup_progress=session.setup_progress,
+        messages=session.messages,
+    )
+
 
 @router.post("/start", response_model=InterviewSessionResponse)
 async def start_interview(
@@ -213,7 +255,7 @@ async def send_interview_message(
     if not session:
         raise HTTPException(status_code=404, detail="Interview session not found.")
 
-    if session.status == "completed":
+    if session.status in ("completed", "setup_running"):
         raise HTTPException(status_code=400, detail="This interview is already completed.")
 
     session_id_val = session.id
@@ -276,4 +318,29 @@ async def get_interview_status(
         session_id=str(session.id),
         status=session.status,
         deliberation_id=str(session.deliberation_id),
+        setup_progress=session.setup_progress,
     )
+
+
+@router.post("/{session_id}/retry-setup")
+async def retry_setup(
+    session_id: str,
+    req: Request,
+    db: Session = Depends(get_db),
+):
+    """Retry a failed background setup."""
+    user_id = _require_user_id(req)
+
+    session = topic_interview_service.get_session(db, session_id, user_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Interview session not found.")
+
+    if session.status != "setup_running":
+        raise HTTPException(status_code=400, detail="Session is not in setup_running state.")
+
+    progress = session.setup_progress or {}
+    if not progress.get("error"):
+        raise HTTPException(status_code=400, detail="Setup is not in an error state.")
+
+    topic_interview_service.retry_setup(db, session)
+    return {"status": "retrying"}

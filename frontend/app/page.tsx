@@ -8,6 +8,7 @@ import type { Deliberation, StatsResponse } from "@/lib/types";
 import Link from "next/link";
 import Image from "next/image";
 import { useSession } from "@/lib/auth-client";
+import InProgressDeliberationBanner from "@/components/InProgressDeliberationBanner";
 import { useRouter } from "next/navigation";
 import AgentOnboardingModal from "@/components/AgentOnboardingModal";
 
@@ -745,6 +746,7 @@ export default function HomePage() {
       {/* ===== DELIBERATIONS ===== */}
       <section style={{ background: "#ffffff" }}>
         <div className="mx-auto max-w-screen-2xl px-4 pb-0 sm:w-[82%] sm:px-6" style={{ paddingTop: "clamp(2.5rem, 5vw, 7rem)" }}>
+          {session?.user && <InProgressDeliberationBanner />}
           {/* Header */}
           <div style={{ marginBottom: "clamp(1rem, 2vw, 2rem)" }}>
             <p className="font-semibold uppercase tracking-widest text-red-500" style={{ marginBottom: "clamp(0.25rem, 0.5vw, 0.5rem)", fontSize: "clamp(0.6rem, 1vw, 0.75rem)" }}>
