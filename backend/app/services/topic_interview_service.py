@@ -65,6 +65,51 @@ Call this when you have enough information to represent their view clearly.
 call if you learned something broadly useful beyond this specific topic).
 """
 
+TOPIC_BROWSE_SYSTEM_PROMPT = """\
+You are a helpful assistant for a democratic deliberation on Habermolt. The user is browsing \
+this deliberation and may have questions about it before deciding to join.
+
+## Deliberation Question
+"{question}"
+
+{profile_context}
+
+{deliberation_context}
+
+Your role: Answer the user's questions about this deliberation — what it's about, what \
+positions people hold, how the process works. Be informative and conversational.
+
+If the user expresses interest in joining or sharing their opinion (e.g. "I want to join", \
+"I'd like to participate", "let me share my views"), transition into interview mode: \
+start asking them about their position on the topic, and when you have enough, call \
+submit_opinion to formally join them.
+
+Rules:
+- Keep messages SHORT. Be concise and direct.
+- If just answering questions, do NOT call any tools.
+- Only call submit_opinion when the user clearly wants to join and you've gathered their view.
+- Stay focused on this specific deliberation topic.
+
+Tools:
+- **submit_opinion**: Submit the human's synthesized opinion for this deliberation. \
+Only call this when the user wants to join and you have enough to represent their view.
+- **update_profile**: Save what you learned about this person's values (optional).
+"""
+
+TOPIC_BROWSE_GREETING = """\
+You are a helpful assistant for a deliberation on Habermolt. The user is browsing \
+this deliberation. Generate a short, welcoming message and let them know they can \
+ask questions about the deliberation or join when they're ready.
+
+The deliberation question is: "{question}"
+
+{profile_context}
+
+{deliberation_context}
+
+Keep it to 1-2 short sentences. Mention they can ask questions or join when ready. \
+No long introductions."""
+
 TOPIC_INTERVIEW_GREETING = """\
 You are about to interview a person about their views on a deliberation topic. \
 Generate a short greeting and your first question about the topic.
@@ -152,11 +197,29 @@ def _get_profile_context(db: Session, agent: Agent) -> str:
     return "You don't know anything about this person yet. Start from scratch."
 
 
+def _get_deliberation_context(db: Session, deliberation: Deliberation) -> str:
+    """Get a summary of the deliberation for browse mode."""
+    opinion_count = db.query(Opinion).filter(
+        Opinion.deliberation_id == deliberation.id
+    ).distinct(Opinion.agent_id).count()
+    statement_count = db.query(Statement).filter(
+        Statement.deliberation_id == deliberation.id
+    ).count()
+
+    parts = [f"This deliberation currently has {opinion_count} participating agent(s) and {statement_count} consensus statement(s)."]
+
+    if deliberation.categories:
+        parts.append(f"Categories: {', '.join(deliberation.categories)}.")
+
+    return " ".join(parts)
+
+
 def create_session(
     db: Session,
     agent: Agent,
     deliberation: Deliberation,
     user_id: str,
+    browse_mode: bool = False,
 ) -> AgentSession:
     """Create a new topic interview session."""
     session = AgentSession(
@@ -167,6 +230,8 @@ def create_session(
         messages=[],
         status="active",
     )
+    if browse_mode:
+        session.setup_progress = {"browse_mode": True}
     db.add(session)
     db.commit()
     db.refresh(session)
@@ -186,6 +251,7 @@ def generate_greeting(
     agent: Agent,
     deliberation: Deliberation,
     session: AgentSession,
+    browse_mode: bool = False,
 ) -> str:
     """Generate the initial greeting message for the interview."""
     profile_context = _get_profile_context(db, agent)
@@ -197,10 +263,18 @@ def generate_greeting(
         agent_id=agent.id,
     )
 
-    prompt = TOPIC_INTERVIEW_GREETING.format(
-        question=deliberation.question,
-        profile_context=profile_context,
-    )
+    if browse_mode:
+        deliberation_context = _get_deliberation_context(db, deliberation)
+        prompt = TOPIC_BROWSE_GREETING.format(
+            question=deliberation.question,
+            profile_context=profile_context,
+            deliberation_context=deliberation_context,
+        )
+    else:
+        prompt = TOPIC_INTERVIEW_GREETING.format(
+            question=deliberation.question,
+            profile_context=profile_context,
+        )
 
     greeting = client.sample_text(
         prompt=prompt,
@@ -237,10 +311,19 @@ def stream_message(
     messages.append({"role": "user", "content": user_content})
 
     profile_context = _get_profile_context(db, agent)
-    system_prompt = TOPIC_INTERVIEW_SYSTEM_PROMPT.format(
-        question=deliberation.question,
-        profile_context=profile_context,
-    )
+    is_browse = bool((session.setup_progress or {}).get("browse_mode"))
+    if is_browse:
+        deliberation_context = _get_deliberation_context(db, deliberation)
+        system_prompt = TOPIC_BROWSE_SYSTEM_PROMPT.format(
+            question=deliberation.question,
+            profile_context=profile_context,
+            deliberation_context=deliberation_context,
+        )
+    else:
+        system_prompt = TOPIC_INTERVIEW_SYSTEM_PROMPT.format(
+            question=deliberation.question,
+            profile_context=profile_context,
+        )
 
     llm_messages = [{"role": "system", "content": system_prompt}]
     llm_messages.extend(messages)
@@ -382,7 +465,7 @@ def _exec_submit_opinion(
     ).first() is not None
     needs_seed = is_creator and not has_statements
 
-    # Update session status and initialize progress tracking
+    # Update session status and initialize progress tracking (clear browse_mode)
     session.status = "setup_running"
     session.setup_progress = {
         "current_step": "seed_statements" if needs_seed else "ranking",

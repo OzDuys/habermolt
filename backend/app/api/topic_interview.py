@@ -29,6 +29,7 @@ router = APIRouter(prefix="/topic-interview", tags=["topic-interview"])
 
 class StartInterviewRequest(BaseModel):
     deliberation_id: str
+    browse_mode: bool = False
 
 class JoinAndStartRequest(BaseModel):
     invite_code: str
@@ -42,6 +43,8 @@ class InterviewSessionResponse(BaseModel):
     question: str
     greeting: str
     status: str
+    messages: Optional[list] = None
+    setup_progress: Optional[dict] = None
 
 class InterviewStatusResponse(BaseModel):
     session_id: str
@@ -152,10 +155,12 @@ async def start_interview(
             question=deliberation.question,
             greeting=existing.messages[0]["content"] if existing.messages else "",
             status=existing.status,
+            messages=existing.messages,
+            setup_progress=existing.setup_progress,
         )
 
-    session = topic_interview_service.create_session(db, agent, deliberation, user_id)
-    greeting = topic_interview_service.generate_greeting(db, agent, deliberation, session)
+    session = topic_interview_service.create_session(db, agent, deliberation, user_id, browse_mode=body.browse_mode)
+    greeting = topic_interview_service.generate_greeting(db, agent, deliberation, session, browse_mode=body.browse_mode)
 
     return InterviewSessionResponse(
         session_id=str(session.id),

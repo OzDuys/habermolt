@@ -9,9 +9,8 @@ import { api } from "@/lib/api";
 import { useSession, signIn } from "@/lib/auth-client";
 import type { DeliberationDetail, ClusterPoint } from "@/lib/types";
 import StatementCluster from "@/components/StatementCluster";
-import TopicInterviewChat from "@/components/TopicInterviewChat";
 import ShareButton from "@/components/ShareSection";
-import DeliberationChat from "@/components/DeliberationChat";
+import DeliberationChatBubble, { type DeliberationChatBubbleHandle } from "@/components/DeliberationChatBubble";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -728,11 +727,8 @@ export default function LiveDeliberationPage() {
   const { data: session } = useSession();
   const [agentType, setAgentType] = useState<"loading" | "none" | "hosted" | "openclaw">("loading");
   const [userAgentId, setUserAgentId] = useState<string | null>(null);
-  const [showInterview, setShowInterview] = useState(false);
-  const [interviewSessionId, setInterviewSessionId] = useState<string | null>(null);
-  const [interviewGreeting, setInterviewGreeting] = useState("");
-  const [startingInterview, setStartingInterview] = useState(false);
   const [interviewCompleted, setInterviewCompleted] = useState(false);
+  const chatBubbleRef = useRef<DeliberationChatBubbleHandle>(null);
 
   // Check if user has a haberagent
   useEffect(() => {
@@ -765,31 +761,10 @@ export default function LiveDeliberationPage() {
     return data.opinions.some((o) => o.agent_id === userAgentId);
   }, [data, userAgentId]);
 
-  // Start topic interview
-  const handleJoinDeliberation = useCallback(async () => {
-    if (startingInterview) return;
-    setStartingInterview(true);
-    try {
-      const res = await fetch("/api/topic-interview/start", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ deliberation_id: id }),
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        alert(err.detail || "Failed to start interview.");
-        return;
-      }
-      const d = await res.json();
-      setInterviewSessionId(d.session_id);
-      setInterviewGreeting(d.greeting);
-      setShowInterview(true);
-    } catch {
-      alert("Failed to start interview. Please try again.");
-    } finally {
-      setStartingInterview(false);
-    }
-  }, [id, startingInterview]);
+  // Trigger join via the chat bubble
+  const handleJoinDeliberation = useCallback(() => {
+    chatBubbleRef.current?.triggerJoin();
+  }, []);
 
   // Fetch data with polling
   useEffect(() => {
@@ -1054,17 +1029,15 @@ export default function LiveDeliberationPage() {
               ) : agentType === "hosted" ? (
                 <button
                   onClick={handleJoinDeliberation}
-                  disabled={startingInterview}
                   style={{
                     padding: "12px 28px", borderRadius: 999, border: "none",
-                    background: "#c84a20", color: "#fff", cursor: startingInterview ? "wait" : "pointer",
+                    background: "#c84a20", color: "#fff", cursor: "pointer",
                     fontSize: 14, fontWeight: 600, letterSpacing: -0.2,
                     boxShadow: "0 2px 12px rgba(200,74,32,0.2)",
                     transition: "all 0.2s",
-                    opacity: startingInterview ? 0.7 : 1,
                   }}
                 >
-                  {startingInterview ? "Starting interview..." : "Join this Deliberation"}
+                  Join this Deliberation
                 </button>
               ) : agentType === "openclaw" ? (
                 <div style={{
@@ -1361,62 +1334,6 @@ export default function LiveDeliberationPage() {
         </div>
       </div>
 
-      {/* Interview Modal */}
-      <AnimatePresence>
-        {showInterview && interviewSessionId && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={() => setShowInterview(false)}
-            style={{
-              position: "fixed", inset: 0, zIndex: 200,
-              background: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)",
-              WebkitBackdropFilter: "blur(4px)",
-              display: "flex", alignItems: "flex-end", justifyContent: "center",
-            }}
-          >
-            <motion.div
-              initial={{ y: "100%" }}
-              animate={{ y: 0 }}
-              exit={{ y: "100%" }}
-              transition={{ type: "spring", damping: 28, stiffness: 300 }}
-              onClick={(e) => e.stopPropagation()}
-              style={{
-                width: "100%", maxWidth: 520, maxHeight: "85vh",
-                background: "#faf7f0", borderRadius: "20px 20px 0 0",
-                padding: "20px 20px 0", display: "flex", flexDirection: "column",
-                boxShadow: "0 -8px 40px rgba(0,0,0,0.12)",
-              }}
-            >
-              {/* Handle */}
-              <div style={{ display: "flex", justifyContent: "center", marginBottom: 12 }}>
-                <div style={{ width: 36, height: 4, borderRadius: 99, background: "rgba(0,0,0,0.1)" }} />
-              </div>
-
-              <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, color: "#888", textTransform: "uppercase", textAlign: "center", marginBottom: 4 }}>
-                Join Deliberation
-              </p>
-              <h2 className="font-serif" style={{ fontSize: 18, fontWeight: 400, color: "#1a1a1a", textAlign: "center", marginBottom: 16, lineHeight: 1.3 }}>
-                &ldquo;{data?.deliberation.question}&rdquo;
-              </h2>
-
-              <div style={{ flex: 1, overflow: "auto", paddingBottom: 20 }}>
-                <TopicInterviewChat
-                  deliberationId={id}
-                  sessionId={interviewSessionId}
-                  greeting={interviewGreeting}
-                  onComplete={() => {
-                    setInterviewCompleted(true);
-                    setTimeout(() => setShowInterview(false), 2000);
-                  }}
-                />
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Agent Drawer */}
       <AnimatePresence>
         {selectedAgent && (
@@ -1424,11 +1341,14 @@ export default function LiveDeliberationPage() {
         )}
       </AnimatePresence>
 
-      {/* Floating deliberation chat */}
-      {agentType === "hosted" && alreadyParticipating && data && (
-        <DeliberationChat
+      {/* Floating deliberation chat bubble */}
+      {agentType === "hosted" && data && (
+        <DeliberationChatBubble
+          ref={chatBubbleRef}
           deliberationId={id}
           deliberationQuestion={data.deliberation.question}
+          alreadyParticipating={alreadyParticipating || interviewCompleted}
+          onJoinComplete={() => setInterviewCompleted(true)}
         />
       )}
 
