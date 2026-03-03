@@ -32,10 +32,9 @@ interface SessionMessage {
 }
 
 const MODELS = [
-  "google/gemini-2.5-flash",
-  "anthropic/claude-sonnet-4.6",
-  "openai/gpt-4.1-mini",
-  "deepseek/deepseek-v3.2",
+  "google/gemini-3-flash-preview",
+  "x-ai/grok-4.1-fast",
+  "openai/gpt-5-mini",
 ];
 
 const FREQUENCIES = [

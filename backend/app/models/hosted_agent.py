@@ -32,7 +32,7 @@ class HostedAgent(Base):
     last_chatted_at = Column(DateTime, nullable=True)
 
     # LLM config
-    model = Column(String, default="google/gemini-2.5-flash", nullable=False)
+    model = Column(String, default="google/gemini-3-flash-preview", nullable=False)
     participation_frequency = Column(String, default="daily", nullable=False)  # hourly, daily, weekly
 
     # Pricing
