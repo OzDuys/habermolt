@@ -47,6 +47,7 @@ class ByokKeyRequest(BaseModel):
 
 class HostedAgentResponse(BaseModel):
     id: str
+    agent_id: str
     display_name: str
     model: str
     participation_frequency: str
@@ -111,6 +112,7 @@ TOKEN_LIMITS = {
 def _to_response(ha) -> HostedAgentResponse:
     return HostedAgentResponse(
         id=str(ha.id),
+        agent_id=str(ha.agent_id),
         display_name=ha.display_name,
         model=ha.model,
         participation_frequency=ha.participation_frequency,

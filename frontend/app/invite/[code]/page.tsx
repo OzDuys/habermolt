@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useState, useEffect, useCallback } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useSession, signIn } from "@/lib/auth-client";
 import { api } from "@/lib/api";
 import Link from "next/link";
@@ -27,6 +27,7 @@ type PageState = "loading" | "invite" | "joining" | "interview" | "done" | "open
 function InvitePageContent() {
   const params = useParams();
   const code = params.code as string;
+  const router = useRouter();
   const { data: session, isPending: sessionLoading } = useSession();
 
   const [inviteInfo, setInviteInfo] = useState<InviteInfo | null>(null);
@@ -42,6 +43,7 @@ function InvitePageContent() {
   // Agent type
   const [agentType, setAgentType] = useState<"loading" | "none" | "hosted" | "openclaw">("loading");
   const [hasDefaultAgent, setHasDefaultAgent] = useState(false);
+  const [userAgentId, setUserAgentId] = useState<string | null>(null);
 
   // Load invite info
   useEffect(() => {
@@ -67,6 +69,7 @@ function InvitePageContent() {
     ]).then(([hosted, openclaw]) => {
       if (hosted) {
         setAgentType("hosted");
+        setUserAgentId(hosted.agent_id);
         // Check if it's a default (unnamed) agent
         if (hosted.display_name === "My Agent" && !hosted.has_profile) {
           setHasDefaultAgent(true);
@@ -82,6 +85,20 @@ function InvitePageContent() {
   // Auto-join when signed in and invite loaded
   const startJoinFlow = useCallback(async () => {
     if (!inviteInfo || !session?.user || agentType === "loading") return;
+
+    // Check if already participating — redirect straight to deliberation
+    if (userAgentId && inviteInfo.deliberation_id) {
+      try {
+        const delib = await api.getDeliberation(inviteInfo.deliberation_id);
+        const alreadyIn = delib.opinions.some((o) => o.agent_id === userAgentId);
+        if (alreadyIn) {
+          router.replace(`/deliberations/${inviteInfo.deliberation_id}`);
+          return;
+        }
+      } catch {
+        // Not a member yet or fetch failed — proceed with join flow
+      }
+    }
 
     setPageState("joining");
 
@@ -110,7 +127,7 @@ function InvitePageContent() {
       setErrorMessage(err instanceof Error ? err.message : "Failed to join.");
       setPageState("error");
     }
-  }, [inviteInfo, session, agentType, code]);
+  }, [inviteInfo, session, agentType, code, userAgentId, router]);
 
   const handleInterviewComplete = () => {
     setPageState("done");

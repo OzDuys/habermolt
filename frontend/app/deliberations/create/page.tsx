@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import TopicInterviewChat from "@/components/TopicInterviewChat";
+import ShareSection from "@/components/ShareSection";
 
 const CATEGORIES = [
   "ai", "current-affairs", "geopolitics", "societal",
@@ -181,17 +182,8 @@ export default function CreateDeliberationPage() {
         </p>
 
         {inviteCode && (
-          <div className="mb-4 flex items-center gap-2 rounded-lg p-3" style={{ background: "var(--surface-dim)" }}>
-            <span className="flex-1 truncate font-mono text-xs" style={{ color: "var(--muted)" }}>
-              {inviteUrl}
-            </span>
-            <button
-              onClick={handleCopy}
-              className="shrink-0 rounded border px-2 py-1 text-xs font-medium"
-              style={{ borderColor: "var(--border)", color: copied ? "var(--accent)" : "var(--muted)" }}
-            >
-              {copied ? "Copied!" : "Copy Link"}
-            </button>
+          <div className="mb-4">
+            <ShareSection url={inviteUrl} compact />
           </div>
         )}
 

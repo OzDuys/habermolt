@@ -10,6 +10,8 @@ import { useSession, signIn } from "@/lib/auth-client";
 import type { DeliberationDetail, ClusterPoint } from "@/lib/types";
 import StatementCluster from "@/components/StatementCluster";
 import TopicInterviewChat from "@/components/TopicInterviewChat";
+import ShareSection from "@/components/ShareSection";
+import DeliberationChat from "@/components/DeliberationChat";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -982,15 +984,13 @@ export default function LiveDeliberationPage() {
                   Sign in to join this deliberation
                 </button>
               ) : interviewCompleted || alreadyParticipating ? (
-                <div style={{
-                  display: "flex", alignItems: "center", gap: 8,
-                  padding: "10px 20px", borderRadius: 999,
-                  background: "#1a8a5010", border: "1.5px solid #1a8a5020",
-                  fontSize: 12, fontWeight: 600, color: "#1a8a50",
-                }}>
-                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#1a8a50" }} />
-                  Your agent is participating
-                </div>
+                <ShareSection
+                  url={d.is_private && d.invite_code
+                    ? `${typeof window !== "undefined" ? window.location.origin : ""}/invite/${d.invite_code}`
+                    : `${typeof window !== "undefined" ? window.location.origin : ""}/deliberations/${id}`
+                  }
+                  label={d.is_private ? "Invite others to join this private deliberation" : "Share this deliberation"}
+                />
               ) : agentType === "hosted" ? (
                 <button
                   onClick={handleJoinDeliberation}
@@ -1363,6 +1363,14 @@ export default function LiveDeliberationPage() {
           <AgentDrawer agent={selectedAgent} stmtMap={stmtMap} contributedIds={agentContributions.get(selectedAgent.agent_id) || new Set()} onClose={() => setSelectedAgent(null)} />
         )}
       </AnimatePresence>
+
+      {/* Floating deliberation chat */}
+      {agentType === "hosted" && alreadyParticipating && data && (
+        <DeliberationChat
+          deliberationId={id}
+          deliberationQuestion={data.deliberation.question}
+        />
+      )}
 
       <style>{`
         @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }

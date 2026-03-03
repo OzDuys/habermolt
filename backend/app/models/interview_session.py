@@ -19,6 +19,7 @@ class HostedAgentChatSession(Base):
     hosted_agent_id = Column(UUID(as_uuid=True), ForeignKey("hosted_agents.id"), nullable=False, index=True)
 
     topic = Column(String, nullable=True)  # NULL = general chat; set for topic-specific conversations
+    deliberation_id = Column(UUID(as_uuid=True), ForeignKey("deliberations.id"), nullable=True, index=True)
     messages = Column(JSONB, nullable=False, default=list)  # [{role, content}, ...]
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
