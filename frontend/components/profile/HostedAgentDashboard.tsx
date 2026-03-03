@@ -477,16 +477,24 @@ export default function HostedAgentDashboard() {
                   {expandedSession === s.id && (
                     <div className="ml-4 mb-2 rounded-lg border p-3 text-xs space-y-2" style={{ borderColor: "var(--border)", background: "var(--background)" }}>
                       {expandedMessages
-                        .filter((m) => (m.role === "user" || m.role === "assistant") && m.content)
-                        .map((m, i) => (
-                          <div key={i}>
-                            <span className="font-semibold" style={{ color: m.role === "user" ? "var(--accent)" : "var(--muted)" }}>
-                              {m.role === "user" ? "You" : "Agent"}:
-                            </span>{" "}
-                            <span style={{ color: "var(--foreground)" }}>{m.content}</span>
-                          </div>
-                        ))}
-                      {expandedMessages.filter(m => (m.role === "user" || m.role === "assistant") && m.content).length === 0 && (
+                        .filter((m) => ((m.role === "user" || m.role === "assistant") && m.content) || m.role === "action")
+                        .map((m, i) =>
+                          m.role === "action" ? (
+                            <div key={i} className="flex items-center gap-1.5 rounded px-2 py-1" style={{ background: "var(--background)", color: "var(--muted)" }}>
+                              <span>{"✓"}</span>
+                              <span>{(m as Record<string, string>).action?.replace(/_/g, " ")}</span>
+                              {(m as Record<string, string>).description && <span>— {(m as Record<string, string>).description}</span>}
+                            </div>
+                          ) : (
+                            <div key={i}>
+                              <span className="font-semibold" style={{ color: m.role === "user" ? "var(--accent)" : "var(--muted)" }}>
+                                {m.role === "user" ? "You" : "Agent"}:
+                              </span>{" "}
+                              <span style={{ color: "var(--foreground)" }}>{m.content}</span>
+                            </div>
+                          )
+                        )}
+                      {expandedMessages.filter(m => ((m.role === "user" || m.role === "assistant") && m.content) || m.role === "action").length === 0 && (
                         <span style={{ color: "var(--muted)" }}>Empty session</span>
                       )}
                     </div>
