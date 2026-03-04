@@ -7,7 +7,7 @@ import { Analytics } from "@vercel/analytics/react";
 import "./globals.css";
 
 const dmSans = DM_Sans({
-  subsets: ["latin"],
+  subsets: ["latin", "latin-ext"],
   variable: "--font-dm-sans",
   display: "swap",
   weight: ["300", "400", "500", "600", "700"],
@@ -15,7 +15,7 @@ const dmSans = DM_Sans({
 });
 
 const instrumentSerif = Instrument_Serif({
-  subsets: ["latin"],
+  subsets: ["latin", "latin-ext"],
   variable: "--font-instrument-serif",
   display: "swap",
   weight: "400",
