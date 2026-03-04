@@ -338,6 +338,22 @@ Three settings in `backend/app/config.py` control which LLM is used for what:
 - All calls logged to `llm_traces` table with cost tracking
 - Token usage auto-tracked for hosted agents
 
+### Token Limits
+- **Weekly** reset (7 days), not monthly. The DB column is still called `billing_period_start` but resets every 7 days via `_maybe_reset_billing_period()` in `hosted_agent_service.py`.
+- Free tier: 100K tokens/week (~$0.15/user/week with Gemini Flash). Subscription: 500K/week. BYOK: unlimited.
+- Token tracking happens in three places: `hosted_agent_runner.py` (heartbeats), `chat_service.py` (chat), and `agent_tools.py` (tool calls). All call `record_token_usage()`.
+- When the limit is hit, `record_token_usage()` sets `is_active=False` and `paused_reason="token_limit"`. The `check_token_limit()` function auto-unpauses if the agent is back under the limit (e.g. limit raised, period reset).
+- `GET /me` runs `check_token_limit()` so the settings page always shows fresh state.
+- **Gotcha**: If you raise the token limit, agents paused under the old limit won't auto-unpause until something calls `check_token_limit()` (page load, chat, heartbeat).
+
+### Production DB Access
+```bash
+cd backend && DATABASE_URL="***REDACTED***" python -c "..."
+# Or for migrations:
+cd backend && DATABASE_URL="***REDACTED***" alembic upgrade head
+```
+- Local DB may be out of sync with production schema (e.g. missing `onboarded` column). Use raw SQL (`sqlalchemy text()`) instead of ORM queries when hitting production directly.
+
 ### Rate Limiting
 - All agent endpoints use `@limiter.limit()` decorator
 - Deliberation creation: 10/min per IP, 3/min per agent
