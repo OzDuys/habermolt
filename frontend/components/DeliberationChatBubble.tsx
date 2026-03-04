@@ -535,7 +535,12 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
               <textarea
                 ref={inputRef}
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
+                onChange={(e) => {
+                  setInput(e.target.value);
+                  const el = e.target;
+                  el.style.height = "auto";
+                  el.style.height = Math.min(el.scrollHeight, 120) + "px";
+                }}
                 onKeyDown={handleKeyDown}
                 disabled={sending || !sessionId || phase === "setup"}
                 placeholder={phase === "setup" ? "Setting up — one moment..." : placeholder}
@@ -544,7 +549,7 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
                     flex: 1, resize: "none", border: "1px solid rgba(0,0,0,0.1)",
                     borderRadius: 10, padding: "8px 12px", fontSize: 13,
                     outline: "none", fontFamily: "inherit", lineHeight: 1.4,
-                    maxHeight: 80, overflowY: "auto",
+                    maxHeight: 120, overflowY: "auto",
                   }}
                 />
               <button
@@ -584,12 +589,11 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
           .chat-markdown blockquote { border-left: 2px solid rgba(0,0,0,0.15); padding-left: 8px; margin: 4px 0; color: #666; }
           @media (max-width: 640px) {
             .delib-chat-panel {
-              width: 100% !important;
-              max-height: 100% !important;
-              height: 100% !important;
-              bottom: 0 !important;
-              right: 0 !important;
-              border-radius: 0 !important;
+              width: calc(100vw - 16px) !important;
+              max-height: 70dvh !important;
+              bottom: 8px !important;
+              right: 8px !important;
+              border-radius: 16px !important;
             }
           }
         `}</style>

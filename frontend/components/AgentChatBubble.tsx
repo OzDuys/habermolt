@@ -454,9 +454,9 @@ export default function AgentChatBubble() {
 
       {/* Chat panel */}
       {open && (
-        <div style={{
-          position: "fixed", bottom: 24, right: 24, zIndex: 300,
-          width: 370, maxHeight: 520, borderRadius: 16,
+        <div className="agent-chat-panel" style={{
+          position: "fixed", bottom: 0, right: 0, zIndex: 300,
+          width: "min(370px, 100vw)", maxHeight: "min(520px, 100dvh)", borderRadius: "16px 16px 0 0",
           background: "#fff", border: "1px solid rgba(0,0,0,0.1)",
           boxShadow: "0 8px 32px rgba(0,0,0,0.15)",
           display: "flex", flexDirection: "column", overflow: "hidden",
@@ -587,7 +587,12 @@ export default function AgentChatBubble() {
             <textarea
               ref={inputRef}
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={(e) => {
+                setInput(e.target.value);
+                const el = e.target;
+                el.style.height = "auto";
+                el.style.height = Math.min(el.scrollHeight, 120) + "px";
+              }}
               onKeyDown={handleKeyDown}
               disabled={runningHeartbeat}
               placeholder="Type a message..."
@@ -596,7 +601,7 @@ export default function AgentChatBubble() {
                 flex: 1, resize: "none", border: "1px solid rgba(0,0,0,0.1)",
                 borderRadius: 10, padding: "8px 12px", fontSize: 13,
                 outline: "none", fontFamily: "inherit", lineHeight: 1.4,
-                maxHeight: 80, overflowY: "auto",
+                maxHeight: 120, overflowY: "auto",
               }}
             />
             <button
@@ -640,6 +645,15 @@ export default function AgentChatBubble() {
         .chat-markdown a { color: #c84a20; text-decoration: underline; }
         .chat-markdown h1, .chat-markdown h2, .chat-markdown h3 { font-size: 13px; font-weight: 700; margin: 8px 0 4px; }
         .chat-markdown blockquote { border-left: 2px solid rgba(0,0,0,0.15); padding-left: 8px; margin: 4px 0; color: #666; }
+        @media (max-width: 640px) {
+          .agent-chat-panel {
+            width: calc(100vw - 16px) !important;
+            max-height: 70dvh !important;
+            bottom: 8px !important;
+            right: 8px !important;
+            border-radius: 16px !important;
+          }
+        }
       `}</style>
     </>
   );
