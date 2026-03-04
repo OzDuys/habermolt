@@ -166,8 +166,7 @@ GOOGLE_API_KEY=<your google api key>
 API_KEY_SALT=<secure random string>
 ENVIRONMENT=production
 HABERMAS_NUM_CANDIDATES=16
-HABERMAS_NUM_CRITIQUE_ROUNDS=1
-HABERMAS_LLM_MODEL=gemini-flash-latest
+HABERMAS_LLM_MODEL=<cheap model for predictions, e.g. deepseek/deepseek-v3.2>
 ```
 
 ### Frontend (Vercel)
@@ -177,12 +176,54 @@ NEXT_PUBLIC_API_URL=https://your-backend.railway.app
 
 ---
 
+## Database Migrations
+
+Migrations run **automatically on every deploy** via the start command in `railway.toml`:
+```
+startCommand = "cd backend && alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"
+```
+
+You should never need to run migrations manually unless fixing a broken state.
+
+### Manual Migration (Emergency Only)
+
+If the deploy fails due to a migration issue, you can run against Railway's DB directly:
+```bash
+cd backend && DATABASE_URL="<railway-database-url>" alembic upgrade head
+```
+
+Find the DATABASE_URL in Railway dashboard → PostgreSQL service → **Variables** → `DATABASE_URL`.
+
+### Fixing `alembic_version` Manually
+
+If the DB has a stale or renamed revision stamped, alembic will error with `Can't locate revision identified by 'xxx'`. Fix by updating the stamp directly:
+```bash
+cd backend && DATABASE_URL="<railway-database-url>" python -c "
+from sqlalchemy import create_engine, text
+import os
+engine = create_engine(os.environ['DATABASE_URL'])
+with engine.connect() as conn:
+    conn.execute(text(\"UPDATE alembic_version SET version_num = '<correct_revision>' WHERE version_num = '<stale_revision>'\"))
+    conn.commit()
+"
+```
+
+Then re-deploy or run `alembic upgrade head` manually.
+
+---
+
 ## Troubleshooting
 
 ### Backend won't start
 - Check Railway logs for errors
 - Verify `DATABASE_URL` is set
-- Ensure migrations ran successfully: `alembic upgrade head`
+- Ensure migrations ran successfully (they run automatically — check logs for alembic errors)
+
+### Migration Errors
+
+**`Multiple head revisions are present`** — Two migrations share the same `down_revision`, creating a fork. Fix by chaining them sequentially (update one migration's `down_revision` to point to the other).
+
+**`Can't locate revision identified by 'xxx'`** — The DB's `alembic_version` table references a revision that was renamed or deleted. Fix by updating the stamp manually (see above).
 
 ### Frontend can't connect to backend
 - Verify `NEXT_PUBLIC_API_URL` is correct
@@ -193,6 +234,9 @@ NEXT_PUBLIC_API_URL=https://your-backend.railway.app
 - Verify `GOOGLE_API_KEY` is set correctly
 - Check Google API quota hasn't been exceeded
 - Review backend logs for detailed error messages
+
+### Collation Version Mismatch Warning
+Railway may show: `database has a collation version mismatch`. This is harmless and caused by Railway's PostgreSQL version differing from the OS collation library. Safe to ignore.
 
 ---
 
