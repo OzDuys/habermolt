@@ -53,8 +53,20 @@ function InvitePageContent() {
     setPageState("joining");
 
     try {
-      const result = await api.acceptInvite(code);
-      if (result.already_member) {
+      let result;
+      try {
+        result = await api.joinDeliberation(code);
+      } catch (joinErr: any) {
+        // If join fails because user has no agent, auto-create one and retry
+        if (joinErr?.message?.includes("need an agent")) {
+          await api.createDefaultAgent();
+          result = await api.joinDeliberation(code);
+        } else {
+          throw joinErr;
+        }
+      }
+      const alreadyMember = result.message?.includes("already");
+      if (alreadyMember) {
         router.replace(`/deliberations/${result.deliberation_id}`);
       } else {
         router.replace(`/deliberations/${result.deliberation_id}?joined=true`);

@@ -21,7 +21,6 @@ from app.models.hosted_agent import HostedAgent
 from app.middleware.auth import APIKeyAuth
 from app.services.content_moderation_service import check_community_guidelines
 from app.schemas.deliberation import (
-    AcceptInviteResponse,
     CreateDeliberationHumanRequest,
     CreatePrivateDeliberationRequest,
     InviteInfoResponse,
@@ -29,7 +28,6 @@ from app.schemas.deliberation import (
     PrivateDeliberationListItem,
     PrivateDeliberationListResponse,
 )
-from app.services import hosted_agent_service
 
 logger = logging.getLogger(__name__)
 
@@ -196,69 +194,6 @@ async def get_invite_info(
         created_at=deliberation.created_at,
     )
 
-
-@router.post(
-    "/accept-invite/{invite_code}",
-    response_model=AcceptInviteResponse,
-    summary="Accept an invite and join a private deliberation (human auth)",
-)
-async def accept_invite(
-    invite_code: str,
-    req: Request,
-    db: Session = Depends(get_db),
-):
-    """
-    Lightweight invite acceptance: finds/creates user's agent, adds membership,
-    and returns deliberation_id. Used by the invite page to redirect to the
-    deliberation page where the chat bubble handles the interview.
-    """
-    user_id = _require_user_id(req)
-
-    deliberation = db.query(Deliberation).filter(
-        Deliberation.invite_code == invite_code
-    ).first()
-    if not deliberation:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invalid invite code")
-
-    # Find or auto-create the user's agent
-    agent = _find_user_agent(db, user_id)
-    if not agent:
-        try:
-            ha = hosted_agent_service.create_hosted_agent(
-                db, user_id, display_name="My Agent", pricing_tier="free"
-            )
-            agent = ha.agent
-        except ValueError:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Could not create agent.")
-
-    # Check if already a member
-    existing = db.query(DeliberationMember).filter(
-        and_(
-            DeliberationMember.deliberation_id == deliberation.id,
-            DeliberationMember.agent_id == agent.id,
-        )
-    ).first()
-    if existing:
-        return AcceptInviteResponse(
-            deliberation_id=str(deliberation.id),
-            already_member=True,
-        )
-
-    # Add as member
-    member = DeliberationMember(
-        deliberation_id=deliberation.id,
-        agent_id=agent.id,
-        joined_by_user_id=user_id,
-    )
-    db.add(member)
-    db.commit()
-
-    logger.info(f"User {user_id} accepted invite for deliberation {deliberation.id}")
-
-    return AcceptInviteResponse(
-        deliberation_id=str(deliberation.id),
-        already_member=False,
-    )
 
 
 @router.post(
