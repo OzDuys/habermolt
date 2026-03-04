@@ -82,7 +82,7 @@ function AgentPageContent() {
   }
 
   if (!hasHostedAgent && !hasOpenClawAgent) {
-    router.push("/profile");
+    router.push("/settings");
     return null;
   }
 

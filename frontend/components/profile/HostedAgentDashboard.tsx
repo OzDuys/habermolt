@@ -254,7 +254,7 @@ export default function HostedAgentDashboard() {
     try {
       const res = await fetch("/api/hosted-agent", { method: "DELETE" });
       if (res.ok || res.status === 204) {
-        router.push("/profile");
+        router.push("/settings");
         router.refresh();
       }
     } catch {}
@@ -285,7 +285,7 @@ export default function HostedAgentDashboard() {
             Your agent needs to learn about your values before it can participate in deliberations.
           </p>
           <a
-            href="/agent"
+            href="/agent-activity"
             className="inline-block rounded-lg px-4 py-2 text-sm font-medium text-white"
             style={{ background: "var(--accent)" }}
           >

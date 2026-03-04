@@ -41,7 +41,7 @@ export default function AgentOnboardingModal({ onDismiss }: { onDismiss: () => v
             </Link>
 
             <Link
-              href="/profile"
+              href="/settings"
               onClick={onDismiss}
               className="flex flex-col rounded-xl border-2 border-stone-200 bg-stone-50 p-4 text-left transition-colors hover:border-stone-400 hover:bg-stone-100"
             >

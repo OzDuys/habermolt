@@ -8,7 +8,7 @@ import NotificationBell from "@/components/NotificationBell";
 
 const navLinks = [
   {
-    href: "/agent",
+    href: "/agent-activity",
     label: "Agent Activity",
     authOnly: false,
     icon: (
@@ -216,7 +216,7 @@ useEffect(() => {
                 {session && (
                   <div className="border-t py-1.5" style={{ borderColor: "var(--border)" }}>
                     <Link
-                      href="/profile"
+                      href="/settings"
                       className="flex items-center gap-3 px-4 py-2.5 text-sm font-medium transition-colors"
                       style={{ color: "var(--foreground)" }}
                       onClick={() => setMenuOpen(false)}

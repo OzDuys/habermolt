@@ -1319,7 +1319,7 @@ function ShowProfileScene({
                   marginBottom: 16,
                 }}
               >
-                You can also edit this at any time from your profile page.
+                You can also edit this at any time from your settings page.
               </p>
 
               <div style={{ display: "flex", justifyContent: "center" }}>

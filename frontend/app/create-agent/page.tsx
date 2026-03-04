@@ -38,7 +38,7 @@ function CreateAgentPageContent() {
       const data = await res.json();
       if (data.has_profile) {
         // Agent already has a profile — no need for wizard
-        router.push("/profile");
+        router.push("/settings");
       } else {
         // Bare agent exists but no profile — allow wizard in update mode
         setIsUpdate(true);
