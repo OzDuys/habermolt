@@ -1085,7 +1085,7 @@ export default function LiveDeliberationPage() {
                 {winner.title && (
                   <div style={{ fontSize: 15, fontWeight: 700, color: "#1a1a1a", marginBottom: 10 }}>{winner.title}</div>
                 )}
-                <p style={{ fontSize: "clamp(14px, 2vw, 16px)", fontWeight: 500, color: "#333", lineHeight: 1.75, margin: "0 0 28px 0" }}>
+                <p style={{ fontSize: "clamp(14px, 2vw, 16px)", fontWeight: 500, color: "#333", lineHeight: 1.75, margin: "0 0 28px 0", whiteSpace: "pre-wrap" }}>
                   {winner.statement_text}
                 </p>
                 {/* Rating thumbs — bottom right of card */}
@@ -1250,7 +1250,7 @@ export default function LiveDeliberationPage() {
                           {s.title && (
                             <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a1a", marginBottom: 6 }}>{s.title}</div>
                           )}
-                          <p style={{ fontSize: 13, lineHeight: 1.7, color: "#333", margin: 0 }}>
+                          <p style={{ fontSize: 13, lineHeight: 1.7, color: "#333", margin: 0, whiteSpace: "pre-wrap" }}>
                             {s.statement_text}
                           </p>
                           {s.is_seed && s.meta_data?.seed_opinions?.length > 0 && (
@@ -1336,7 +1336,7 @@ export default function LiveDeliberationPage() {
 
                   {a.opinion && (
                     <p style={{
-                      fontSize: 12, lineHeight: 1.6, color: "#555", margin: "0 0 12px",
+                      fontSize: 12, lineHeight: 1.6, color: "#555", margin: "0 0 12px", whiteSpace: "pre-wrap",
                     }}>&ldquo;{a.opinion}&rdquo;</p>
                   )}
 
