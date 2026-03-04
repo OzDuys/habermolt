@@ -1668,7 +1668,7 @@ function loadSavedState(): SavedFlowState | null {
   return null;
 }
 
-export default function CreateAgentFlow() {
+export default function CreateAgentFlow({ isUpdate = false }: { isUpdate?: boolean }) {
   const restoredRef = useRef(false);
   const saved = useRef(loadSavedState());
 
@@ -1751,18 +1751,32 @@ export default function CreateAgentFlow() {
     setCreating(true);
     setError("");
     try {
-      const res = await fetch("/api/hosted-agent", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          display_name: agentName,
-          pricing_tier: "free",
-          selected_deliberation_ids: selectedDelibIds,
-        }),
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.detail || "Failed to create agent");
+      if (isUpdate) {
+        // Update existing bare agent's display name
+        const patchRes = await fetch("/api/hosted-agent", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ display_name: agentName }),
+        });
+        if (!patchRes.ok) {
+          const data = await patchRes.json();
+          throw new Error(data.detail || "Failed to update agent");
+        }
+      } else {
+        // Create new agent
+        const res = await fetch("/api/hosted-agent", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            display_name: agentName,
+            pricing_tier: "free",
+            selected_deliberation_ids: selectedDelibIds,
+          }),
+        });
+        if (!res.ok) {
+          const data = await res.json();
+          throw new Error(data.detail || "Failed to create agent");
+        }
       }
 
       // Upload bootstrapped profile (use user-edited version if available)

@@ -735,6 +735,8 @@ export default function LiveDeliberationPage() {
   const [agentType, setAgentType] = useState<"loading" | "none" | "hosted" | "openclaw">("loading");
   const [userAgentId, setUserAgentId] = useState<string | null>(null);
   const [interviewCompleted, setInterviewCompleted] = useState(false);
+  const [hasProfile, setHasProfile] = useState(true);
+  const [showSetupPrompt, setShowSetupPrompt] = useState(false);
   const chatBubbleRef = useRef<DeliberationChatBubbleHandle>(null);
 
   // Check if user has a haberagent
@@ -754,6 +756,7 @@ export default function LiveDeliberationPage() {
       if (hosted) {
         setAgentType("hosted");
         if (hosted.agent_id) setUserAgentId(hosted.agent_id);
+        setHasProfile(!!hosted.has_profile);
       } else if (openclaw) {
         setAgentType("openclaw");
       } else {
@@ -1400,6 +1403,52 @@ export default function LiveDeliberationPage() {
         )}
       </AnimatePresence>
 
+      {/* Setup prompt for bare agents */}
+      <AnimatePresence>
+        {showSetupPrompt && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            style={{
+              position: "fixed", bottom: 90, left: "50%", transform: "translateX(-50%)",
+              zIndex: 1000, background: "#fff", borderRadius: 16,
+              padding: "16px 20px", boxShadow: "0 4px 24px rgba(0,0,0,0.12)",
+              border: "1.5px solid rgba(200,74,32,0.15)",
+              display: "flex", alignItems: "center", gap: 14, maxWidth: 480,
+            }}
+          >
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: "#333", marginBottom: 4 }}>
+                Your agent just represented you!
+              </div>
+              <div style={{ fontSize: 12, color: "#888" }}>
+                Set up its profile so it can do even better next time.
+              </div>
+            </div>
+            <Link
+              href="/create-agent"
+              style={{
+                padding: "8px 16px", borderRadius: 999, border: "none",
+                background: "#c84a20", color: "#fff", fontSize: 12,
+                fontWeight: 600, textDecoration: "none", whiteSpace: "nowrap",
+              }}
+            >
+              Set up my agent
+            </Link>
+            <button
+              onClick={() => setShowSetupPrompt(false)}
+              style={{
+                background: "none", border: "none", cursor: "pointer",
+                fontSize: 18, color: "#ccc", padding: 0, lineHeight: 1,
+              }}
+            >
+              ×
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Floating deliberation chat bubble */}
       {agentType === "hosted" && data && (
         <DeliberationChatBubble
@@ -1407,7 +1456,10 @@ export default function LiveDeliberationPage() {
           deliberationId={id}
           deliberationQuestion={data.deliberation.question}
           alreadyParticipating={alreadyParticipating || interviewCompleted}
-          onJoinComplete={() => setInterviewCompleted(true)}
+          onJoinComplete={() => {
+            setInterviewCompleted(true);
+            if (!hasProfile) setShowSetupPrompt(true);
+          }}
           onScrollToAgents={() => scrollToTab("agents")}
         />
       )}

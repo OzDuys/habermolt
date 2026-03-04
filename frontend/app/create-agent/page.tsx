@@ -17,6 +17,7 @@ function CreateAgentPageContent() {
   const { data: session, isPending } = useSession();
   const router = useRouter();
   const [ready, setReady] = useState(false);
+  const [isUpdate, setIsUpdate] = useState(false);
 
   useEffect(() => {
     if (isPending) return;
@@ -25,15 +26,27 @@ function CreateAgentPageContent() {
       return;
     }
     // Check if agent already exists
-    fetch("/api/hosted-agent").then((res) => {
-      if (res.status !== 404) {
+    fetch("/api/hosted-agent").then(async (res) => {
+      if (res.status === 404) {
+        setReady(true);
+        return;
+      }
+      if (!res.ok) {
+        setReady(true);
+        return;
+      }
+      const data = await res.json();
+      if (data.has_profile) {
+        // Agent already has a profile — no need for wizard
         router.push("/profile");
       } else {
+        // Bare agent exists but no profile — allow wizard in update mode
+        setIsUpdate(true);
         setReady(true);
       }
     });
   }, [session, isPending, router]);
 
   if (isPending || !ready) return null;
-  return <CreateAgentFlow />;
+  return <CreateAgentFlow isUpdate={isUpdate} />;
 }
