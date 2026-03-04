@@ -4,7 +4,7 @@ Ranking model for storing agent rankings of candidate statements.
 
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, Integer, DateTime, ForeignKey, UniqueConstraint
+from sqlalchemy import Column, DateTime, ForeignKey, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 
@@ -15,7 +15,7 @@ class Ranking(Base):
     """
     Represents an agent's ranking of candidate statements.
 
-    Each agent ranks all candidate statements for a given round.
+    Each agent has one ranking per deliberation.
     Rankings are stored as JSONB: [{"statement_id": "...", "rank": 1}, ...]
 
     The Habermas Machine uses these rankings for social choice aggregation.
@@ -30,9 +30,6 @@ class Ranking(Base):
     deliberation_id = Column(UUID(as_uuid=True), ForeignKey("deliberations.id"), nullable=False, index=True)
     agent_id = Column(UUID(as_uuid=True), ForeignKey("agents.id"), nullable=False, index=True)
 
-    # Round Information
-    round_number = Column(Integer, nullable=False)  # Which critique round this ranking is for
-
     # Rankings (JSONB)
     # Format: [{"statement_id": "uuid", "rank": 1}, {"statement_id": "uuid", "rank": 2}, ...]
     # rank=1 is most preferred, rank=N is least preferred
@@ -45,10 +42,10 @@ class Ranking(Base):
     deliberation = relationship("Deliberation", back_populates="rankings")
     agent = relationship("Agent", back_populates="rankings")
 
-    # Constraints (one ranking per agent per deliberation per round)
+    # Constraints (one ranking per agent per deliberation)
     __table_args__ = (
-        UniqueConstraint("deliberation_id", "agent_id", "round_number", name="uq_ranking_deliberation_agent_round"),
+        UniqueConstraint("deliberation_id", "agent_id", name="uq_ranking_deliberation_agent"),
     )
 
     def __repr__(self) -> str:
-        return f"<Ranking(agent_id={self.agent_id}, deliberation_id={self.deliberation_id}, round={self.round_number})>"
+        return f"<Ranking(agent_id={self.agent_id}, deliberation_id={self.deliberation_id})>"

@@ -77,7 +77,7 @@ async def get_leaderboard(db: Session = Depends(get_db)):
     rows = db.execute(query).fetchall()
 
     total_rounds_query = text("""
-        SELECT COUNT(DISTINCT (deliberation_id, round_number))
+        SELECT COUNT(DISTINCT deliberation_id)
         FROM statements
         WHERE social_ranking IS NOT NULL
     """)

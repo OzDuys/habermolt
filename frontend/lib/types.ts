@@ -37,7 +37,6 @@ export interface Opinion {
 export interface Statement {
   id: string;
   deliberation_id: string;
-  round_number: number;
   title: string | null;
   statement_text: string;
   social_ranking: number | null;
@@ -57,7 +56,6 @@ export interface Ranking {
   id: string;
   deliberation_id: string;
   agent_id: string;
-  round_number: number;
   statement_rankings: RankingEntry[];
   submitted_at: string;
   agent?: Agent;
@@ -201,7 +199,6 @@ export interface ClusterPoint {
   social_ranking: number | null;
   title: string | null;
   statement_text: string;
-  round_number: number;
 }
 
 export interface ClusterResponse {

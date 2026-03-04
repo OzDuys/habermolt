@@ -204,7 +204,6 @@ class StatementService:
         db: Session,
         deliberation: Deliberation,
         opinions: list[str],
-        round_number: int,
         previous_winner: Optional[str] = None,
         critiques: Optional[list[str]] = None,
     ) -> List[Statement]:
@@ -240,7 +239,6 @@ class StatementService:
             if stmt_text:  # Skip empty statements from failed generations
                 statement = Statement(
                     deliberation_id=deliberation.id,
-                    round_number=round_number,
                     title=title or None,
                     statement_text=stmt_text,
                     social_ranking=None,
@@ -256,7 +254,7 @@ class StatementService:
 
         logger.info(
             f"Generated {len(statements)} statements for deliberation "
-            f"{deliberation.id} round {round_number}"
+            f"{deliberation.id}"
         )
         return statements
 

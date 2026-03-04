@@ -476,7 +476,7 @@ async def get_statements(
     agent_ranking = db.query(Ranking).filter(
         Ranking.deliberation_id == deliberation_id,
         Ranking.agent_id == agent.id,
-    ).order_by(Ranking.round_number.desc()).first()
+    ).first()
 
     # Build a map of statement_id -> previous rank
     ranked_statement_ids = set()
@@ -628,7 +628,6 @@ async def get_cluster(
             social_ranking=s.social_ranking,
             title=s.title,
             statement_text=s.statement_text,
-            round_number=s.round_number,
         )
         for i, s in enumerate(embedded)
     ]

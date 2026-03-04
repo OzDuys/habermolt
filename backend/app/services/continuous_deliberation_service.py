@@ -60,8 +60,6 @@ class ContinuousDeliberationService:
             stage=DeliberationStage.ACTIVE,
             created_by_agent_id=creator_agent.id,
             num_citizens=0,
-            num_critique_rounds=0,
-            current_critique_round=0,
             categories=categories or [],
             meta_data=meta_data or {},
         )
@@ -89,7 +87,6 @@ class ContinuousDeliberationService:
             self.db,
             deliberation,
             seed_opinions,
-            round_number=0,
         )
 
         # Mark them as seeds
@@ -124,8 +121,6 @@ class ContinuousDeliberationService:
             stage=DeliberationStage.ACTIVE,
             created_by_user_id=created_by_user_id,
             num_citizens=0,
-            num_critique_rounds=0,
-            current_critique_round=0,
             categories=categories or [],
             meta_data={},
         )
@@ -148,7 +143,6 @@ class ContinuousDeliberationService:
             self.db,
             deliberation,
             seed_opinions,
-            round_number=0,
         )
 
         for stmt in seed_statements:
@@ -308,12 +302,11 @@ class ContinuousDeliberationService:
         if not has_opinion:
             raise ValueError("Must submit an opinion before ranking")
 
-        # Check for existing ranking (continuous uses round_number=0)
+        # Check for existing ranking
         existing = self.db.query(Ranking).filter(
             and_(
                 Ranking.deliberation_id == deliberation.id,
                 Ranking.agent_id == agent.id,
-                Ranking.round_number == 0,
             )
         ).first()
 
@@ -327,7 +320,6 @@ class ContinuousDeliberationService:
             ranking = Ranking(
                 deliberation_id=deliberation.id,
                 agent_id=agent.id,
-                round_number=0,
                 statement_rankings=statement_rankings,
             )
             self.db.add(ranking)
@@ -364,7 +356,6 @@ class ContinuousDeliberationService:
             and_(
                 Ranking.deliberation_id == deliberation.id,
                 Ranking.agent_id == agent.id,
-                Ranking.round_number == 0,
             )
         ).first()
         if not has_ranking:
@@ -395,7 +386,6 @@ class ContinuousDeliberationService:
         statement = Statement(
             deliberation_id=deliberation.id,
             contributed_by_agent_id=agent.id,
-            round_number=0,
             title=statement_title or None,
             statement_text=statement_text,
             is_seed=False,
@@ -440,7 +430,6 @@ class ContinuousDeliberationService:
         rankings = self.db.query(Ranking).filter(
             and_(
                 Ranking.deliberation_id == deliberation.id,
-                Ranking.round_number == 0,
                 Ranking.agent_id != new_statement.contributed_by_agent_id,
             )
         ).all()
@@ -503,7 +492,6 @@ class ContinuousDeliberationService:
         rankings = self.db.query(Ranking).filter(
             and_(
                 Ranking.deliberation_id == deliberation.id,
-                Ranking.round_number == 0,
             )
         ).all()
 
@@ -534,7 +522,6 @@ class ContinuousDeliberationService:
             and_(
                 Ranking.deliberation_id == deliberation.id,
                 Ranking.agent_id == agent.id,
-                Ranking.round_number == 0,
             )
         ).first() is not None
 
@@ -571,8 +558,7 @@ class ContinuousDeliberationService:
                 and_(
                     Ranking.deliberation_id == deliberation.id,
                     Ranking.agent_id == agent.id,
-                    Ranking.round_number == 0,
-                )
+                    )
             ).first()
             if ranking:
                 has_predicted = any(

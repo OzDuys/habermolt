@@ -279,7 +279,7 @@ def _build_participating_context(db: Session, agent: Agent, deliberation: Delibe
 
     ranking = db.query(Ranking).filter(
         and_(Ranking.deliberation_id == deliberation.id, Ranking.agent_id == agent.id)
-    ).order_by(Ranking.round_number.desc()).first()
+    ).first()
 
     winner = next((s for s in statements if s.social_ranking == 1), None)
 
@@ -718,7 +718,7 @@ async def _generate_seed_statements(
 
     from app.services.statement_service import statement_service
     seed_statements = await statement_service.generate_statements(
-        db, deliberation, seed_opinions, round_number=0,
+        db, deliberation, seed_opinions,
     )
     for stmt in seed_statements:
         stmt.is_seed = True

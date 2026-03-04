@@ -88,7 +88,6 @@ async def get_current_winner(
 
     total_rankings = db.query(Ranking).filter(
         Ranking.deliberation_id == deliberation_id,
-        Ranking.round_number == 0,
     ).count()
     total_participants = db.query(func.count(func.distinct(Opinion.agent_id))).filter(
         Opinion.deliberation_id == deliberation_id,
@@ -134,7 +133,6 @@ async def get_all_opinions(
     has_ranking = db.query(Ranking).filter(
         Ranking.deliberation_id == deliberation.id,
         Ranking.agent_id == agent.id,
-        Ranking.round_number == 0,
     ).first()
     if not has_ranking:
         raise HTTPException(

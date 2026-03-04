@@ -99,7 +99,6 @@ async def get_agent_status(
             and_(
                 Ranking.deliberation_id == delib.id,
                 Ranking.agent_id == agent.id,
-                Ranking.round_number == 0,
             )
         ).first()
 

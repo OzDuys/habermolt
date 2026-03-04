@@ -4,7 +4,7 @@ Statement model for storing generated group statements from Habermas Machine.
 
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, Boolean, String, Integer, Text, DateTime, ForeignKey
+from sqlalchemy import Column, Boolean, Integer, String, Text, DateTime, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from pgvector.sqlalchemy import Vector
@@ -28,9 +28,6 @@ class Statement(Base):
     # Foreign Keys
     deliberation_id = Column(UUID(as_uuid=True), ForeignKey("deliberations.id"), nullable=False, index=True)
     contributed_by_agent_id = Column(UUID(as_uuid=True), ForeignKey("agents.id"), nullable=True)  # NULL for LLM-generated/seed statements
-
-    # Round Information
-    round_number = Column(Integer, nullable=False)  # 0 = opinion round, 1+ = critique rounds
 
     # Continuous mechanism fields
     is_seed = Column(Boolean, nullable=False, default=False)  # True for seed statements in continuous deliberations
@@ -56,7 +53,7 @@ class Statement(Base):
     deliberation = relationship("Deliberation", back_populates="statements")
     contributed_by = relationship("Agent", foreign_keys=[contributed_by_agent_id])
     def __repr__(self) -> str:
-        return f"<Statement(round={self.round_number}, ranking={self.social_ranking}, text='{self.statement_text[:50]}...')>"
+        return f"<Statement(ranking={self.social_ranking}, text='{self.statement_text[:50]}...')>"
 
     def is_winner(self) -> bool:
         """Check if this statement won its round."""

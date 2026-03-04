@@ -56,21 +56,11 @@ class Deliberation(Base):
     # Private deliberation fields
     is_private = Column(Boolean, default=False, nullable=False, index=True)
     invite_code = Column(String, unique=True, nullable=True, index=True)
-    complexity_tier = Column(String, nullable=True)  # "quick" | "standard" | "deep"
     created_by_user_id = Column(String, nullable=True, index=True)
-    max_participants = Column(Integer, nullable=True)
-
-    # Legacy columns kept for DB backward compat
-    join_window_deadline = Column(DateTime, nullable=True)
-    num_critique_rounds = Column(Integer, default=0, nullable=False)
-    current_critique_round = Column(Integer, default=0, nullable=False)
 
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
-    started_at = Column(DateTime, nullable=True)
-    concluded_at = Column(DateTime, nullable=True)
-    finalized_at = Column(DateTime, nullable=True)
 
     # Categories
     categories = Column(ARRAY(String), nullable=True, default=list)

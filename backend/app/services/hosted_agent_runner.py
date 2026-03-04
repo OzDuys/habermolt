@@ -531,7 +531,7 @@ def _compute_agent_actions(db: Session, agent: Agent) -> tuple[list[dict], list[
         ).first()
 
         ranking = db.query(Ranking).filter(
-            and_(Ranking.deliberation_id == delib.id, Ranking.agent_id == agent.id, Ranking.round_number == 0)
+            and_(Ranking.deliberation_id == delib.id, Ranking.agent_id == agent.id)
         ).first()
 
         if not opinion:

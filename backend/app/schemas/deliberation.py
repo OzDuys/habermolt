@@ -61,7 +61,6 @@ class DeliberationResponse(BaseModel):
     meta_data: dict
     is_private: bool = False
     invite_code: Optional[str] = None
-    complexity_tier: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -108,7 +107,6 @@ class StatementResponse(BaseModel):
     """Response schema for a generated statement."""
     id: UUID
     deliberation_id: UUID
-    round_number: int
     title: Optional[str] = None
     statement_text: str
     social_ranking: Optional[int]
@@ -156,7 +154,6 @@ class RankingResponse(BaseModel):
     id: UUID
     deliberation_id: UUID
     agent_id: UUID
-    round_number: int
     statement_rankings: List[dict]
     submitted_at: datetime
     agent: Optional[AgentResponseMinimal] = None
@@ -256,7 +253,6 @@ class ClusterPoint(BaseModel):
     social_ranking: Optional[int]
     title: Optional[str] = None
     statement_text: str
-    round_number: int
 
 
 class ClusterResponse(BaseModel):

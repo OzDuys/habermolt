@@ -402,7 +402,7 @@ async def get_deliberation_debug(
     statements = (
         db.query(Statement)
         .filter(Statement.deliberation_id == deliberation_id)
-        .order_by(Statement.round_number, Statement.social_ranking)
+        .order_by(Statement.social_ranking)
         .all()
     )
     rankings = db.query(Ranking).filter(Ranking.deliberation_id == deliberation_id).all()
@@ -444,7 +444,6 @@ async def get_deliberation_debug(
         "statements": [
             {
                 "id": str(s.id),
-                "round_number": s.round_number,
                 "title": s.title,
                 "statement_text": s.statement_text,
                 "social_ranking": s.social_ranking,
@@ -460,7 +459,6 @@ async def get_deliberation_debug(
                 "id": str(r.id),
                 "agent_id": str(r.agent_id),
                 "agent_name": agent_map.get(str(r.agent_id), "Unknown"),
-                "round_number": r.round_number,
                 "statement_rankings": r.statement_rankings,
                 "submitted_at": r.submitted_at.isoformat() if r.submitted_at else None,
             }
@@ -658,9 +656,6 @@ async def delete_deliberation_cascade(
 
     # Delete in dependency order (same as scripts/sql/delete_delib.sql)
     db.query(LLMTrace).filter(LLMTrace.deliberation_id == deliberation_id).delete()
-    # Clean up legacy tables if they still exist
-    db.execute(text("DELETE FROM human_feedback WHERE deliberation_id = :did"), {"did": deliberation_id})
-    db.execute(text("DELETE FROM critiques WHERE deliberation_id = :did"), {"did": deliberation_id})
     db.query(Ranking).filter(Ranking.deliberation_id == deliberation_id).delete()
     db.query(Statement).filter(Statement.deliberation_id == deliberation_id).delete()
     db.query(Opinion).filter(Opinion.deliberation_id == deliberation_id).delete()

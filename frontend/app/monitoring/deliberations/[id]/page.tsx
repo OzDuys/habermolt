@@ -27,7 +27,6 @@ interface DebugData {
   }>;
   statements: Array<{
     id: string;
-    round_number: number;
     title: string | null;
     statement_text: string;
     social_ranking: number | null;
@@ -40,7 +39,6 @@ interface DebugData {
     id: string;
     agent_id: string;
     agent_name: string;
-    round_number: number;
     statement_rankings: Array<{ statement_id: string; rank: number; is_predicted?: boolean }>;
     submitted_at: string | null;
   }>;
@@ -159,7 +157,6 @@ export default function DeliberationDebugDetailPage() {
                 <p className="text-xs mb-2 whitespace-pre-wrap">{s.statement_text}</p>
                 <div className="flex items-center gap-3 text-[10px] font-mono" style={{ color: "var(--muted)" }}>
                   <span>Model: {(s.meta_data as Record<string, string>)?.model || "N/A"}</span>
-                  <span>Round: {s.round_number}</span>
                 </div>
                 {(s.meta_data as Record<string, string>)?.reasoning && (
                   <details className="mt-2">
@@ -194,9 +191,6 @@ export default function DeliberationDebugDetailPage() {
               >
                 <div className="flex items-center gap-2 mb-2">
                   <span className="font-bold text-xs">{r.agent_name}</span>
-                  <span className="font-mono text-[10px]" style={{ color: "var(--muted)" }}>
-                    Round {r.round_number}
-                  </span>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {[...r.statement_rankings]

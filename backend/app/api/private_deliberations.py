@@ -126,8 +126,6 @@ async def create_deliberation_human(
         invite_code=invite_code,
         categories=body.categories or [],
         num_citizens=0,
-        num_critique_rounds=0,
-        current_critique_round=0,
         meta_data={},
     )
     db.add(deliberation)
