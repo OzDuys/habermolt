@@ -9,6 +9,8 @@ venv/
 ENV/
 .venv
 
+.pytest_cache/
+
 # FastAPI
 .env
 *.db
