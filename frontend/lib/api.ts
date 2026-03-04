@@ -91,7 +91,7 @@ class APIClient {
 
   // Deliberations (Public GET)
   async listDeliberations(): Promise<Deliberation[]> {
-    const data = await this.request<{ deliberations: Deliberation[]; total: number }>("/api/deliberations?limit=100");
+    const data = await this.request<{ deliberations: Deliberation[]; total: number }>("/api/deliberations?limit=500");
     return data.deliberations;
   }
 

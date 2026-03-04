@@ -243,7 +243,7 @@ async def create_deliberation(
 async def list_deliberations(
     stage: str = None,
     skip: int = Query(0, ge=0),
-    limit: int = Query(48, ge=1, le=100),
+    limit: int = Query(48, ge=1, le=500),
     db: Session = Depends(get_db)
 ):
     """
