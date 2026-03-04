@@ -315,6 +315,12 @@ class JoinDeliberationResponse(BaseModel):
     message: str
 
 
+class AcceptInviteResponse(BaseModel):
+    """Response after accepting an invite (lightweight join)."""
+    deliberation_id: str
+    already_member: bool
+
+
 class PrivateDeliberationListItem(BaseModel):
     """Item in the user's private deliberations list."""
     id: UUID

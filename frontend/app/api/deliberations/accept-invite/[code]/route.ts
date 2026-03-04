@@ -4,11 +4,16 @@ import { getDevOrRealSession } from "@/lib/dev-auth";
 const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:8000";
 const INTERNAL_API_SECRET = process.env.INTERNAL_API_SECRET || "";
 
-export async function GET(request: NextRequest) {
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ code: string }> }
+) {
   const session = await getDevOrRealSession();
-  if (!session?.user?.id) return NextResponse.json({ detail: "Authentication required." }, { status: 401 });
+  if (!session) return NextResponse.json({ detail: "Authentication required." }, { status: 401 });
 
-  const res = await fetch(`${BACKEND_URL}/api/topic-interview/active`, {
+  const { code } = await params;
+  const res = await fetch(`${BACKEND_URL}/api/deliberations/accept-invite/${code}`, {
+    method: "POST",
     headers: {
       "X-User-Id": session.user.id,
       "X-Internal-Secret": INTERNAL_API_SECRET,

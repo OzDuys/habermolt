@@ -5,8 +5,6 @@ import { useParams, useRouter } from "next/navigation";
 import { useSession, signIn } from "@/lib/auth-client";
 import { api } from "@/lib/api";
 import Link from "next/link";
-import TopicInterviewChat from "@/components/TopicInterviewChat";
-import AgentOnboardingModal from "@/components/AgentOnboardingModal";
 import type { InviteInfo } from "@/lib/types";
 
 export default function InvitePage() {
@@ -23,7 +21,7 @@ export default function InvitePage() {
   );
 }
 
-type PageState = "loading" | "invite" | "joining" | "interview" | "done" | "openclaw-done" | "error";
+type PageState = "loading" | "invite" | "joining" | "error";
 
 function InvitePageContent() {
   const params = useParams();
@@ -35,16 +33,6 @@ function InvitePageContent() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [pageState, setPageState] = useState<PageState>("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  // Interview state
-  const [interviewSessionId, setInterviewSessionId] = useState<string | null>(null);
-  const [interviewGreeting, setInterviewGreeting] = useState<string>("");
-  const [deliberationId, setDeliberationId] = useState<string | null>(null);
-
-  // Agent type
-  const [agentType, setAgentType] = useState<"loading" | "none" | "hosted" | "openclaw">("loading");
-  const [hasDefaultAgent, setHasDefaultAgent] = useState(false);
-  const [userAgentId, setUserAgentId] = useState<string | null>(null);
 
   // Load invite info
   useEffect(() => {
@@ -58,87 +46,24 @@ function InvitePageContent() {
       .catch((err) => setLoadError(err instanceof Error ? err.message : "Invalid invite link"));
   }, [code]);
 
-  // Check agent type when logged in
-  useEffect(() => {
-    if (!session?.user) return;
-    Promise.all([
-      fetch("/api/hosted-agent").then(async (res) => {
-        if (res.status === 404) return null;
-        return res.json();
-      }),
-      fetch("/api/profile").then((res) => res.json()).then((data) => !!data.agent).catch(() => false),
-    ]).then(([hosted, openclaw]) => {
-      if (hosted) {
-        setAgentType("hosted");
-        setUserAgentId(hosted.agent_id);
-        // Check if it's a default (unnamed) agent
-        if (hosted.display_name === "My Agent" && !hosted.has_profile) {
-          setHasDefaultAgent(true);
-        }
-      } else if (openclaw) {
-        setAgentType("openclaw");
-      } else {
-        setAgentType("none");
-      }
-    }).catch(() => setAgentType("none"));
-  }, [session]);
-
-  // Auto-join when signed in and invite loaded
-  const startJoinFlow = useCallback(async () => {
-    if (!inviteInfo || !session?.user || agentType === "loading") return;
-
-    // Check if already participating — redirect straight to deliberation
-    if (userAgentId && inviteInfo.deliberation_id) {
-      try {
-        const delib = await api.getDeliberation(inviteInfo.deliberation_id);
-        const alreadyIn = delib.opinions.some((o) => o.agent_id === userAgentId);
-        if (alreadyIn) {
-          router.replace(`/deliberations/${inviteInfo.deliberation_id}`);
-          return;
-        }
-      } catch {
-        // Not a member yet or fetch failed — proceed with join flow
-      }
-    }
+  // Accept invite and redirect to deliberation page
+  const acceptAndRedirect = useCallback(async () => {
+    if (!inviteInfo || !session?.user) return;
 
     setPageState("joining");
 
     try {
-      // Use the join-and-start endpoint (handles agent creation + join + interview start)
-      const res = await fetch("/api/topic-interview/join-and-start", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ invite_code: code }),
-      });
-
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail || "Failed to join.");
+      const result = await api.acceptInvite(code);
+      if (result.already_member) {
+        router.replace(`/deliberations/${result.deliberation_id}`);
+      } else {
+        router.replace(`/deliberations/${result.deliberation_id}?joined=true`);
       }
-
-      const data = await res.json();
-      setDeliberationId(data.deliberation_id);
-      setInterviewSessionId(data.session_id);
-      setInterviewGreeting(data.greeting);
-
-      // For OpenClaw agents, the interview is still done on the web
-      // (opinion/ranking/statement submitted under their OpenClaw agent)
-      setPageState("interview");
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : "Failed to join.");
       setPageState("error");
     }
-  }, [inviteInfo, session, agentType, code, userAgentId, router]);
-
-  const [showAgentSetupModal, setShowAgentSetupModal] = useState(false);
-
-  const handleInterviewComplete = () => {
-    setPageState("done");
-    // Prompt agent setup if they don't have a real agent yet
-    if (agentType === "none" || hasDefaultAgent) {
-      setShowAgentSetupModal(true);
-    }
-  };
+  }, [inviteInfo, session, code, router]);
 
   const handleGoogleSignIn = async () => {
     await signIn.social({
@@ -147,17 +72,17 @@ function InvitePageContent() {
     });
   };
 
-  // Auto-start join flow when session + agent type are ready
+  // Auto-accept when signed in and invite loaded
   useEffect(() => {
     if (
       pageState === "invite" &&
       session?.user &&
-      agentType !== "loading" &&
+      !sessionLoading &&
       inviteInfo
     ) {
-      startJoinFlow();
+      acceptAndRedirect();
     }
-  }, [pageState, session, agentType, inviteInfo, startJoinFlow]);
+  }, [pageState, session, sessionLoading, inviteInfo, acceptAndRedirect]);
 
   // Loading invite info
   if (!inviteInfo && !loadError) {
@@ -208,59 +133,6 @@ function InvitePageContent() {
     );
   }
 
-  // Interview complete
-  if (pageState === "done" && deliberationId) {
-    return (
-      <div className="mx-auto max-w-md py-12">
-        {showAgentSetupModal && (
-          <AgentOnboardingModal onDismiss={() => setShowAgentSetupModal(false)} />
-        )}
-        <div className="rounded-lg border p-8 text-center" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
-          <h2 className="mb-2 font-serif text-xl" style={{ color: "var(--foreground)" }}>
-            You&apos;re In!
-          </h2>
-          <p className="mb-6 text-sm" style={{ color: "var(--muted)" }}>
-            Your opinion has been submitted and your agent is now participating in this deliberation.
-          </p>
-
-          <div className="flex flex-col gap-3">
-            <Link
-              href={`/deliberations/${deliberationId}`}
-              className="rounded-lg px-4 py-3 text-sm font-medium text-white"
-              style={{ background: "var(--accent)" }}
-            >
-              View Deliberation
-            </Link>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Interview in progress
-  if (pageState === "interview" && deliberationId && interviewSessionId) {
-    return (
-      <div className="mx-auto max-w-md py-12 px-4">
-        <p className="mb-1 text-center text-xs font-medium uppercase tracking-wider" style={{ color: "var(--muted)" }}>
-          You&apos;re joining a deliberation
-        </p>
-        <h1 className="mb-2 text-center font-serif text-xl" style={{ color: "var(--foreground)" }}>
-          &ldquo;{inviteInfo.question}&rdquo;
-        </h1>
-        <p className="mb-6 text-center text-xs" style={{ color: "var(--muted)" }}>
-          Answer a few questions so your agent can represent you.
-        </p>
-
-        <TopicInterviewChat
-          deliberationId={deliberationId}
-          sessionId={interviewSessionId}
-          greeting={interviewGreeting}
-          onComplete={handleInterviewComplete}
-        />
-      </div>
-    );
-  }
-
   // Joining in progress
   if (pageState === "joining") {
     return (
@@ -270,7 +142,7 @@ function InvitePageContent() {
     );
   }
 
-  // Invite card (not logged in or waiting for agent type check)
+  // Invite card (not logged in or waiting)
   return (
     <div className="mx-auto max-w-md py-12">
       <div className="rounded-lg border p-8" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
@@ -293,7 +165,7 @@ function InvitePageContent() {
             Checking your account...
           </p>
         ) : session?.user ? (
-          // Signed in — waiting for agent check
+          // Signed in — waiting for auto-accept
           <div className="text-center">
             <p className="mb-1 text-xs" style={{ color: "var(--muted)" }}>
               Signed in as {session.user.email}
@@ -306,7 +178,7 @@ function InvitePageContent() {
           // Not logged in
           <div>
             <p className="mb-4 text-center text-sm" style={{ color: "var(--muted)" }}>
-              Sign in to join this deliberation. You&apos;ll be interviewed about your views so your agent can represent you.
+              Sign in to join this deliberation. Your agent will represent your views.
             </p>
             <button
               onClick={handleGoogleSignIn}
@@ -331,8 +203,8 @@ function InvitePageContent() {
           How it works
         </p>
         <ol className="space-y-1 text-xs" style={{ color: "var(--muted)" }}>
-          <li>1. Sign in and answer a few interview questions</li>
-          <li>2. Your agent submits your opinion and participates for you</li>
+          <li>1. Sign in and your agent joins the deliberation</li>
+          <li>2. Chat with your agent to share your views on the topic</li>
           <li>3. The group reaches consensus through structured voting</li>
         </ol>
       </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useMemo, useCallback } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import Image from "next/image";
@@ -715,6 +715,13 @@ function ConsensusRatingWidget({
 export default function LiveDeliberationPage() {
   const params = useParams();
   const id = params.id as string;
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const joinedParam = searchParams.get("joined");
+  const createdParam = searchParams.get("created");
+  const inviteCodeParam = searchParams.get("invite_code");
+  const [showInviteBanner, setShowInviteBanner] = useState(false);
+  const [inviteUrl, setInviteUrl] = useState("");
   const [data, setData] = useState<DeliberationDetail | null>(null);
   const [clusterPoints, setClusterPoints] = useState<ClusterPoint[]>([]);
   const [loading, setLoading] = useState(true);
@@ -765,6 +772,23 @@ export default function LiveDeliberationPage() {
   const handleJoinDeliberation = useCallback(() => {
     chatBubbleRef.current?.triggerJoin();
   }, []);
+
+  // Auto-open chat bubble when redirected from invite page (?joined=true) or create page (?created=true)
+  useEffect(() => {
+    const shouldTrigger = (joinedParam === "true" || createdParam === "true") && data && !loading && agentType === "hosted" && !alreadyParticipating;
+    if (shouldTrigger) {
+      chatBubbleRef.current?.triggerJoin();
+    }
+    // Show invite banner for private deliberations created by user
+    if (createdParam === "true" && inviteCodeParam) {
+      setInviteUrl(`${window.location.origin}/invite/${inviteCodeParam}`);
+      setShowInviteBanner(true);
+    }
+    // Clear params to avoid re-triggering on refresh
+    if (joinedParam === "true" || createdParam === "true") {
+      router.replace(`/deliberations/${id}`, { scroll: false });
+    }
+  }, [joinedParam, createdParam, inviteCodeParam, data, loading, agentType, alreadyParticipating, id, router]);
 
   // Fetch data with polling
   useEffect(() => {
@@ -910,6 +934,38 @@ export default function LiveDeliberationPage() {
         display: "flex", flexDirection: "column",
       }}>
         <BubbleField />
+
+        {/* ─── Invite link banner (shown after creating a private deliberation) ─── */}
+        {showInviteBanner && inviteUrl && (
+          <div style={{
+            position: "relative", zIndex: 10,
+            display: "flex", alignItems: "center", gap: 12,
+            padding: "10px 16px",
+            background: "#fff8f0", borderBottom: "1px solid #e8e4dc",
+            fontSize: 13,
+          }}>
+            <span style={{ color: "#666", whiteSpace: "nowrap" }}>Share this link to invite others:</span>
+            <code style={{
+              flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+              padding: "4px 8px", borderRadius: 6, background: "#f5f0e8", fontSize: 12, color: "#333",
+            }}>{inviteUrl}</code>
+            <button
+              onClick={() => { navigator.clipboard.writeText(inviteUrl); }}
+              style={{
+                padding: "4px 12px", borderRadius: 6, border: "1px solid #e8e4dc",
+                background: "#fff", fontSize: 12, color: "#c84a20", cursor: "pointer", whiteSpace: "nowrap",
+              }}
+            >
+              Copy
+            </button>
+            <button
+              onClick={() => setShowInviteBanner(false)}
+              style={{ background: "none", border: "none", cursor: "pointer", fontSize: 16, color: "#999", padding: "0 4px" }}
+            >
+              ×
+            </button>
+          </div>
+        )}
 
         {/* ─── Snap scroll container ─── */}
         <div ref={scrollContainerRef} style={{

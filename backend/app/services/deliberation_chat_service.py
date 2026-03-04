@@ -697,6 +697,171 @@ def _exec_propose(
 
 # --- Background Setup ---
 
+async def _generate_seed_statements(
+    db: Session,
+    deliberation: Deliberation,
+    initial_opinion: str,
+):
+    """Generate seed statements for a shell deliberation after the first opinion."""
+    service = ContinuousDeliberationService(db)
+
+    seed_opinions = await service._generate_seed_opinions(
+        deliberation.question, creator_opinion=initial_opinion
+    )
+    if initial_opinion.strip() not in seed_opinions:
+        seed_opinions.insert(0, initial_opinion.strip())
+
+    logger.info(
+        f"Generating seed statements from {len(seed_opinions)} opinions "
+        f"for deliberation {deliberation.id}"
+    )
+
+    from app.services.statement_service import statement_service
+    seed_statements = await statement_service.generate_statements(
+        db, deliberation, seed_opinions, round_number=0,
+    )
+    for stmt in seed_statements:
+        stmt.is_seed = True
+    db.commit()
+
+    logger.info(
+        f"Generated {len(seed_statements)} seed statements for deliberation {deliberation.id}"
+    )
+
+
+def _do_ranking_for_agent(db: Session, agent: Agent, deliberation: Deliberation):
+    """Programmatically rank statements using LLM."""
+    from app.services.hosted_agent_runner import (
+        RANKING_SYSTEM_PROMPT,
+        _parse_ranking_response,
+    )
+
+    opinion = db.query(Opinion).filter(
+        and_(Opinion.deliberation_id == deliberation.id, Opinion.agent_id == agent.id)
+    ).order_by(Opinion.version.desc()).first()
+    if not opinion:
+        return
+
+    statements = db.query(Statement).filter(
+        Statement.deliberation_id == deliberation.id
+    ).all()
+    if not statements:
+        return
+
+    hosted = db.query(HostedAgent).filter(HostedAgent.agent_id == agent.id).first()
+    profile = hosted.user_profile if hosted and hosted.user_profile else "No profile available"
+
+    stmt_list = "\n".join(
+        f"- ID: {s.id} | {s.title or 'Untitled'}: {s.statement_text}"
+        for s in statements
+    )
+
+    client = _get_llm_client(db, agent)
+    client.set_trace_context(
+        trace_type="deliberation_chat_ranking",
+        deliberation_id=deliberation.id,
+        agent_id=agent.id,
+    )
+
+    prompt = (
+        f"Deliberation question: \"{deliberation.question}\"\n\n"
+        f"Statements to rank:\n{stmt_list}\n\n"
+        f"Rank them by listing their IDs from best to worst."
+    )
+    response = client.sample_text(
+        prompt=prompt,
+        system_prompt=RANKING_SYSTEM_PROMPT.format(profile=profile, opinion=opinion.opinion_text),
+        temperature=0.3,
+    )
+
+    if not response:
+        return
+
+    rankings = _parse_ranking_response(response, statements)
+    if not rankings:
+        rankings = [{"statement_id": str(s.id), "rank": i + 1} for i, s in enumerate(statements)]
+
+    service = ContinuousDeliberationService(db)
+    try:
+        service.submit_ranking(deliberation, agent, rankings)
+    except ValueError as e:
+        logger.warning(f"Ranking submission failed: {e}")
+
+
+def _do_propose_for_agent(db: Session, agent: Agent, deliberation: Deliberation):
+    """Programmatically propose a consensus statement using LLM."""
+    from app.services.hosted_agent_runner import (
+        STATEMENT_SYSTEM_PROMPT,
+        _parse_statement_response,
+    )
+
+    agent_stmt_count = db.query(Statement).filter(
+        and_(
+            Statement.deliberation_id == deliberation.id,
+            Statement.contributed_by_agent_id == agent.id,
+        )
+    ).count()
+    if agent_stmt_count >= settings.CONTINUOUS_MAX_STATEMENTS_PER_AGENT:
+        return
+
+    latest_ver = (
+        db.query(Opinion.agent_id, func.max(Opinion.version).label("max_v"))
+        .filter(Opinion.deliberation_id == deliberation.id)
+        .group_by(Opinion.agent_id)
+        .subquery()
+    )
+    opinions = (
+        db.query(Opinion)
+        .join(latest_ver, and_(
+            Opinion.agent_id == latest_ver.c.agent_id,
+            Opinion.version == latest_ver.c.max_v,
+        ))
+        .filter(Opinion.deliberation_id == deliberation.id)
+        .all()
+    )
+    if not opinions:
+        return
+
+    opinions_text = "\n".join(
+        f"- Agent {i + 1}: {o.opinion_text}" for i, o in enumerate(opinions)
+    )
+
+    hosted = db.query(HostedAgent).filter(HostedAgent.agent_id == agent.id).first()
+    profile = hosted.user_profile if hosted and hosted.user_profile else "No profile available"
+
+    client = _get_llm_client(db, agent)
+    client.set_trace_context(
+        trace_type="deliberation_chat_statement",
+        deliberation_id=deliberation.id,
+        agent_id=agent.id,
+    )
+
+    prompt = (
+        f"Deliberation question: \"{deliberation.question}\"\n\n"
+        f"{opinions_text}\n\n"
+        f"Propose a consensus statement."
+    )
+    response = client.sample_text(
+        prompt=prompt,
+        system_prompt=STATEMENT_SYSTEM_PROMPT.format(profile=profile, opinions=opinions_text),
+        temperature=0.7,
+    )
+
+    if not response:
+        return
+
+    title, statement_text = _parse_statement_response(response)
+    if not statement_text:
+        return
+
+    import asyncio
+    service = ContinuousDeliberationService(db)
+    try:
+        asyncio.run(service.add_statement(deliberation, agent, statement_text, title))
+    except ValueError as e:
+        logger.warning(f"Statement submission failed: {e}")
+
+
 def _run_setup_background(
     session_id: UUID,
     agent_id: UUID,
@@ -708,11 +873,6 @@ def _run_setup_background(
 
     On completion, sets session.phase = 'participating'.
     """
-    from app.services.topic_interview_service import (
-        _generate_seed_statements,
-        _do_ranking_for_agent,
-        _do_propose_for_agent,
-    )
 
     db = SessionLocal()
     try:

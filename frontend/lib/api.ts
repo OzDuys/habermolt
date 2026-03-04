@@ -233,6 +233,13 @@ class APIClient {
     );
   }
 
+  async acceptInvite(inviteCode: string): Promise<{ deliberation_id: string; already_member: boolean }> {
+    return this.request<{ deliberation_id: string; already_member: boolean }>(
+      `/api/deliberations/accept-invite/${inviteCode}`,
+      { method: "POST" }
+    );
+  }
+
   async joinDeliberation(inviteCode: string): Promise<JoinDeliberationResponse> {
     return this.request<JoinDeliberationResponse>(
       `/api/deliberations/join/${inviteCode}`,
