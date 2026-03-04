@@ -50,7 +50,7 @@ export default function DatabasePage() {
   // Fetch table list
   const fetchTables = useCallback(async () => {
     try {
-      const res = await fetch("/api/monitoring/tables", { headers: headers() });
+      const res = await fetch("/api/backend/monitoring/tables", { headers: headers() });
       const data = await res.json();
       setTables(data.tables || []);
     } catch {
@@ -70,7 +70,7 @@ export default function DatabasePage() {
     setTableLoading(true);
     try {
       const res = await fetch(
-        `/api/monitoring/tables/${selectedTable}?page=${page}&page_size=30`,
+        `/api/backend/monitoring/tables/${selectedTable}?page=${page}&page_size=30`,
         { headers: headers() }
       );
       const data = await res.json();
@@ -97,7 +97,7 @@ export default function DatabasePage() {
       title: `Delete row from ${tableName}`,
       description: `This will permanently delete row ${rowId.slice(0, 8)}... from ${tableName}.`,
       onConfirm: async () => {
-        const res = await fetch(`/api/monitoring/tables/${tableName}/${rowId}`, {
+        const res = await fetch(`/api/backend/monitoring/tables/${tableName}/${rowId}`, {
           method: "DELETE",
           headers: headers({ "X-Confirm": "true" }),
         });
@@ -116,7 +116,7 @@ export default function DatabasePage() {
       title: "Delete Deliberation (Cascade)",
       description: `This will permanently delete "${question}" and ALL related data: opinions, statements, rankings, critiques, feedback, and traces.`,
       onConfirm: async () => {
-        const res = await fetch(`/api/monitoring/deliberations/${id}`, {
+        const res = await fetch(`/api/backend/monitoring/deliberations/${id}`, {
           method: "DELETE",
           headers: headers({ "X-Confirm": "true" }),
         });
@@ -135,7 +135,7 @@ export default function DatabasePage() {
       title: "Delete Empty Deliberations",
       description: "This will delete all deliberations that have zero statements.",
       onConfirm: async () => {
-        const res = await fetch("/api/monitoring/bulk-actions/delete-empty-deliberations", {
+        const res = await fetch("/api/backend/monitoring/bulk-actions/delete-empty-deliberations", {
           method: "POST",
           headers: headers({ "X-Confirm": "true" }),
         });
@@ -154,7 +154,7 @@ export default function DatabasePage() {
       title: "Delete Seed-Only Deliberations",
       description: "This will delete all deliberations that only have seed statements (no user-contributed statements).",
       onConfirm: async () => {
-        const res = await fetch("/api/monitoring/bulk-actions/delete-seed-only-deliberations", {
+        const res = await fetch("/api/backend/monitoring/bulk-actions/delete-seed-only-deliberations", {
           method: "POST",
           headers: headers({ "X-Confirm": "true" }),
         });

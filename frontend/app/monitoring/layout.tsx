@@ -43,7 +43,7 @@ export default function MonitoringLayout({
 
     // Validate secret against backend
     try {
-      const res = await fetch("/api/monitoring/config", {
+      const res = await fetch("/api/backend/monitoring/config", {
         headers: { "X-Monitoring-Secret": secret.trim() },
       });
       if (res.ok) {

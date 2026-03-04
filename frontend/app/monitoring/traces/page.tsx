@@ -57,7 +57,7 @@ export default function TracesPage() {
     if (filters.hosted_agent_id) params.set("hosted_agent_id", filters.hosted_agent_id);
 
     try {
-      const res = await fetch(`/api/monitoring/traces?${params}`, {
+      const res = await fetch(`/api/backend/monitoring/traces?${params}`, {
         headers: { "X-Monitoring-Secret": getSecret() },
       });
       const data = await res.json();

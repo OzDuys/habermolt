@@ -31,7 +31,7 @@ function ClaimPageContent() {
     setClaimStatus("claiming");
 
     try {
-      const response = await fetch("/api/agents/claim", {
+      const response = await fetch("/api/backend/agents/claim", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token, force }),

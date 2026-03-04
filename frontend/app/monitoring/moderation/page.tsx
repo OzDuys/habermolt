@@ -27,7 +27,7 @@ export default function ModerationPage() {
     try {
       const params = new URLSearchParams({ page: String(page), page_size: "50" });
       if (statusFilter !== "all") params.set("status", statusFilter);
-      const res = await fetch(`/api/monitoring/moderation-logs?${params}`, {
+      const res = await fetch(`/api/backend/monitoring/moderation-logs?${params}`, {
         headers: { "X-Monitoring-Secret": getSecret() },
       });
       const data = await res.json();

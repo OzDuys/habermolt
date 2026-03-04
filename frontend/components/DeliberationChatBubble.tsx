@@ -94,7 +94,7 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
       if (!open || sessionId) return;
 
       setLoading(true);
-      fetch("/api/deliberation-chat/start", {
+      fetch("/api/backend/deliberation-chat/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ deliberation_id: deliberationId }),
@@ -160,7 +160,7 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
 
       const poll = async () => {
         try {
-          const res = await fetch(`/api/deliberation-chat/${sessionId}/status`);
+          const res = await fetch(`/api/backend/deliberation-chat/${sessionId}/status`);
           if (!res.ok) return;
           const data = await res.json();
           setSetupProgress(data.setup_progress);
@@ -171,7 +171,7 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
             setTimeout(() => { onScrollToAgents?.(); }, 2000);
             // Reload session to get background action messages
             try {
-              const startRes = await fetch("/api/deliberation-chat/start", {
+              const startRes = await fetch("/api/backend/deliberation-chat/start", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ deliberation_id: deliberationId }),
@@ -215,7 +215,7 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
       setCurrentActions([]);
 
       try {
-        const res = await fetch(`/api/deliberation-chat/${sid}/message`, {
+        const res = await fetch(`/api/backend/deliberation-chat/${sid}/message`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ content: text }),
@@ -324,7 +324,7 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
       if (!sessionId) return;
       setRetrying(true);
       try {
-        const res = await fetch(`/api/deliberation-chat/${sessionId}/retry-setup`, { method: "POST" });
+        const res = await fetch(`/api/backend/deliberation-chat/${sessionId}/retry-setup`, { method: "POST" });
         if (res.ok) {
           setSetupProgress((prev) => prev ? { ...prev, error: null } : prev);
           setPhase("setup");

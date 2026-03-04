@@ -158,7 +158,7 @@ export default function AgentRequestsPage() {
     if (filters.deliberation_id) params.set("deliberation_id", filters.deliberation_id);
 
     try {
-      const res = await fetch(`/api/monitoring/agent-requests?${params}`, {
+      const res = await fetch(`/api/backend/monitoring/agent-requests?${params}`, {
         headers: { "X-Monitoring-Secret": getSecret() },
       });
       const data = await res.json();

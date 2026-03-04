@@ -23,8 +23,8 @@ export default function ConfigPage() {
 
   useEffect(() => {
     Promise.all([
-      fetch("/api/monitoring/config", { headers: { "X-Monitoring-Secret": getSecret() } }).then((r) => r.json()),
-      fetch("/api/monitoring/prompts", { headers: { "X-Monitoring-Secret": getSecret() } }).then((r) => r.json()),
+      fetch("/api/backend/monitoring/config", { headers: { "X-Monitoring-Secret": getSecret() } }).then((r) => r.json()),
+      fetch("/api/backend/monitoring/prompts", { headers: { "X-Monitoring-Secret": getSecret() } }).then((r) => r.json()),
     ])
       .then(([configData, promptsData]) => {
         setConfig(configData);

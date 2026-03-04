@@ -28,8 +28,8 @@ export default function CreateDeliberationPage() {
     if (!session?.user) return;
 
     Promise.all([
-      fetch("/api/hosted-agent").then((res) => res.status !== 404),
-      fetch("/api/profile").then((res) => res.json()).then((data) => !!data.agent).catch(() => false),
+      fetch("/api/backend/hosted-agents/me").then((res) => res.status !== 404),
+      fetch("/api/backend/agents/me").then((res) => res.json()).then((data) => !!data.agent).catch(() => false),
     ]).then(([hosted, openclaw]) => {
       if (hosted) setAgentType("hosted");
       else if (openclaw) setAgentType("openclaw");

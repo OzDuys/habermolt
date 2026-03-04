@@ -1724,7 +1724,7 @@ export default function CreateAgentFlow({ isUpdate = false }: { isUpdate?: boole
   // Fetch deliberations and taken names on mount
   useEffect(() => {
     api.listDeliberations().then(setDeliberations).catch(() => {});
-    fetch("/api/hosted-agent/taken-names")
+    fetch("/api/backend/hosted-agents/taken-names")
       .then((r) => r.json())
       .then((names: string[]) => setTakenNames(names.map((n) => n.toLowerCase())))
       .catch(() => {});
@@ -1753,7 +1753,7 @@ export default function CreateAgentFlow({ isUpdate = false }: { isUpdate?: boole
     try {
       if (isUpdate) {
         // Update existing bare agent's display name
-        const patchRes = await fetch("/api/hosted-agent", {
+        const patchRes = await fetch("/api/backend/hosted-agents/me", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ display_name: agentName }),
@@ -1764,7 +1764,7 @@ export default function CreateAgentFlow({ isUpdate = false }: { isUpdate?: boole
         }
       } else {
         // Create new agent
-        const res = await fetch("/api/hosted-agent", {
+        const res = await fetch("/api/backend/hosted-agents", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -1782,7 +1782,7 @@ export default function CreateAgentFlow({ isUpdate = false }: { isUpdate?: boole
       // Upload bootstrapped profile (use user-edited version if available)
       const profile = editedProfile || composeProfile(seedAnswers, interestsSummary);
       if (profile) {
-        await fetch("/api/hosted-agent/profile", {
+        await fetch("/api/backend/hosted-agents/me/profile", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ profile_markdown: profile }),
@@ -1884,7 +1884,7 @@ export default function CreateAgentFlow({ isUpdate = false }: { isUpdate?: boole
                   // Kick off LLM generation in background while user answers static questions
                   setLlmQuestionsLoading(true);
                   setSeedQuestions([]);
-                  fetch("/api/hosted-agent/seed-questions", {
+                  fetch("/api/backend/hosted-agents/seed-questions", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ deliberation_ids: selectedDelibIds }),

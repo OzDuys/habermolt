@@ -26,7 +26,7 @@ function CreateAgentPageContent() {
       return;
     }
     // Check if agent already exists
-    fetch("/api/hosted-agent").then(async (res) => {
+    fetch("/api/backend/hosted-agents/me").then(async (res) => {
       if (res.status === 404) {
         setReady(true);
         return;

@@ -513,7 +513,7 @@ export default function AgentActivitySection() {
   const [ratingLoading, setRatingLoading] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("/api/profile/activity")
+    fetch("/api/backend/agents/me/activity")
       .then((res) => res.json())
       .then((data) => {
         if (data.detail) {
@@ -529,7 +529,7 @@ export default function AgentActivitySection() {
   const handleRate = async (deliberationId: string, rating: number, feedback?: string) => {
     setRatingLoading(deliberationId);
     try {
-      const res = await fetch("/api/profile/rate", {
+      const res = await fetch("/api/backend/agents/me/rate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ deliberation_id: deliberationId, rating, feedback: feedback || null }),
@@ -558,7 +558,7 @@ export default function AgentActivitySection() {
   ) => {
     setRatingLoading(`consensus-${deliberationId}`);
     try {
-      const res = await fetch("/api/profile/rate-consensus", {
+      const res = await fetch("/api/backend/agents/me/rate-consensus", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ deliberation_id: deliberationId, ...ratings, feedback: feedback || null }),

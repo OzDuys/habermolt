@@ -533,7 +533,7 @@ function ConsensusRatingWidget({
   // Fetch existing rating
   useEffect(() => {
     if (!session?.user?.id) return;
-    fetch(`/api/profile/rate-consensus?deliberation_id=${deliberationId}`)
+    fetch(`/api/backend/agents/me/consensus-rating/${deliberationId}`)
       .then((r) => r.json())
       .then((data) => {
         if (data && data.id) {
@@ -555,7 +555,7 @@ function ConsensusRatingWidget({
     }
     setSaving(true);
     try {
-      const res = await fetch("/api/profile/rate-consensus", {
+      const res = await fetch("/api/backend/agents/me/rate-consensus", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -746,12 +746,12 @@ export default function LiveDeliberationPage() {
       return;
     }
     Promise.all([
-      fetch("/api/hosted-agent").then(async (res) => {
+      fetch("/api/backend/hosted-agents/me").then(async (res) => {
         if (res.status === 404) return null;
         if (!res.ok) return null;
         return res.json();
       }),
-      fetch("/api/profile").then((res) => res.json()).then((d) => !!d.agent).catch(() => false),
+      fetch("/api/backend/agents/me").then((res) => res.json()).then((d) => !!d.agent).catch(() => false),
     ]).then(([hosted, openclaw]) => {
       if (hosted) {
         setAgentType("hosted");

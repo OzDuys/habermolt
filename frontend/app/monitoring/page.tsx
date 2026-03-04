@@ -34,7 +34,7 @@ export default function MonitoringDashboard() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("/api/monitoring/stats", {
+    fetch("/api/backend/monitoring/stats", {
       headers: { "X-Monitoring-Secret": getSecret() },
     })
       .then((r) => {

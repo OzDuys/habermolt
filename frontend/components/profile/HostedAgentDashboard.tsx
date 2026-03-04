@@ -83,7 +83,7 @@ export default function HostedAgentDashboard() {
   const fetchAgent = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/hosted-agent");
+      const res = await fetch("/api/backend/hosted-agents/me");
       if (res.status === 404) { setNotFound(true); return; }
       const data = await res.json();
       if (data.detail) { setError(data.detail); return; }
@@ -97,7 +97,7 @@ export default function HostedAgentDashboard() {
 
   const fetchProfile = async () => {
     try {
-      const res = await fetch("/api/hosted-agent/profile");
+      const res = await fetch("/api/backend/hosted-agents/me/profile");
       if (res.ok) {
         const data = await res.json();
         setProfileMarkdown(data.profile_markdown || "");
@@ -107,7 +107,7 @@ export default function HostedAgentDashboard() {
 
   const fetchSessions = async () => {
     try {
-      const res = await fetch("/api/hosted-agent/chat/history");
+      const res = await fetch("/api/backend/hosted-agents/me/chat/history");
       if (res.ok) {
         const data = await res.json();
         setSessions(data);
@@ -118,7 +118,7 @@ export default function HostedAgentDashboard() {
   const handleSaveProfile = async () => {
     setSaving(true);
     try {
-      const res = await fetch("/api/hosted-agent/profile", {
+      const res = await fetch("/api/backend/hosted-agents/me/profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ profile_markdown: profileDraft }),
@@ -139,7 +139,7 @@ export default function HostedAgentDashboard() {
     }
     setExpandedSession(sessionId);
     try {
-      const res = await fetch(`/api/hosted-agent/chat/${sessionId}`);
+      const res = await fetch(`/api/backend/hosted-agents/me/chat/${sessionId}`);
       if (res.ok) {
         const data = await res.json();
         setExpandedMessages(data.messages || []);
@@ -165,12 +165,12 @@ export default function HostedAgentDashboard() {
   };
 
   const handleDownloadSession = (sessionId: string) => {
-    window.open(`/api/hosted-agent/chat/${sessionId}/download`, "_blank");
+    window.open(`/api/backend/hosted-agents/me/chat/${sessionId}/download`, "_blank");
   };
 
   const handleDownloadSelected = async () => {
     if (selectedSessions.size === 0) return;
-    const res = await fetch("/api/hosted-agent/chat/download", {
+    const res = await fetch("/api/backend/hosted-agents/me/chat/download", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ session_ids: Array.from(selectedSessions) }),
@@ -191,7 +191,7 @@ export default function HostedAgentDashboard() {
     setError("");
     try {
       const sessionIds = selectedSessions.size > 0 ? Array.from(selectedSessions) : [];
-      const res = await fetch("/api/hosted-agent/profile/rebuild", {
+      const res = await fetch("/api/backend/hosted-agents/me/profile/rebuild", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ session_ids: sessionIds }),
@@ -215,7 +215,7 @@ export default function HostedAgentDashboard() {
   const handleAcceptRebuild = async () => {
     setSaving(true);
     try {
-      const res = await fetch("/api/hosted-agent/profile", {
+      const res = await fetch("/api/backend/hosted-agents/me/profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ profile_markdown: proposedProfile }),
@@ -238,7 +238,7 @@ export default function HostedAgentDashboard() {
   const handleConfigUpdate = async (field: string, value: string | boolean) => {
     setSaving(true);
     try {
-      const res = await fetch("/api/hosted-agent", {
+      const res = await fetch("/api/backend/hosted-agents/me", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ [field]: value }),
@@ -252,7 +252,7 @@ export default function HostedAgentDashboard() {
   const handleDeleteAgent = async () => {
     if (!confirm("This will permanently delete your hosted agent. Continue?")) return;
     try {
-      const res = await fetch("/api/hosted-agent", { method: "DELETE" });
+      const res = await fetch("/api/backend/hosted-agents/me", { method: "DELETE" });
       if (res.ok || res.status === 204) {
         router.push("/settings");
         router.refresh();

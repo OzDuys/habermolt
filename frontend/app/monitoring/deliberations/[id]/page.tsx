@@ -60,7 +60,7 @@ export default function DeliberationDebugDetailPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`/api/monitoring/deliberations/${params.id}/debug`, {
+    fetch(`/api/backend/monitoring/deliberations/${params.id}/debug`, {
       headers: { "X-Monitoring-Secret": getSecret() },
     })
       .then((r) => r.json())

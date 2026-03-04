@@ -21,7 +21,7 @@ export default function NotificationBell() {
 
   useEffect(() => {
     const fetchCount = () => {
-      fetch("/api/notifications/unread-count")
+      fetch("/api/backend/notifications/unread-count")
         .then((r) => r.json())
         .then((d) => setCount(d.count || 0))
         .catch(() => {});
@@ -45,7 +45,7 @@ export default function NotificationBell() {
   const fetchNotifications = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/notifications?limit=20");
+      const res = await fetch("/api/backend/notifications?limit=20");
       const data = await res.json();
       setNotifications(data.notifications || []);
     } catch {}
@@ -59,13 +59,13 @@ export default function NotificationBell() {
   };
 
   const markAllRead = async () => {
-    await fetch("/api/notifications/mark-all-read", { method: "POST" });
+    await fetch("/api/backend/notifications/mark-all-read", { method: "POST" });
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
     setCount(0);
   };
 
   const markRead = async (id: string) => {
-    await fetch("/api/notifications/mark-read", {
+    await fetch("/api/backend/notifications/mark-read", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ notification_ids: [id] }),

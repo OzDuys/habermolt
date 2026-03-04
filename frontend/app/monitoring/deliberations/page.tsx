@@ -40,7 +40,7 @@ function DeliberationRow({ d }: { d: Deliberation }) {
     setLoadingTraces(true);
     try {
       const params = new URLSearchParams({ deliberation_id: d.id, page_size: "100" });
-      const res = await fetch(`/api/monitoring/traces?${params}`, {
+      const res = await fetch(`/api/backend/monitoring/traces?${params}`, {
         headers: { "X-Monitoring-Secret": getSecret() },
       });
       const data = await res.json();
@@ -206,7 +206,7 @@ export default function DeliberationsDebugPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/deliberations")
+    fetch("/api/backend/deliberations")
       .then((r) => r.json())
       .then((data) => setDeliberations(data.deliberations || []))
       .catch(() => {})

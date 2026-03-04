@@ -36,14 +36,14 @@ function AgentPageContent() {
     if (isPending) return;
     if (!session) return;
 
-    fetch("/api/hosted-agent")
+    fetch("/api/backend/hosted-agents/me")
       .then((res) => {
         if (res.status === 404) { setHasHostedAgent(false); return; }
         setHasHostedAgent(true);
       })
       .catch(() => setHasHostedAgent(false));
 
-    fetch("/api/profile")
+    fetch("/api/backend/agents/me")
       .then((res) => res.json())
       .then((data) => { setHasOpenClawAgent(!!data.agent); })
       .catch(() => setHasOpenClawAgent(false));

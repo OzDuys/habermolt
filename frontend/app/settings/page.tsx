@@ -40,11 +40,11 @@ function ProfilePageContent() {
     if (isPending) return;
     if (!session) { router.push("/sign-in"); return; }
 
-    fetch("/api/hosted-agent")
+    fetch("/api/backend/hosted-agents/me")
       .then((res) => setHasHostedAgent(res.status !== 404))
       .catch(() => setHasHostedAgent(false));
 
-    fetch("/api/profile")
+    fetch("/api/backend/agents/me")
       .then((res) => res.json())
       .then((data) => setHasOpenClawAgent(!!data.agent))
       .catch(() => setHasOpenClawAgent(false));

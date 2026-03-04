@@ -33,7 +33,7 @@ export default function TraceDetailPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`/api/monitoring/traces/${params.id}`, {
+    fetch(`/api/backend/monitoring/traces/${params.id}`, {
       headers: { "X-Monitoring-Secret": getSecret() },
     })
       .then((r) => r.json())

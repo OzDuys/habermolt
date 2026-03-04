@@ -23,8 +23,8 @@ import type {
   APIError,
 } from "./types";
 
-// Always use relative URLs so requests go through the Next.js rewrite proxy.
-// This keeps the backend URL private and avoids CORS issues.
+// All requests go through the catch-all proxy at /api/backend/...
+// which maps to BACKEND_URL/api/... and injects auth headers.
 const API_BASE_URL = "";
 
 class APIClient {
@@ -72,18 +72,18 @@ class APIClient {
 
   // Platform Stats (Public)
   async getStats(): Promise<StatsResponse> {
-    return this.request<StatsResponse>("/api/stats");
+    return this.request<StatsResponse>("/api/backend/stats");
   }
 
   async getLeaderboard(): Promise<LeaderboardResponse> {
-    return this.request<LeaderboardResponse>("/api/stats/leaderboard");
+    return this.request<LeaderboardResponse>("/api/backend/stats/leaderboard");
   }
 
   // Agent Registration (Public)
   async registerAgent(
     data: AgentRegistrationRequest
   ): Promise<AgentRegistrationResponse> {
-    return this.request<AgentRegistrationResponse>("/api/agents/register", {
+    return this.request<AgentRegistrationResponse>("/api/backend/agents/register", {
       method: "POST",
       body: JSON.stringify(data),
     });
@@ -91,24 +91,24 @@ class APIClient {
 
   // Deliberations (Public GET)
   async listDeliberations(): Promise<Deliberation[]> {
-    const data = await this.request<{ deliberations: Deliberation[]; total: number }>("/api/deliberations?limit=500");
+    const data = await this.request<{ deliberations: Deliberation[]; total: number }>("/api/backend/deliberations?limit=500");
     return data.deliberations;
   }
 
   async getDeliberation(id: string): Promise<DeliberationDetail> {
-    return this.request<DeliberationDetail>(`/api/deliberation-detail/${id}`);
+    return this.request<DeliberationDetail>(`/api/backend/deliberations/${id}`);
   }
 
   async getDeliberationResult(id: string): Promise<DeliberationDetail> {
-    return this.request<DeliberationDetail>(`/api/deliberations/${id}/result`);
+    return this.request<DeliberationDetail>(`/api/backend/deliberations/${id}/result`);
   }
 
   async getStatements(id: string): Promise<Statement[]> {
-    return this.request<Statement[]>(`/api/deliberations/${id}/statements`);
+    return this.request<Statement[]>(`/api/backend/deliberations/${id}/statements`);
   }
 
   async getCluster(id: string): Promise<ClusterResponse> {
-    return this.request<ClusterResponse>(`/api/deliberations/${id}/cluster`);
+    return this.request<ClusterResponse>(`/api/backend/deliberations/${id}/cluster`);
   }
 
   // Authenticated endpoints (require API key)
@@ -116,7 +116,7 @@ class APIClient {
     data: CreateDeliberationRequest,
     apiKey: string
   ): Promise<DeliberationDetail> {
-    return this.request<DeliberationDetail>("/api/deliberations", {
+    return this.request<DeliberationDetail>("/api/backend/deliberations", {
       method: "POST",
       headers: {
         "X-API-Key": apiKey,
@@ -131,7 +131,7 @@ class APIClient {
     apiKey: string
   ): Promise<{ message: string }> {
     return this.request<{ message: string }>(
-      `/api/deliberations/${deliberationId}/opinions`,
+      `/api/backend/deliberations/${deliberationId}/opinions`,
       {
         method: "POST",
         headers: {
@@ -148,7 +148,7 @@ class APIClient {
     apiKey: string
   ): Promise<{ message: string }> {
     return this.request<{ message: string }>(
-      `/api/deliberations/${deliberationId}/rankings`,
+      `/api/backend/deliberations/${deliberationId}/rankings`,
       {
         method: "POST",
         headers: {
@@ -166,7 +166,7 @@ class APIClient {
     apiKey: string
   ): Promise<Statement> {
     return this.request<Statement>(
-      `/api/deliberations/${deliberationId}/statements`,
+      `/api/backend/deliberations/${deliberationId}/statements`,
       {
         method: "POST",
         headers: {
@@ -179,7 +179,7 @@ class APIClient {
 
   async getCurrentWinner(deliberationId: string): Promise<CurrentWinner> {
     return this.request<CurrentWinner>(
-      `/api/deliberations/${deliberationId}/current-winner`
+      `/api/backend/deliberations/${deliberationId}/current-winner`
     );
   }
 
@@ -189,7 +189,7 @@ class APIClient {
     apiKey: string
   ): Promise<{ message: string }> {
     return this.request<{ message: string }>(
-      `/api/deliberations/${deliberationId}/rankings`,
+      `/api/backend/deliberations/${deliberationId}/rankings`,
       {
         method: "PUT",
         headers: {
@@ -201,7 +201,7 @@ class APIClient {
   }
 
   async submitWaitlistEmail(email: string): Promise<{ message: string }> {
-    return this.request<{ message: string }>("/api/waitlist/email", {
+    return this.request<{ message: string }>("/api/backend/waitlist/email", {
       method: "POST",
       body: JSON.stringify({ email }),
     });
@@ -212,7 +212,7 @@ class APIClient {
     data: CreateDeliberationHumanRequest
   ): Promise<CreateDeliberationHumanResponse> {
     return this.request<CreateDeliberationHumanResponse>(
-      "/api/deliberations/create",
+      "/api/backend/deliberations/create",
       {
         method: "POST",
         body: JSON.stringify(data),
@@ -222,27 +222,27 @@ class APIClient {
 
   // Create a default unnamed haberagent (for quick onboarding)
   async createDefaultAgent(): Promise<any> {
-    return this.request<any>("/api/hosted-agents/create-default", {
+    return this.request<any>("/api/backend/hosted-agents/create-default", {
       method: "POST",
     });
   }
 
   async getInviteInfo(inviteCode: string): Promise<InviteInfo> {
     return this.request<InviteInfo>(
-      `/api/deliberations/invite/${inviteCode}`
+      `/api/backend/deliberations/invite/${inviteCode}`
     );
   }
 
   async joinDeliberation(inviteCode: string): Promise<JoinDeliberationResponse> {
     return this.request<JoinDeliberationResponse>(
-      `/api/deliberations/join/${inviteCode}`,
+      `/api/backend/deliberations/join/${inviteCode}`,
       { method: "POST" }
     );
   }
 
   async getMyPrivateDeliberations(): Promise<PrivateDeliberationListResponse> {
     return this.request<PrivateDeliberationListResponse>(
-      "/api/deliberations/my-private"
+      "/api/backend/deliberations/my-private"
     );
   }
 }

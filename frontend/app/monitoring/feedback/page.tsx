@@ -24,7 +24,7 @@ export default function FeedbackPage() {
   const fetchFeedback = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/monitoring/feedback?page=${page}&page_size=50`, {
+      const res = await fetch(`/api/backend/monitoring/feedback?page=${page}&page_size=50`, {
         headers: { "X-Monitoring-Secret": getSecret() },
       });
       const data = await res.json();

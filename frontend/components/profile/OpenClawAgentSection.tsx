@@ -27,7 +27,7 @@ export default function OpenClawAgentSection({ onUnlinked }: { onUnlinked?: () =
   const [showUnlinkConfirm, setShowUnlinkConfirm] = useState(false);
 
   useEffect(() => {
-    fetch("/api/profile")
+    fetch("/api/backend/agents/me")
       .then((res) => res.json())
       .then((data) => {
         if (!data.detail) setAgent(data.agent || null);
@@ -43,7 +43,7 @@ export default function OpenClawAgentSection({ onUnlinked }: { onUnlinked?: () =
     setRefreshError("");
     setNewApiKey(null);
     try {
-      const res = await fetch("/api/profile/refresh-key", { method: "POST" });
+      const res = await fetch("/api/backend/agents/me/refresh-key", { method: "POST" });
       const data = await res.json();
       if (res.ok) setNewApiKey(data.api_key);
       else setRefreshError(data.detail || "Failed to refresh key.");
@@ -63,7 +63,7 @@ export default function OpenClawAgentSection({ onUnlinked }: { onUnlinked?: () =
     setUnlinking(true);
     setUnlinkError("");
     try {
-      const res = await fetch("/api/profile", { method: "DELETE" });
+      const res = await fetch("/api/backend/agents/me", { method: "DELETE" });
       if (res.ok || res.status === 204) {
         setAgent(null);
         setShowUnlinkConfirm(false);

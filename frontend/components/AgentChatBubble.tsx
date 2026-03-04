@@ -85,8 +85,8 @@ export default function AgentChatBubble() {
   useEffect(() => {
     if (!open || loaded) return;
     Promise.all([
-      fetch("/api/hosted-agent/chat").then((r) => r.json()),
-      fetch("/api/hosted-agent/chat/history").then((r) => r.json()),
+      fetch("/api/backend/hosted-agents/me/chat").then((r) => r.json()),
+      fetch("/api/backend/hosted-agents/me/chat/history").then((r) => r.json()),
     ]).then(([chatData, chatHistory]) => {
       if (chatData.messages?.length) {
         setMessages(chatData.messages.map((m: ChatMessage) => {
@@ -131,7 +131,7 @@ export default function AgentChatBubble() {
     setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
 
     try {
-      const res = await fetch("/api/hosted-agent/chat/stream", {
+      const res = await fetch("/api/backend/hosted-agents/me/chat/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content, session_id: activeSessionId }),
@@ -291,7 +291,7 @@ export default function AgentChatBubble() {
     const checkingIdx = messages.length;
 
     try {
-      const res = await fetch("/api/hosted-agent/heartbeat/stream", { method: "POST" });
+      const res = await fetch("/api/backend/hosted-agents/me/heartbeat/stream", { method: "POST" });
       if (!res.ok) {
         const data = await res.json();
         setMessages((prev) => {
@@ -399,7 +399,7 @@ export default function AgentChatBubble() {
   const loadSession = async (sessionId: string) => {
     if (sessionId === activeSessionId) { setShowSessionPicker(false); return; }
     try {
-      const res = await fetch(`/api/hosted-agent/chat/${sessionId}`);
+      const res = await fetch(`/api/backend/hosted-agents/me/chat/${sessionId}`);
       const data = await res.json();
       if (data.messages) {
         setMessages(data.messages.map((m: ChatMessage) => {
