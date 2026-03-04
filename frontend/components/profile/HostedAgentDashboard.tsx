@@ -509,7 +509,7 @@ export default function HostedAgentDashboard() {
           </Section>
         )}
 
-        <Section title="Token Usage">
+        <Section title="Weekly Token Usage">
           <TokenUsageBar used={agent.tokens_used_period} limit={agent.token_limit} tier={agent.pricing_tier} />
         </Section>
 

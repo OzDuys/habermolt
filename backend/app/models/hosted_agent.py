@@ -39,7 +39,7 @@ class HostedAgent(Base):
     pricing_tier = Column(String, default="free", nullable=False)  # free, byok, subscription
     byok_api_key_encrypted = Column(String, nullable=True)  # Fernet-encrypted OpenRouter key
 
-    # Token usage (rolling monthly billing period)
+    # Token usage (rolling weekly billing period)
     tokens_used_period = Column(Integer, default=0, nullable=False)
     billing_period_start = Column(DateTime, nullable=False, default=datetime.utcnow)
 

@@ -196,8 +196,8 @@ def record_token_usage(db: Session, hosted_agent: HostedAgent, tokens: int) -> N
 
 
 def _maybe_reset_billing_period(hosted_agent: HostedAgent) -> None:
-    """Lazy reset: if 30 days have passed, reset the counter."""
-    if datetime.utcnow() - hosted_agent.billing_period_start > timedelta(days=30):
+    """Lazy reset: if 7 days have passed, reset the counter."""
+    if datetime.utcnow() - hosted_agent.billing_period_start > timedelta(days=7):
         hosted_agent.tokens_used_period = 0
         hosted_agent.billing_period_start = datetime.utcnow()
         if hosted_agent.paused_reason == "token_limit":

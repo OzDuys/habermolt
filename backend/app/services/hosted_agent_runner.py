@@ -264,7 +264,7 @@ def run_single_hosted_agent(db: Session, hosted_agent: HostedAgent) -> dict:
             db, hosted_agent.user_id,
             type="limit_approaching",
             title="Token limit reached",
-            body=f"Your agent has used all available tokens for this billing period ({hosted_agent.pricing_tier} tier). Upgrade or wait for the next period.",
+            body=f"Your agent has used all available tokens for this week ({hosted_agent.pricing_tier} tier). Upgrade or wait for the next week.",
         )
         return {"status": "token_limit"}
 
@@ -362,7 +362,7 @@ def run_single_hosted_agent_stream(db: Session, hosted_agent: HostedAgent):
     )
 
     if not check_token_limit(hosted_agent):
-        yield {"type": "error", "message": "Token limit reached for this period."}
+        yield {"type": "error", "message": "Token limit reached for this week."}
         return
 
     from app.services.agent_tools import get_tool_schemas, execute_tool

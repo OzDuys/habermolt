@@ -12,7 +12,7 @@ export default function TokenUsageBar({
   if (tier === "byok" || limit === null) {
     return (
       <div className="text-xs" style={{ color: "var(--muted)" }}>
-        Unlimited (BYOK) &mdash; {used.toLocaleString()} tokens used this period
+        Unlimited (BYOK) &mdash; {used.toLocaleString()} tokens used this week
       </div>
     );
   }
@@ -24,7 +24,7 @@ export default function TokenUsageBar({
     <div>
       <div className="mb-1 flex items-center justify-between text-xs">
         <span style={{ color: "var(--muted)" }}>
-          {used.toLocaleString()} / {limit.toLocaleString()} tokens
+          {used.toLocaleString()} / {limit.toLocaleString()} tokens this week
         </span>
         <span
           className="font-medium"

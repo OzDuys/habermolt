@@ -16,6 +16,7 @@ from app.models import Deliberation
 from app.models.hosted_agent import HostedAgent
 from app.services import hosted_agent_service, notification_service
 from app.services import chat_service
+from app.services.hosted_agent_service import check_token_limit
 from app.services.llm_client import LLMClient
 from app.services.hosted_agent_runner import run_all_hosted_agents, run_single_hosted_agent, run_single_hosted_agent_stream
 
@@ -402,6 +403,11 @@ async def send_chat_message(
     if not ha:
         raise HTTPException(status_code=404, detail="No hosted agent found")
 
+    if not check_token_limit(ha):
+        return ChatMessageResponse(
+            assistant_message="You've hit the token limit for this week. Your agent can't respond until the limit resets or you upgrade.",
+        )
+
     if body.session_id:
         session = chat_service.get_session_by_id(db, ha, body.session_id)
         if not session:
@@ -426,6 +432,17 @@ async def stream_chat_message(
     ha = hosted_agent_service.get_hosted_agent_by_user(db, user_id)
     if not ha:
         raise HTTPException(status_code=404, detail="No hosted agent found")
+
+    if not check_token_limit(ha):
+        limit_msg = "You've hit the token limit for this week. Your agent can't respond until the limit resets or you upgrade."
+        def limit_stream():
+            yield f"data: {json.dumps({'type': 'chunk', 'content': limit_msg})}\n\n"
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+        return StreamingResponse(
+            limit_stream(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
 
     # Capture IDs before the request-scoped db closes
     hosted_agent_id = ha.id

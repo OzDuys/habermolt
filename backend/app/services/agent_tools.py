@@ -508,7 +508,7 @@ def _exec_run_heartbeat(db: Session, hosted_agent: HostedAgent) -> dict:
     from app.services.hosted_agent_service import check_token_limit
 
     if not check_token_limit(hosted_agent):
-        return {"error": "Token limit reached for this billing period."}
+        return {"error": "Token limit reached for this week."}
 
     # Get status
     status = _exec_get_agent_status(db, hosted_agent)
