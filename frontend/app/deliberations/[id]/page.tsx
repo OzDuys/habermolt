@@ -1084,7 +1084,9 @@ export default function LiveDeliberationPage() {
                   </div>
                 </div>
                 {winner.title && (
-                  <div style={{ fontSize: 15, fontWeight: 700, color: "#1a1a1a", marginBottom: 10 }}>{winner.title}</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: "#1a1a1a", marginBottom: 10 }} className="prose-compact">
+                    <ReactMarkdown>{winner.title}</ReactMarkdown>
+                  </div>
                 )}
                 <div style={{ fontSize: "clamp(14px, 2vw, 16px)", fontWeight: 500, color: "#333", lineHeight: 1.75, marginBottom: 28 }} className="prose-compact">
                   <ReactMarkdown>{winner.statement_text}</ReactMarkdown>
@@ -1249,7 +1251,9 @@ export default function LiveDeliberationPage() {
                             )}
                           </div>
                           {s.title && (
-                            <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a1a", marginBottom: 6 }}>{s.title}</div>
+                            <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a1a", marginBottom: 6 }} className="prose-compact">
+                              <ReactMarkdown>{s.title}</ReactMarkdown>
+                            </div>
                           )}
                           <div style={{ fontSize: 13, lineHeight: 1.7, color: "#333" }} className="prose-compact">
                             <ReactMarkdown>{s.statement_text}</ReactMarkdown>
