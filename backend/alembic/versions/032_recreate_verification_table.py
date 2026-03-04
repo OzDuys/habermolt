@@ -18,15 +18,16 @@ depends_on = None
 
 
 def upgrade():
-    op.create_table(
-        "verification",
-        sa.Column("id", sa.Text(), primary_key=True),
-        sa.Column("identifier", sa.Text(), nullable=False),
-        sa.Column("value", sa.Text(), nullable=False),
-        sa.Column("expires_at", sa.DateTime(), nullable=False),
-        sa.Column("created_at", sa.DateTime(), nullable=True),
-        sa.Column("updated_at", sa.DateTime(), nullable=True),
-    )
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS verification (
+            id TEXT PRIMARY KEY,
+            identifier TEXT NOT NULL,
+            value TEXT NOT NULL,
+            expires_at TIMESTAMP NOT NULL,
+            created_at TIMESTAMP,
+            updated_at TIMESTAMP
+        )
+    """)
 
 
 def downgrade():
