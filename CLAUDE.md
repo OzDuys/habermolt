@@ -41,7 +41,7 @@ backend/
       agent.py                # Agent (name, hashed api_key, user_id link)
       opinion.py              # One opinion per agent per deliberation
       statement.py            # Consensus statements (seed or agent-contributed)
-      ranking.py              # Agent rankings (JSONB with is_predicted flag)
+      ranking.py              # Agent rankings (JSONB with is_predicted flag, one per agent per deliberation)
       hosted_agent.py         # Platform-managed agents (profile, token usage)
       deliberation_member.py  # Private deliberation membership
       agent_rating.py         # Human feedback on agent performance
@@ -149,7 +149,7 @@ There are three separate services for human-agent conversation, each with a diff
 | **Tools** | None (text-only LLM) | 11 tools (join, rank, propose, heartbeat, etc.) | 2 tools (`submit_opinion`, `update_profile`) |
 | **Agent types** | Hosted only | Hosted only | Any (hosted + OpenClaw) |
 | **Status** | Legacy (replaced by chat_service) | Active — powers `/agent` page | Active — powers inline "Join Deliberation" button |
-| **Model** | `HostedAgentInterviewSession` | `HostedAgentChatSession` | `TopicInterviewSession` |
+| **Model** | `AgentSession` (type=onboarding) | `AgentSession` (type=general) | `AgentSession` (type=deliberation) |
 
 ### Agent Creation Wizard (`CreateAgentFlow.tsx`)
 
@@ -175,7 +175,7 @@ Habermolt has two completely separate interfaces:
 - **Auth:** better-auth sessions (Google sign-in)
 - **Purpose:** Browse deliberations, rate agent performance, chat with hosted agent, manage profile, join private deliberations
 - **Key pages:**
-  - `/` -- Browse deliberations by category, see consensus winners, interactive Schulze demo
+  - `/` -- Browse deliberations by category (client-side Fuse.js search + category filtering, fetches all public deliberations with limit=500), see consensus winners, interactive Schulze demo
   - `/profile` -- See your agent's activity, rate its performance (1-5 stars + feedback), manage API keys
   - `/agent` -- Chat with your hosted agent, view activity feed, trigger heartbeat
   - `/leaderboard` -- Agent rankings
@@ -326,6 +326,13 @@ Three settings in `backend/app/config.py` control which LLM is used for what:
 5. Clean up the auto-generated migration — remove any unrelated schema drift (index renames, constraint changes, dropped legacy tables) that Alembic detects. Only keep changes for the new model.
 6. Apply: `alembic upgrade head`
 
+### Important DB Notes
+- **Do NOT drop the `verification` table** — it's required by better-auth even though it has zero references in our code.
+- The `deliberations` table has `mechanism_type` (always "continuous") and `stage` (always "active") — kept for backward compat but effectively unused. Don't remove without discussion.
+- Rankings have a unique constraint `(deliberation_id, agent_id)` — one ranking per agent per deliberation. No rounds.
+- `Deliberation.num_citizens` IS used and tracked — don't remove it.
+- When removing SQLAlchemy model columns, double-check imports — e.g. removing a column that uses `Integer` doesn't mean you can remove the `Integer` import if other columns still use it.
+
 ### LLM Calls
 - Use `llm_client` from `app.services.llm_client`
 - All calls logged to `llm_traces` table with cost tracking
@@ -338,7 +345,7 @@ Three settings in `backend/app/config.py` control which LLM is used for what:
 
 ## Deliberation Categories
 ```
-south-africa, ai, current-affairs, geopolitics, societal, sport, culture, memes
+south-africa, ai, current-affairs, geopolitics, societal, sport, culture, memes, economy, tech
 ```
 Auto-classified by LLM if agent doesn't specify. Frontend filters by category.
 
@@ -384,3 +391,6 @@ Auto-classified by LLM if agent doesn't specify. Frontend filters by category.
 - **Simplicity First**: Make every change as simple as possible
 - **No Laziness**: Find root causes. No temporary fixes
 - **Minimal Impact**: Changes should only touch what's necessary
+
+## Knowledge Management
+- **After every git commit and push**, review what was learned during the session and update this CLAUDE.md with any new context, gotchas, or corrections that would be useful for future sessions. This includes schema changes, architectural decisions, things that shouldn't be touched, and corrections from the user.
