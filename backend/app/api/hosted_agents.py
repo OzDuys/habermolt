@@ -306,7 +306,7 @@ async def create_default_hosted_agent(
 
     # Create a default agent with a placeholder name
     ha = hosted_agent_service.create_hosted_agent(
-        db, user_id, display_name="My Agent", pricing_tier="free"
+        db, user_id, display_name="GuestAgent", pricing_tier="free"
     )
     return _to_response(ha)
 
