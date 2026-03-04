@@ -49,7 +49,7 @@ def upgrade():
     # --- Drop legacy tables (if they exist) ---
     op.execute("DROP TABLE IF EXISTS critiques CASCADE")
     op.execute("DROP TABLE IF EXISTS human_feedback CASCADE")
-    op.execute("DROP TABLE IF EXISTS verification CASCADE")
+    # NOTE: Do NOT drop verification — it's required by better-auth
 
 
 def downgrade():
