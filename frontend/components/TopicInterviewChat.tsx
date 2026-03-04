@@ -27,6 +27,7 @@ interface TopicInterviewChatProps {
   greeting: string;
   initialMessages?: Message[];
   initialStatus?: string;
+  initialPhase?: string;
   initialSetupProgress?: SetupProgress | null;
   onComplete?: () => void;
 }
@@ -45,6 +46,7 @@ export default function TopicInterviewChat({
   greeting,
   initialMessages,
   initialStatus,
+  initialPhase,
   initialSetupProgress,
   onComplete,
 }: TopicInterviewChatProps) {
@@ -56,6 +58,7 @@ export default function TopicInterviewChat({
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [interviewStatus, setInterviewStatus] = useState<string>(initialStatus || "active");
+  const [phase, setPhase] = useState<string>(initialPhase || "browsing");
   const [currentActions, setCurrentActions] = useState<ActionEvent[]>([]);
   const [setupProgress, setSetupProgress] = useState<SetupProgress | null>(initialSetupProgress || null);
   const [retrying, setRetrying] = useState(false);
@@ -71,9 +74,9 @@ export default function TopicInterviewChat({
     if (!sending && interviewStatus === "active") inputRef.current?.focus();
   }, [sending, interviewStatus]);
 
-  // Poll for setup progress when in setup_running state
+  // Poll for setup progress when in setup phase
   useEffect(() => {
-    if (interviewStatus !== "setup_running") {
+    if (phase !== "setup") {
       if (pollRef.current) {
         clearInterval(pollRef.current);
         pollRef.current = null;
@@ -87,8 +90,10 @@ export default function TopicInterviewChat({
         if (!res.ok) return;
         const data = await res.json();
         setSetupProgress(data.setup_progress);
-        if (data.status === "completed") {
+        if (data.phase) setPhase(data.phase);
+        if (data.status === "completed" || data.phase === "participating") {
           setInterviewStatus("completed");
+          setPhase("participating");
           onComplete?.();
         }
       } catch {
@@ -106,7 +111,7 @@ export default function TopicInterviewChat({
         pollRef.current = null;
       }
     };
-  }, [interviewStatus, sessionId, onComplete]);
+  }, [phase, sessionId, onComplete]);
 
   const handleRetry = async () => {
     setRetrying(true);
@@ -195,11 +200,12 @@ export default function TopicInterviewChat({
               );
             } else if (event.type === "status") {
               setInterviewStatus(event.status);
+              if (event.phase) setPhase(event.phase);
               if (event.status === "completed") {
                 onComplete?.();
               }
               // Set initial progress immediately so UI has something before first poll
-              if (event.status === "setup_running") {
+              if (event.phase === "setup") {
                 setSetupProgress((prev) => prev || {
                   current_step: "seed_statements",
                   completed_steps: ["opinion_submitted"],
@@ -235,7 +241,7 @@ export default function TopicInterviewChat({
   };
 
   const isCompleted = interviewStatus === "completed";
-  const isSetupRunning = interviewStatus === "setup_running";
+  const isSetupRunning = phase === "setup";
   const chatDisabled = isCompleted || isSetupRunning;
 
   return (

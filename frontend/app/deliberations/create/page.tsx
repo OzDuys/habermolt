@@ -35,6 +35,7 @@ export default function CreateDeliberationPage() {
   const [interviewGreeting, setInterviewGreeting] = useState<string>("");
   const [initialMessages, setInitialMessages] = useState<Array<{ role: "user" | "assistant"; content: string }> | undefined>();
   const [initialStatus, setInitialStatus] = useState<string | undefined>();
+  const [initialPhase, setInitialPhase] = useState<string | undefined>();
   const [initialSetupProgress, setInitialSetupProgress] = useState<any>(undefined);
   const [activeSession, setActiveSession] = useState<any>(null);
 
@@ -69,6 +70,7 @@ export default function CreateDeliberationPage() {
     setInterviewSessionId(activeSession.session_id);
     setQuestion(activeSession.question || "");
     setInitialStatus(activeSession.status);
+    setInitialPhase(activeSession.phase);
     setInitialSetupProgress(activeSession.setup_progress);
     if (activeSession.messages && activeSession.messages.length > 0) {
       setInitialMessages(activeSession.messages);
@@ -227,6 +229,7 @@ export default function CreateDeliberationPage() {
           greeting={interviewGreeting}
           initialMessages={initialMessages}
           initialStatus={initialStatus}
+          initialPhase={initialPhase}
           initialSetupProgress={initialSetupProgress}
           onComplete={handleInterviewComplete}
         />
@@ -252,7 +255,7 @@ export default function CreateDeliberationPage() {
         >
           <div className="min-w-0 flex-1">
             <div className="text-xs font-medium" style={{ color: "var(--accent)" }}>
-              {activeSession.status === "setup_running" ? "Setting up deliberation" : "Interview in progress"}
+              {activeSession.phase === "setup" ? "Setting up deliberation" : "Interview in progress"}
               {activeSession.is_private ? " (private)" : " (public)"}
             </div>
             <div className="truncate text-sm" style={{ color: "var(--foreground)" }}>

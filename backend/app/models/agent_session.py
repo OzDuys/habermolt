@@ -23,7 +23,7 @@ class AgentSession(Base):
 
     session_type = Column(String, nullable=False)  # onboarding, deliberation, general
     phase = Column(String, nullable=True)  # browsing, setup, participating (deliberation sessions only)
-    status = Column(String, default="active", nullable=False)  # active, opinion_submitted, setup_running, completed
+    status = Column(String, default="active", nullable=False)  # active, completed, dismissed
     topic = Column(String, nullable=True)
 
     messages = Column(JSONB, nullable=False, default=list)

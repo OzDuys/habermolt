@@ -46,6 +46,13 @@ def upgrade():
         WHERE session_type IN ('deliberation_join', 'deliberation_chat')
     """)
 
+    # Clean up legacy status values — phase now handles these
+    op.execute("""
+        UPDATE agent_sessions
+        SET status = 'active'
+        WHERE status IN ('setup_running', 'opinion_submitted')
+    """)
+
 
 def downgrade():
     # Restore old session types based on phase

@@ -43,12 +43,14 @@ class InterviewSessionResponse(BaseModel):
     question: str
     greeting: str
     status: str
+    phase: Optional[str] = None
     messages: Optional[list] = None
     setup_progress: Optional[dict] = None
 
 class InterviewStatusResponse(BaseModel):
     session_id: str
     status: str
+    phase: Optional[str] = None
     deliberation_id: str
     setup_progress: Optional[dict] = None
 
@@ -58,6 +60,7 @@ class ActiveSessionResponse(BaseModel):
     deliberation_id: Optional[str] = None
     question: Optional[str] = None
     status: Optional[str] = None
+    phase: Optional[str] = None
     setup_progress: Optional[dict] = None
     messages: Optional[list] = None
     is_private: Optional[bool] = None
@@ -99,7 +102,7 @@ async def get_active_session(
         and_(
             AgentSession.user_id == user_id,
             AgentSession.session_type == "deliberation",
-            AgentSession.status.in_(["active", "opinion_submitted", "setup_running"]),
+            AgentSession.status == "active",
         )
     ).order_by(AgentSession.created_at.desc()).first()
 
@@ -114,6 +117,7 @@ async def get_active_session(
         deliberation_id=str(session.deliberation_id),
         question=deliberation.question if deliberation else "",
         status=session.status,
+        phase=session.phase,
         setup_progress=session.setup_progress,
         messages=session.messages,
         is_private=deliberation.is_private if deliberation else None,
@@ -145,7 +149,7 @@ async def start_interview(
             AgentSession.agent_id == agent.id,
             AgentSession.deliberation_id == deliberation.id,
             AgentSession.session_type == "deliberation",
-            AgentSession.status.in_(["active", "opinion_submitted", "setup_running"]),
+            AgentSession.status == "active",
         )
     ).first()
     if existing:
@@ -155,6 +159,7 @@ async def start_interview(
             question=deliberation.question,
             greeting=existing.messages[0]["content"] if existing.messages else "",
             status=existing.status,
+            phase=existing.phase,
             messages=existing.messages,
             setup_progress=existing.setup_progress,
         )
@@ -168,6 +173,7 @@ async def start_interview(
         question=deliberation.question,
         greeting=greeting,
         status=session.status,
+        phase=session.phase,
     )
 
 
@@ -223,7 +229,7 @@ async def join_and_start_interview(
             AgentSession.agent_id == agent.id,
             AgentSession.deliberation_id == deliberation.id,
             AgentSession.session_type == "deliberation",
-            AgentSession.status.in_(["active", "opinion_submitted", "setup_running"]),
+            AgentSession.status == "active",
         )
     ).first()
     if existing_session:
@@ -233,6 +239,7 @@ async def join_and_start_interview(
             question=deliberation.question,
             greeting=existing_session.messages[0]["content"] if existing_session.messages else "",
             status=existing_session.status,
+            phase=existing_session.phase,
             messages=existing_session.messages,
             setup_progress=existing_session.setup_progress,
         )
@@ -246,6 +253,7 @@ async def join_and_start_interview(
         question=deliberation.question,
         greeting=greeting,
         status=session.status,
+        phase=session.phase,
     )
 
 
@@ -264,7 +272,7 @@ async def send_interview_message(
     if not session:
         raise HTTPException(status_code=404, detail="Interview session not found.")
 
-    if session.status in ("completed", "setup_running"):
+    if session.status == "completed" or session.phase == "setup":
         raise HTTPException(status_code=400, detail="This interview is already completed.")
 
     session_id_val = session.id
@@ -295,7 +303,7 @@ async def send_interview_message(
 
             # Check if session completed
             stream_db.refresh(stream_session)
-            yield f"data: {json.dumps({'type': 'status', 'status': stream_session.status})}\n\n"
+            yield f"data: {json.dumps({'type': 'status', 'status': stream_session.status, 'phase': stream_session.phase})}\n\n"
             yield f"data: {json.dumps({'type': 'done'})}\n\n"
         except Exception as e:
             logger.error(f"Topic interview stream error: {e}", exc_info=True)
@@ -326,6 +334,7 @@ async def get_interview_status(
     return InterviewStatusResponse(
         session_id=str(session.id),
         status=session.status,
+        phase=session.phase,
         deliberation_id=str(session.deliberation_id),
         setup_progress=session.setup_progress,
     )
@@ -344,8 +353,8 @@ async def retry_setup(
     if not session:
         raise HTTPException(status_code=404, detail="Interview session not found.")
 
-    if session.status != "setup_running":
-        raise HTTPException(status_code=400, detail="Session is not in setup_running state.")
+    if session.phase != "setup":
+        raise HTTPException(status_code=400, detail="Session is not in setup state.")
 
     progress = session.setup_progress or {}
     if not progress.get("error"):

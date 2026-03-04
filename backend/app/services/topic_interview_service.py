@@ -480,7 +480,6 @@ def _exec_submit_opinion(
 
     # Update session phase and initialize progress tracking
     session.phase = "setup"
-    session.status = "setup_running"
     session.setup_progress = {
         "current_step": "seed_statements" if needs_seed else "ranking",
         "completed_steps": ["opinion_submitted"],
@@ -505,7 +504,7 @@ def _exec_submit_opinion(
         "action": "submit_opinion",
         "description": f"Opinion submitted for '{deliberation.question[:50]}'",
         "opinion_text": opinion_text,
-        "status": "setup_running",
+        "phase": "setup",
     }
 
 
@@ -618,7 +617,6 @@ def retry_setup(db: Session, session: AgentSession):
     progress["error"] = None
     session.setup_progress = progress
     session.phase = "setup"
-    session.status = "setup_running"
     db.commit()
 
     session_id = session.id
