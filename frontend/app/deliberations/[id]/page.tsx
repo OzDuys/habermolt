@@ -755,6 +755,7 @@ export default function LiveDeliberationPage() {
   const inviteCodeParam = searchParams.get("invite_code");
   const [showInviteBanner, setShowInviteBanner] = useState(false);
   const [inviteUrl, setInviteUrl] = useState("");
+  const [copied, setCopied] = useState(false);
   const [data, setData] = useState<DeliberationDetail | null>(null);
   const [clusterPoints, setClusterPoints] = useState<ClusterPoint[]>([]);
   const [loading, setLoading] = useState(true);
@@ -975,7 +976,7 @@ export default function LiveDeliberationPage() {
         {showInviteBanner && inviteUrl && (
           <div style={{
             position: "relative", zIndex: 10,
-            display: "flex", alignItems: "center", gap: 12,
+            display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap",
             padding: "10px 16px",
             background: "#fff8f0", borderBottom: "1px solid #e8e4dc",
             fontSize: 13,
@@ -986,13 +987,14 @@ export default function LiveDeliberationPage() {
               padding: "4px 8px", borderRadius: 6, background: "#f5f0e8", fontSize: 12, color: "#333",
             }}>{inviteUrl}</code>
             <button
-              onClick={() => { navigator.clipboard.writeText(inviteUrl); }}
+              onClick={() => { navigator.clipboard.writeText(inviteUrl); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
               style={{
-                padding: "4px 12px", borderRadius: 6, border: "1px solid #e8e4dc",
-                background: "#fff", fontSize: 12, color: "#c84a20", cursor: "pointer", whiteSpace: "nowrap",
+                padding: "4px 12px", borderRadius: 6, border: `1px solid ${copied ? "#1a8a5030" : "#e8e4dc"}`,
+                background: copied ? "#1a8a5010" : "#fff", fontSize: 12, color: copied ? "#1a8a50" : "#c84a20", cursor: "pointer", whiteSpace: "nowrap",
+                transition: "all 0.2s",
               }}
             >
-              Copy
+              {copied ? "Copied!" : "Copy"}
             </button>
             <button
               onClick={() => setShowInviteBanner(false)}
