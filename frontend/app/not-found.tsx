@@ -1,5 +1,18 @@
-import { redirect } from "next/navigation";
+"use client";
+
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 
 export default function NotFound() {
-  redirect("/");
+  const router = useRouter();
+
+  useEffect(() => {
+    router.replace("/");
+  }, [router]);
+
+  return (
+    <div className="flex flex-col items-center justify-center py-20">
+      <p style={{ color: "var(--muted)" }}>Redirecting...</p>
+    </div>
+  );
 }
