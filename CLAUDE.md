@@ -348,9 +348,9 @@ Three settings in `backend/app/config.py` control which LLM is used for what:
 
 ### Production DB Access
 ```bash
-cd backend && DATABASE_URL="***REDACTED***" python -c "..."
-# Or for migrations:
-cd backend && DATABASE_URL="***REDACTED***" alembic upgrade head
+# Get the DATABASE_URL from Railway dashboard (never commit it!)
+cd backend && DATABASE_URL="<from-railway-dashboard>" python -c "..."
+cd backend && DATABASE_URL="<from-railway-dashboard>" alembic upgrade head
 ```
 - Local DB may be out of sync with production schema (e.g. missing `onboarded` column). Use raw SQL (`sqlalchemy text()`) instead of ORM queries when hitting production directly.
 
