@@ -369,9 +369,9 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
 
         {/* Chat panel */}
         {open && (
-          <div style={{
-            position: "fixed", bottom: 24, right: 24, zIndex: 300,
-            width: 370, maxHeight: 520, borderRadius: 16,
+          <div className="delib-chat-panel" style={{
+            position: "fixed", bottom: 0, right: 0, zIndex: 300,
+            width: "min(370px, 100vw)", maxHeight: "min(520px, 100dvh)", borderRadius: "16px 16px 0 0",
             background: "#fff", border: "1px solid rgba(0,0,0,0.1)",
             boxShadow: "0 8px 32px rgba(0,0,0,0.15)",
             display: "flex", flexDirection: "column", overflow: "hidden",
@@ -439,7 +439,7 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
                   >
                     {msg.role === "assistant" ? (
                       <div className="chat-markdown">
-                        <ReactMarkdown>{msg.content || ""}</ReactMarkdown>
+                        <ReactMarkdown breaks>{msg.content || ""}</ReactMarkdown>
                       </div>
                     ) : (
                       msg.content
@@ -569,8 +569,9 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
             50% { opacity: 0.4; }
           }
           .chat-markdown { white-space: normal; }
-          .chat-markdown p { margin: 0 0 6px; }
+          .chat-markdown p { margin: 0 0 12px; }
           .chat-markdown p:last-child { margin-bottom: 0; }
+          .chat-markdown p + p { margin-top: 4px; }
           .chat-markdown ul, .chat-markdown ol { margin: 4px 0; padding-left: 18px; }
           .chat-markdown li { margin-bottom: 2px; }
           .chat-markdown strong { font-weight: 700; }
