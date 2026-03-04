@@ -20,7 +20,7 @@ class Notification(Base):
     type = Column(String(50), nullable=False, index=True)  # agent_action, interview_needed, limit_approaching, consensus_shifted
     title = Column(String, nullable=False)
     body = Column(String, nullable=False)
-    read = Column(Boolean, default=False, nullable=False)
+    read = Column(Boolean, default=False, nullable=False, index=True)
     metadata_ = Column("metadata", JSONB, nullable=True)  # deliberation_id, action details, etc.
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)

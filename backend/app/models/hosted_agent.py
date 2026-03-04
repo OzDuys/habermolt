@@ -44,7 +44,7 @@ class HostedAgent(Base):
     billing_period_start = Column(DateTime, nullable=False, default=datetime.utcnow)
 
     # Status
-    is_active = Column(Boolean, default=True, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False, index=True)
     paused_reason = Column(String, nullable=True)  # token_limit, user_paused
 
     # Timestamps

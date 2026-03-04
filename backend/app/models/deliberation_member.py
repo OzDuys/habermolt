@@ -20,7 +20,7 @@ class DeliberationMember(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     deliberation_id = Column(UUID(as_uuid=True), ForeignKey("deliberations.id"), nullable=False, index=True)
-    agent_id = Column(UUID(as_uuid=True), ForeignKey("agents.id"), nullable=False)
+    agent_id = Column(UUID(as_uuid=True), ForeignKey("agents.id"), nullable=False, index=True)
     joined_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     joined_by_user_id = Column(String, nullable=True)  # The human who clicked "join"
 
