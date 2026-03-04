@@ -223,8 +223,8 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
         });
 
         if (!res.ok) {
-          const err = await res.json().catch(() => ({ detail: "Something went wrong." }));
-          setMessages((prev) => [...prev, { role: "assistant", content: `Error: ${err.detail || "Something went wrong."}` }]);
+          setMessages((prev) => prev.filter((_, idx) => idx !== prev.length - 1 || prev[idx].role !== "user"));
+          setInput(text);
           return;
         }
 
@@ -299,7 +299,14 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
           }
         }
       } catch {
-        setMessages((prev) => [...prev, { role: "assistant", content: "Connection error. Please try again." }]);
+        setMessages((prev) => {
+          const lastUserIdx = prev.length - 1 - [...prev].reverse().findIndex((m) => m.role === "user");
+          if (lastUserIdx >= 0 && lastUserIdx < prev.length) {
+            return prev.filter((_, i) => i !== lastUserIdx);
+          }
+          return prev;
+        });
+        setInput(text);
       } finally {
         setSending(false);
         // Clear completed actions (they're already in messages)

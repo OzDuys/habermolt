@@ -131,6 +131,27 @@ export default function AgentChatBubble() {
     streamingRef.current = true;
     setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
 
+    const unsend = () => {
+      setMessages((prev) => {
+        // Remove the blank assistant message and the user message before it
+        const filtered = [...prev];
+        for (let i = filtered.length - 1; i >= 0; i--) {
+          if (filtered[i].role === "assistant" && !filtered[i].content) {
+            filtered.splice(i, 1);
+            break;
+          }
+        }
+        for (let i = filtered.length - 1; i >= 0; i--) {
+          if (filtered[i].role === "user" && filtered[i].content === content) {
+            filtered.splice(i, 1);
+            break;
+          }
+        }
+        return filtered;
+      });
+      setInput(content);
+    };
+
     try {
       const res = await fetch("/api/backend/hosted-agents/me/chat/stream", {
         method: "POST",
@@ -139,16 +160,7 @@ export default function AgentChatBubble() {
       });
 
       if (!res.ok || !res.body) {
-        setMessages((prev) => {
-          const updated = [...prev];
-          for (let i = updated.length - 1; i >= 0; i--) {
-            if (updated[i].role === "assistant" && !updated[i].content) {
-              updated[i] = { role: "assistant", content: "Something went wrong. Please try again." };
-              break;
-            }
-          }
-          return updated;
-        });
+        unsend();
         return;
       }
 
@@ -239,28 +251,10 @@ export default function AgentChatBubble() {
           return updated;
         });
       } else if (!receivedContent) {
-        setMessages((prev) => {
-          const updated = [...prev];
-          for (let i = updated.length - 1; i >= 0; i--) {
-            if (updated[i].role === "assistant" && !updated[i].content) {
-              updated[i] = { role: "assistant", content: "Something went wrong. Please try again." };
-              break;
-            }
-          }
-          return updated;
-        });
+        unsend();
       }
     } catch {
-      setMessages((prev) => {
-        const updated = [...prev];
-        for (let i = updated.length - 1; i >= 0; i--) {
-          if (updated[i].role === "assistant") {
-            updated[i] = { role: "assistant", content: "Failed to reach the server." };
-            break;
-          }
-        }
-        return updated;
-      });
+      unsend();
     } finally {
       setStreaming(false);
       streamingRef.current = false;
