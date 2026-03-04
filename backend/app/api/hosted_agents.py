@@ -317,6 +317,9 @@ async def get_my_hosted_agent(req: Request, db: Session = Depends(get_db)):
     ha = hosted_agent_service.get_hosted_agent_by_user(db, user_id)
     if not ha:
         raise HTTPException(status_code=404, detail="No hosted agent found")
+    # Run token limit check so paused agents get un-paused if under limit
+    check_token_limit(ha)
+    db.commit()
     return _to_response(ha)
 
 

@@ -173,12 +173,23 @@ def get_llm_client(hosted_agent: HostedAgent) -> LLMClient:
 
 
 def check_token_limit(hosted_agent: HostedAgent) -> bool:
-    """Return True if the agent can proceed (under limit or unlimited)."""
+    """Return True if the agent can proceed (under limit or unlimited).
+
+    Also un-pauses the agent if it was paused for token_limit but is now
+    under the limit (e.g. limit was raised or period reset).
+    """
     _maybe_reset_billing_period(hosted_agent)
     limit = TOKEN_LIMITS.get(hosted_agent.pricing_tier)
     if limit is None:
+        if hosted_agent.paused_reason == "token_limit":
+            hosted_agent.is_active = True
+            hosted_agent.paused_reason = None
         return True
-    return hosted_agent.tokens_used_period < limit
+    under_limit = hosted_agent.tokens_used_period < limit
+    if under_limit and hosted_agent.paused_reason == "token_limit":
+        hosted_agent.is_active = True
+        hosted_agent.paused_reason = None
+    return under_limit
 
 
 def record_token_usage(db: Session, hosted_agent: HostedAgent, tokens: int) -> None:
