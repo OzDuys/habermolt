@@ -102,6 +102,8 @@ def update_hosted_agent(
 ) -> HostedAgent:
     if display_name is not None:
         hosted_agent.display_name = display_name
+        if hosted_agent.agent:
+            hosted_agent.agent.name = display_name
     if model is not None:
         hosted_agent.model = model
     if participation_frequency is not None:
