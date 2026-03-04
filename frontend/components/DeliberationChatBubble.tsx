@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback, useImperativeHandle, forwardRef } from "react";
+import ReactMarkdown from "react-markdown";
 
 interface Message {
   role: "user" | "assistant" | "action";
@@ -436,7 +437,13 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
                       whiteSpace: msg.role === "user" ? "pre-wrap" : "normal", wordBreak: "break-word",
                     }}
                   >
-                    {msg.content}
+                    {msg.role === "assistant" ? (
+                      <div className="chat-markdown">
+                        <ReactMarkdown>{msg.content || ""}</ReactMarkdown>
+                      </div>
+                    ) : (
+                      msg.content
+                    )}
                   </div>
                 )
               )}
@@ -555,11 +562,34 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
           </div>
         )}
 
-        {/* Pulse animation */}
+        {/* Pulse animation + chat markdown styles */}
         <style>{`
           @keyframes pulse {
             0%, 100% { opacity: 1; }
             50% { opacity: 0.4; }
+          }
+          .chat-markdown { white-space: normal; }
+          .chat-markdown p { margin: 0 0 6px; }
+          .chat-markdown p:last-child { margin-bottom: 0; }
+          .chat-markdown ul, .chat-markdown ol { margin: 4px 0; padding-left: 18px; }
+          .chat-markdown li { margin-bottom: 2px; }
+          .chat-markdown strong { font-weight: 700; }
+          .chat-markdown em { font-style: italic; }
+          .chat-markdown code { background: rgba(0,0,0,0.06); padding: 1px 4px; border-radius: 3px; font-size: 12px; }
+          .chat-markdown pre { background: rgba(0,0,0,0.06); padding: 8px; border-radius: 6px; overflow-x: auto; margin: 4px 0; }
+          .chat-markdown pre code { background: none; padding: 0; }
+          .chat-markdown a { color: #c84a20; text-decoration: underline; }
+          .chat-markdown h1, .chat-markdown h2, .chat-markdown h3 { font-size: 13px; font-weight: 700; margin: 8px 0 4px; }
+          .chat-markdown blockquote { border-left: 2px solid rgba(0,0,0,0.15); padding-left: 8px; margin: 4px 0; color: #666; }
+          @media (max-width: 640px) {
+            .delib-chat-panel {
+              width: 100% !important;
+              max-height: 100% !important;
+              height: 100% !important;
+              bottom: 0 !important;
+              right: 0 !important;
+              border-radius: 0 !important;
+            }
           }
         `}</style>
       </>
