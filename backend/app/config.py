@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
 
     # Habermas Machine Configuration
-    HABERMAS_NUM_CANDIDATES: int = 6
+    HABERMAS_NUM_CANDIDATES: int = 2
     HABERMAS_LLM_MODEL: str = "google/gemini-3-flash-preview" # This is the default used if no model name is provided. Sonnet 4.6 was getting to expensive for this. Its actually quite an easy task.
     HABERMAS_LLM_MODELS: str = "x-ai/grok-4.1-fast, arcee-ai/trinity-large-preview:free, minimax/minimax-m2.5, google/gemini-3-flash-preview, deepseek/deepseek-v3.2, openai/gpt-5-mini"  # Comma-separated list of models; cycles if fewer than NUM_CANDIDATES; z-ai/glm-5 was a bit too slow
     HABERMAS_LLM_TEMPERATURE: float = 0.8
@@ -55,7 +55,7 @@ class Settings(BaseSettings):
 
     # Continuous Mechanism Configuration
     CONTINUOUS_NUM_SEED_STATEMENTS: int = 4  # Initial LLM-generated statements
-    CONTINUOUS_NUM_SEED_OPINIONS: int = 4  # Synthetic opinions for seed generation
+    CONTINUOUS_NUM_SEED_OPINIONS: int = 2  # Synthetic opinions for seed generation
     CONTINUOUS_MAX_STATEMENTS: int = 32  # Hard cap on statement pool
     CONTINUOUS_MAX_STATEMENTS_PER_AGENT: int = 3  # Per-agent contribution limit
 

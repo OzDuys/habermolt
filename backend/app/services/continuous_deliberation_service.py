@@ -77,6 +77,12 @@ class ContinuousDeliberationService:
         if initial_opinion.strip() not in seed_opinions:
             seed_opinions.insert(0, initial_opinion.strip())
 
+        # Store seed opinions on deliberation for debugging/monitoring
+        meta = deliberation.meta_data or {}
+        meta["seed_opinions"] = seed_opinions
+        deliberation.meta_data = meta
+        self.db.commit()
+
         logger.info(
             f"Generating seed statements from {len(seed_opinions)} opinions "
             f"for deliberation {deliberation.id}"
@@ -87,6 +93,7 @@ class ContinuousDeliberationService:
             self.db,
             deliberation,
             seed_opinions,
+            seed_opinions=seed_opinions,
         )
 
         # Mark them as seeds
@@ -134,6 +141,12 @@ class ContinuousDeliberationService:
         if initial_opinion.strip() not in seed_opinions:
             seed_opinions.insert(0, initial_opinion.strip())
 
+        # Store seed opinions on deliberation for debugging/monitoring
+        meta = deliberation.meta_data or {}
+        meta["seed_opinions"] = seed_opinions
+        deliberation.meta_data = meta
+        self.db.commit()
+
         logger.info(
             f"Generating seed statements from {len(seed_opinions)} opinions "
             f"for deliberation {deliberation.id} (no agent)"
@@ -143,6 +156,7 @@ class ContinuousDeliberationService:
             self.db,
             deliberation,
             seed_opinions,
+            seed_opinions=seed_opinions,
         )
 
         for stmt in seed_statements:
@@ -179,15 +193,11 @@ class ContinuousDeliberationService:
             f"{creator_context}"
             f"Generate {settings.CONTINUOUS_NUM_SEED_OPINIONS} diverse perspectives "
             f"on this topic.\n\n"
-            f"CRITICAL: The perspectives must span the FULL spectrum of views on this "
-            f"topic, not cluster around a moderate center. Include:\n"
-            f"- At least one strong YES/FOR position\n"
-            f"- At least one strong NO/AGAINST position\n"
-            f"- At least one nuanced or conditional position\n"
-            f"- At least one perspective that reframes the question entirely\n\n"
-            f"Each perspective should be fundamentally different in its conclusion, "
-            f"not just different reasoning for the same moderate position. Avoid "
-            f"generating multiple variations of 'it depends' or 'it should be negotiated.'\n\n"
+            f"CRITICAL: The two perspectives must represent opposite poles:\n"
+            f"- One strong YES/FOR position\n"
+            f"- One strong NO/AGAINST position\n\n"
+            f"Each perspective should be fundamentally different in its conclusion. "
+            f"Make each one substantive and well-reasoned (2-3 sentences).\n\n"
             f"Format as a numbered list. Return ONLY the numbered list, one perspective per line."
         )
 

@@ -206,6 +206,7 @@ class StatementService:
         opinions: list[str],
         previous_winner: Optional[str] = None,
         critiques: Optional[list[str]] = None,
+        seed_opinions: Optional[list[str]] = None,
     ) -> List[Statement]:
         """
         Generate num_candidates statements and store them in the database.
@@ -242,7 +243,11 @@ class StatementService:
                     title=title or None,
                     statement_text=stmt_text,
                     social_ranking=None,
-                    meta_data={"reasoning": reasoning, "model": model_name},
+                    meta_data={
+                        "reasoning": reasoning,
+                        "model": model_name,
+                        **({"seed_opinions": seed_opinions} if seed_opinions else {}),
+                    },
                 )
                 db.add(statement)
                 statements.append(statement)

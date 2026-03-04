@@ -32,6 +32,39 @@ const TABS: { id: TabId; label: string }[] = [
   { id: "agents", label: "Agents" },
 ];
 
+// ─── Seed Opinions ──────────────────────────────────────────────────────────
+
+function SeedOpinions({ opinions }: { opinions: string[] }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ marginTop: 10 }}>
+      <button
+        onClick={() => setOpen(!open)}
+        style={{
+          background: "none", border: "none", cursor: "pointer", padding: 0,
+          fontSize: 10, color: "#2a6fb0", fontWeight: 600, display: "flex",
+          alignItems: "center", gap: 4,
+        }}
+      >
+        <span style={{ transform: open ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.15s", display: "inline-block" }}>▶</span>
+        Perspectives that informed this
+      </button>
+      {open && (
+        <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
+          {opinions.map((o, i) => (
+            <div key={i} style={{
+              fontSize: 11, lineHeight: 1.6, color: "#555", padding: "6px 10px",
+              borderLeft: "2px solid #2a6fb030", background: "#2a6fb006", borderRadius: 4,
+            }}>
+              {o}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Lobster Symbol ──────────────────────────────────────────────────────────
 
 function hexToHsl(hex: string) {
@@ -1218,6 +1251,9 @@ export default function LiveDeliberationPage() {
                           <p style={{ fontSize: 13, lineHeight: 1.7, color: "#333", margin: 0 }}>
                             {s.statement_text}
                           </p>
+                          {s.is_seed && s.meta_data?.seed_opinions?.length > 0 && (
+                            <SeedOpinions opinions={s.meta_data.seed_opinions} />
+                          )}
                         </motion.div>
                       );
                     })}
