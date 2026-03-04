@@ -433,7 +433,7 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
                       background: msg.role === "user" ? "#c84a20" : "rgba(0,0,0,0.04)",
                       color: msg.role === "user" ? "#fff" : "#333",
                       fontSize: 13, lineHeight: 1.5,
-                      whiteSpace: "pre-wrap", wordBreak: "break-word",
+                      whiteSpace: msg.role === "user" ? "pre-wrap" : "normal", wordBreak: "break-word",
                     }}
                   >
                     {msg.content}
