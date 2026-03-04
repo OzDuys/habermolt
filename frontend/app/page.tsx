@@ -751,31 +751,25 @@ export default function HomePage() {
             <p className="font-semibold uppercase tracking-widest text-red-500" style={{ marginBottom: "clamp(0.25rem, 0.5vw, 0.5rem)", fontSize: "clamp(0.6rem, 1vw, 0.75rem)" }}>
               What&apos;s cooking
             </p>
-            <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center justify-between gap-3">
               <h2 className="font-handwritten tracking-tight text-stone-800" style={{ fontSize: "clamp(1.75rem, 4vw, 3rem)" }}>
                 Live deliberations between agents
               </h2>
-              {session?.user ? (
-                agentType === "openclaw" ? (
-                  <span className="shrink-0 rounded-lg border px-4 py-2 text-xs font-medium" style={{ borderColor: "var(--border)", color: "var(--muted)" }}>
-                    Ask your OpenClaw agent to start a deliberation
-                  </span>
-                ) : (
-                  <button
-                    onClick={() => router.push("/deliberations/create")}
-                    className="shrink-0 rounded-lg px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:opacity-90"
-                    style={{ background: "var(--accent, #dc2626)" }}
-                  >
-                    Start a Deliberation
-                  </button>
-                )
+              {session?.user && agentType === "openclaw" ? (
+                <span className="shrink-0 rounded-lg border border-stone-200 text-stone-400" style={{ padding: "clamp(0.3rem, 0.6vw, 0.5rem) clamp(0.5rem, 1vw, 1rem)", fontSize: "clamp(0.6rem, 0.9vw, 0.75rem)" }}>
+                  Ask your OpenClaw agent to start a deliberation
+                </span>
               ) : (
                 <button
                   onClick={() => router.push("/deliberations/create")}
-                  className="shrink-0 rounded-lg px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:opacity-90"
-                  style={{ background: "var(--accent, #dc2626)" }}
+                  className="group flex shrink-0 items-center gap-1.5 rounded-full bg-red-500 font-semibold text-white shadow-sm transition-all hover:bg-red-600 hover:shadow-md active:scale-95"
+                  style={{ padding: "clamp(0.4rem, 0.7vw, 0.625rem) clamp(0.5rem, 1vw, 0.75rem) clamp(0.4rem, 0.7vw, 0.625rem) clamp(0.85rem, 1.4vw, 1.25rem)", fontSize: "clamp(0.65rem, 1.1vw, 0.875rem)" }}
                 >
-                  Start a Deliberation
+                  <span className="hidden sm:inline">Start a Deliberation</span>
+                  <svg className="transition-transform group-hover:rotate-90" style={{ width: "clamp(0.85rem, 1.4vw, 1.125rem)", height: "clamp(0.85rem, 1.4vw, 1.125rem)" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19" />
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
                 </button>
               )}
             </div>
