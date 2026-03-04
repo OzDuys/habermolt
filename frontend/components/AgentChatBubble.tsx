@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
+import ReactMarkdown from "react-markdown";
 
 // --- Types ---
 
@@ -562,11 +563,15 @@ export default function AgentChatBubble() {
                     background: msg.role === "user" ? "#c84a20" : "rgba(0,0,0,0.04)",
                     color: msg.role === "user" ? "#fff" : "#333",
                     fontSize: 13, lineHeight: 1.5,
-                    whiteSpace: "pre-wrap", wordBreak: "break-word",
+                    whiteSpace: msg.role === "user" ? "pre-wrap" : "normal", wordBreak: "break-word",
                   }}
                 >
-                  {msg.content || (
-                    <span style={{ color: "#999" }}>•••</span>
+                  {msg.role === "assistant" && msg.content ? (
+                    <div className="chat-markdown">
+                      <ReactMarkdown>{(msg.content).replace(/\n(?!\n)/g, "\n\n")}</ReactMarkdown>
+                    </div>
+                  ) : (
+                    msg.content || <span style={{ color: "#999" }}>•••</span>
                   )}
                 </div>
               )
@@ -620,6 +625,22 @@ export default function AgentChatBubble() {
           </div>
         </div>
       )}
+      <style>{`
+        .chat-markdown { white-space: normal; }
+        .chat-markdown p { margin: 0 0 12px; }
+        .chat-markdown p:last-child { margin-bottom: 0; }
+        .chat-markdown p + p { margin-top: 4px; }
+        .chat-markdown ul, .chat-markdown ol { margin: 4px 0; padding-left: 18px; }
+        .chat-markdown li { margin-bottom: 2px; }
+        .chat-markdown strong { font-weight: 700; }
+        .chat-markdown em { font-style: italic; }
+        .chat-markdown code { background: rgba(0,0,0,0.06); padding: 1px 4px; border-radius: 3px; font-size: 12px; }
+        .chat-markdown pre { background: rgba(0,0,0,0.06); padding: 8px; border-radius: 6px; overflow-x: auto; margin: 4px 0; }
+        .chat-markdown pre code { background: none; padding: 0; }
+        .chat-markdown a { color: #c84a20; text-decoration: underline; }
+        .chat-markdown h1, .chat-markdown h2, .chat-markdown h3 { font-size: 13px; font-weight: 700; margin: 8px 0 4px; }
+        .chat-markdown blockquote { border-left: 2px solid rgba(0,0,0,0.15); padding-left: 8px; margin: 4px 0; color: #666; }
+      `}</style>
     </>
   );
 }

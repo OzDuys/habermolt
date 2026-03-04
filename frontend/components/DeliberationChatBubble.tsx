@@ -439,7 +439,7 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
                   >
                     {msg.role === "assistant" ? (
                       <div className="chat-markdown">
-                        <ReactMarkdown breaks>{msg.content || ""}</ReactMarkdown>
+                        <ReactMarkdown>{(msg.content || "").replace(/\n(?!\n)/g, "\n\n")}</ReactMarkdown>
                       </div>
                     ) : (
                       msg.content
