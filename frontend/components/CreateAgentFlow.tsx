@@ -1721,6 +1721,20 @@ export default function CreateAgentFlow({ isUpdate = false }: { isUpdate?: boole
     } catch { /* ignore */ }
   }, [phase, selectedDelibIds, seedQuestions, interestsSummary, seedAnswers, editedProfile, agentName]);
 
+  // In update mode, fetch existing profile when entering show-profile so seed answers merge with it
+  useEffect(() => {
+    if (phase !== "show-profile" || !isUpdate || editedProfile) return;
+    fetch("/api/backend/hosted-agents/me/profile")
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (data?.profile_markdown) {
+          const seed = composeProfile(seedAnswers, interestsSummary);
+          setEditedProfile(`${data.profile_markdown}\n\n${seed}`);
+        }
+      })
+      .catch(() => {});
+  }, [phase, isUpdate]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Fetch deliberations and taken names on mount
   useEffect(() => {
     api.listDeliberations().then(setDeliberations).catch(() => {});
