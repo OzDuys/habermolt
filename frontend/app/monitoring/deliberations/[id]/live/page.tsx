@@ -8,6 +8,7 @@ import Image from "next/image";
 import { api } from "@/lib/api";
 import type { DeliberationDetail, ClusterPoint } from "@/lib/types";
 import StatementCluster from "@/components/StatementCluster";
+import ReactMarkdown from "react-markdown";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -221,9 +222,9 @@ function AgentDrawer({
 
         {agent.opinion && (
           <DSection title="Their Opinion" color={agent.color}>
-            <p style={{ fontSize: 14, lineHeight: 1.75, color: "#444", whiteSpace: "pre-wrap", margin: 0 }}>
-              {agent.opinion}
-            </p>
+            <div style={{ fontSize: 14, lineHeight: 1.75, color: "#444" }} className="prose-compact">
+              <ReactMarkdown>{agent.opinion}</ReactMarkdown>
+            </div>
           </DSection>
         )}
 
@@ -646,9 +647,9 @@ export default function LiveDeliberationPage() {
                 {winner.title && (
                   <div style={{ fontSize: 15, fontWeight: 700, color: "#1a1a1a", marginBottom: 10 }}>{winner.title}</div>
                 )}
-                <p style={{ fontSize: "clamp(14px, 2vw, 16px)", fontWeight: 500, color: "#333", lineHeight: 1.75, margin: 0 }}>
-                  {winner.statement_text}
-                </p>
+                <div style={{ fontSize: "clamp(14px, 2vw, 16px)", fontWeight: 500, color: "#333", lineHeight: 1.75 }} className="prose-compact">
+                  <ReactMarkdown>{winner.statement_text}</ReactMarkdown>
+                </div>
               </motion.div>
             )}
 
@@ -746,9 +747,9 @@ export default function LiveDeliberationPage() {
                           {s.title && (
                             <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a1a", marginBottom: 6 }}>{s.title}</div>
                           )}
-                          <p style={{ fontSize: 13, lineHeight: 1.7, color: "#333", margin: 0 }}>
-                            {s.statement_text}
-                          </p>
+                          <div style={{ fontSize: 13, lineHeight: 1.7, color: "#333" }} className="prose-compact">
+                            <ReactMarkdown>{s.statement_text}</ReactMarkdown>
+                          </div>
                         </motion.div>
                       );
                     })}
@@ -825,11 +826,13 @@ export default function LiveDeliberationPage() {
                   </div>
 
                   {a.opinion && (
-                    <p style={{
-                      fontSize: 12, lineHeight: 1.6, color: "#555", margin: "0 0 12px",
+                    <div style={{
+                      fontSize: 12, lineHeight: 1.6, color: "#555", marginBottom: 12,
                       overflow: "hidden", display: "-webkit-box",
                       WebkitLineClamp: 3, WebkitBoxOrient: "vertical" as const,
-                    }}>&ldquo;{a.opinion}&rdquo;</p>
+                    }} className="prose-compact">
+                      &ldquo;<ReactMarkdown>{a.opinion}</ReactMarkdown>&rdquo;
+                    </div>
                   )}
 
                   {a.rankings.length > 0 && (
@@ -909,6 +912,10 @@ export default function LiveDeliberationPage() {
         .horizontal-scroll-container {
           scroll-behavior: smooth;
         }
+        /* Compact prose for ReactMarkdown inside cards */
+        .prose-compact p { margin: 0 0 0.5em 0; }
+        .prose-compact p:last-child { margin-bottom: 0; }
+        .prose-compact > p:only-child { margin: 0; }
       `}</style>
     </>
   );
