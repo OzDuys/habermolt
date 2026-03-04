@@ -21,7 +21,8 @@ class AgentSession(Base):
     user_id = Column(String, nullable=True, index=True)
     deliberation_id = Column(UUID(as_uuid=True), ForeignKey("deliberations.id"), nullable=True, index=True)
 
-    session_type = Column(String, nullable=False)  # onboarding, deliberation_join, deliberation_chat, general
+    session_type = Column(String, nullable=False)  # onboarding, deliberation, general
+    phase = Column(String, nullable=True)  # browsing, setup, participating (deliberation sessions only)
     status = Column(String, default="active", nullable=False)  # active, opinion_submitted, setup_running, completed
     topic = Column(String, nullable=True)
 

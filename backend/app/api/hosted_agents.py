@@ -506,7 +506,7 @@ async def list_chat_sessions(req: Request, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="No hosted agent found")
     sessions = chat_service.get_all_sessions(db, ha)
     # Pre-fetch deliberation questions for interview sessions
-    delib_ids = [s.deliberation_id for s in sessions if s.deliberation_id and s.session_type == "deliberation_join"]
+    delib_ids = [s.deliberation_id for s in sessions if s.deliberation_id and s.session_type == "deliberation"]
     delib_map = {}
     if delib_ids:
         delibs = db.query(Deliberation).filter(Deliberation.id.in_(delib_ids)).all()
@@ -514,7 +514,7 @@ async def list_chat_sessions(req: Request, db: Session = Depends(get_db)):
     return [
         ChatSessionSummary(
             id=str(s.id),
-            topic=delib_map.get(s.deliberation_id, s.topic) if s.session_type == "deliberation_join" else s.topic,
+            topic=delib_map.get(s.deliberation_id, s.topic) if s.session_type == "deliberation" else s.topic,
             message_count=len(s.messages or []),
             created_at=s.created_at.isoformat(),
         )

@@ -1,18 +1,23 @@
 """
-Deliberation Chat Service — ongoing chat for deliberation participants.
+Deliberation Chat Service — unified chat for deliberation participants.
 
-Uses AgentSession with deliberation_id set. Unlike the topic interview
-(one-time, focused on extracting an opinion), this is an ongoing assistant
-that helps participants update opinions, rerank statements, and propose consensus.
+Single session per agent per deliberation, with phases:
+- browsing: asking questions about the deliberation
+- joining: LLM extracting opinion from user
+- setup: background work (ranking, proposing consensus)
+- participating: full participant with tools
 """
 
 import json
 import logging
+import threading
+from uuid import UUID
 
 from sqlalchemy.orm import Session
-from sqlalchemy import and_
+from sqlalchemy import and_, func
 
 from app.config import settings
+from app.database import SessionLocal
 from app.models import Agent, Deliberation, Opinion, Statement, Ranking
 from app.models.hosted_agent import HostedAgent
 from app.models.agent_session import AgentSession
@@ -22,7 +27,40 @@ from app.services.llm_client import LLMClient
 logger = logging.getLogger(__name__)
 
 
-DELIBERATION_CHAT_SYSTEM_PROMPT = """\
+# --- System Prompts ---
+
+BROWSE_SYSTEM_PROMPT = """\
+You are a helpful assistant for a democratic deliberation on Habermolt. The user is browsing \
+this deliberation and may have questions about it before deciding to join.
+
+## Deliberation Question
+"{question}"
+
+{profile_context}
+
+{deliberation_context}
+
+Your role: Answer the user's questions about this deliberation — what it's about, what \
+positions people hold, how the process works. Be informative and conversational.
+
+If the user expresses interest in joining or sharing their opinion (e.g. "I want to join", \
+"I'd like to participate", "let me share my views"), transition into interview mode: \
+start asking them about their position on the topic, and when you have enough, call \
+submit_opinion to formally join them.
+
+Rules:
+- Keep messages SHORT. Be concise and direct.
+- If just answering questions, do NOT call any tools.
+- Only call submit_opinion when the user clearly wants to join and you've gathered their view.
+- Stay focused on this specific deliberation topic.
+
+Tools:
+- **submit_opinion**: Submit the human's synthesized opinion for this deliberation. \
+Only call this when the user wants to join and you have enough to represent their view.
+- **update_profile**: Save what you learned about this person's values (optional).
+"""
+
+PARTICIPATING_SYSTEM_PROMPT = """\
 You are a helpful assistant on Habermolt, a platform for AI-assisted democratic deliberation.
 You're helping a participant in an ongoing deliberation.
 
@@ -56,8 +94,81 @@ Rules:
 - Explain the Schulze voting method simply if asked
 """
 
+BROWSE_GREETING_PROMPT = """\
+You are a helpful assistant for a deliberation on Habermolt. The user is browsing \
+this deliberation. Generate a short, welcoming message and let them know they can \
+ask questions about the deliberation or join when they're ready.
 
-DELIBERATION_CHAT_TOOLS = [
+The deliberation question is: "{question}"
+
+{profile_context}
+
+{deliberation_context}
+
+Keep it to 1-2 short sentences. Mention they can ask questions or join when ready. \
+No long introductions."""
+
+PARTICIPATING_GREETING_PROMPT = """\
+You're greeting a participant who wants to chat about a deliberation they're in.
+
+Deliberation: "{question}"
+Current winner: {winner_info}
+Their opinion: {opinion_info}
+
+{profile_context}
+
+Give a brief, friendly greeting (1-2 sentences). Mention something specific about \
+the current state — like the consensus winner or how many statements there are. \
+Ask how you can help."""
+
+
+# --- Tool Definitions ---
+
+INTERVIEW_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "submit_opinion",
+            "description": (
+                "Submit the human's synthesized opinion for this deliberation. "
+                "Call this when you have enough information from the interview to "
+                "write a clear, specific 2-4 sentence opinion from their perspective."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "opinion_text": {
+                        "type": "string",
+                        "description": "The synthesized opinion (2-4 sentences) from the human's perspective.",
+                    },
+                },
+                "required": ["opinion_text"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_profile",
+            "description": (
+                "Save what you learned about this person's values beyond just this topic. "
+                "Only call if you learned something broadly useful."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "profile_text": {
+                        "type": "string",
+                        "description": "Concise markdown profile section capturing what you learned.",
+                    },
+                },
+                "required": ["profile_text"],
+            },
+        },
+    },
+]
+
+PARTICIPATING_TOOLS = [
     {
         "type": "function",
         "function": {
@@ -117,6 +228,8 @@ DELIBERATION_CHAT_TOOLS = [
 ]
 
 
+# --- Helpers ---
+
 def _get_llm_client(db: Session, agent: Agent) -> LLMClient:
     """Get an LLM client for any agent type."""
     hosted = db.query(HostedAgent).filter(HostedAgent.agent_id == agent.id).first()
@@ -137,29 +250,40 @@ def _get_profile_context(db: Session, agent: Agent) -> str:
     return ""
 
 
-def _build_context(db: Session, agent: Agent, deliberation: Deliberation) -> dict:
-    """Build the full deliberation context for the system prompt."""
-    # Agent's latest opinion
+def _get_deliberation_context(db: Session, deliberation: Deliberation) -> str:
+    """Get a summary of the deliberation for browse mode."""
+    opinion_count = db.query(Opinion).filter(
+        Opinion.deliberation_id == deliberation.id
+    ).distinct(Opinion.agent_id).count()
+    statement_count = db.query(Statement).filter(
+        Statement.deliberation_id == deliberation.id
+    ).count()
+
+    parts = [f"This deliberation currently has {opinion_count} participating agent(s) and {statement_count} consensus statement(s)."]
+
+    if deliberation.categories:
+        parts.append(f"Categories: {', '.join(deliberation.categories)}.")
+
+    return " ".join(parts)
+
+
+def _build_participating_context(db: Session, agent: Agent, deliberation: Deliberation) -> dict:
+    """Build the full deliberation context for participating prompt."""
     opinion = db.query(Opinion).filter(
         and_(Opinion.deliberation_id == deliberation.id, Opinion.agent_id == agent.id)
     ).order_by(Opinion.version.desc()).first()
 
-    # All statements
     statements = db.query(Statement).filter(
         Statement.deliberation_id == deliberation.id
     ).order_by(Statement.social_ranking.nulls_last()).all()
 
-    # Agent's current ranking
     ranking = db.query(Ranking).filter(
         and_(Ranking.deliberation_id == deliberation.id, Ranking.agent_id == agent.id)
     ).order_by(Ranking.round_number.desc()).first()
 
-    # Winner
     winner = next((s for s in statements if s.social_ranking == 1), None)
 
-    # Format
     winner_info = f"{winner.title or 'Untitled'}: {winner.statement_text}" if winner else "No consensus winner yet."
-
     opinion_info = opinion.opinion_text if opinion else "No opinion submitted yet."
 
     if ranking and ranking.statement_rankings:
@@ -189,25 +313,39 @@ def _build_context(db: Session, agent: Agent, deliberation: Deliberation) -> dic
     }
 
 
+# --- Session Management ---
+
 def get_or_create_session(
     db: Session, hosted_agent: HostedAgent, deliberation: Deliberation,
 ) -> AgentSession:
-    """Get existing deliberation chat session or create a new one."""
+    """Get existing deliberation chat session or create a new one.
+
+    Returns a single session per agent per deliberation. The phase field
+    determines what tools/prompt the LLM gets.
+    """
+    # Look for existing unified session
     existing = db.query(AgentSession).filter(
         and_(
             AgentSession.agent_id == hosted_agent.agent_id,
             AgentSession.deliberation_id == deliberation.id,
-            AgentSession.session_type == "deliberation_chat",
+            AgentSession.session_type == "deliberation",
         )
     ).first()
     if existing:
         return existing
 
+    # Check if agent already has an opinion (already participating)
+    has_opinion = db.query(Opinion).filter(
+        and_(Opinion.deliberation_id == deliberation.id, Opinion.agent_id == hosted_agent.agent_id)
+    ).first() is not None
+
+    phase = "participating" if has_opinion else "browsing"
     session = AgentSession(
         agent_id=hosted_agent.agent_id,
         user_id=hosted_agent.user_id,
         deliberation_id=deliberation.id,
-        session_type="deliberation_chat",
+        session_type="deliberation",
+        phase=phase,
         topic=f"deliberation:{deliberation.id}",
         messages=[],
     )
@@ -217,21 +355,9 @@ def get_or_create_session(
     return session
 
 
-def generate_greeting(db: Session, agent: Agent, deliberation: Deliberation) -> str:
-    """Generate a contextual greeting for the deliberation chat."""
-    context = _build_context(db, agent, deliberation)
+def generate_greeting(db: Session, agent: Agent, deliberation: Deliberation, phase: str = "browsing") -> str:
+    """Generate a contextual greeting based on the session phase."""
     profile_context = _get_profile_context(db, agent)
-
-    prompt = (
-        f"You're greeting a participant who wants to chat about a deliberation they're in.\n\n"
-        f"Deliberation: \"{deliberation.question}\"\n"
-        f"Current winner: {context['winner_info']}\n"
-        f"Their opinion: {context['opinion_info']}\n\n"
-        f"{profile_context}\n\n"
-        f"Give a brief, friendly greeting (1-2 sentences). Mention something specific about "
-        f"the current state — like the consensus winner or how many statements there are. "
-        f"Ask how you can help."
-    )
 
     client = _get_llm_client(db, agent)
     client.set_trace_context(
@@ -240,12 +366,32 @@ def generate_greeting(db: Session, agent: Agent, deliberation: Deliberation) -> 
         agent_id=agent.id,
     )
 
+    if phase == "participating":
+        context = _build_participating_context(db, agent, deliberation)
+        prompt = PARTICIPATING_GREETING_PROMPT.format(
+            question=deliberation.question,
+            profile_context=profile_context,
+            **context,
+        )
+    else:
+        deliberation_context = _get_deliberation_context(db, deliberation)
+        prompt = BROWSE_GREETING_PROMPT.format(
+            question=deliberation.question,
+            profile_context=profile_context,
+            deliberation_context=deliberation_context,
+        )
+
     greeting = client.sample_text(prompt=prompt, temperature=0.7, max_tokens=200)
     if not greeting:
-        greeting = f"Hey! I'm here to help you with the deliberation on \"{deliberation.question}\". What would you like to do?"
+        if phase == "participating":
+            greeting = f"Hey! I'm here to help you with the deliberation on \"{deliberation.question}\". What would you like to do?"
+        else:
+            greeting = f"Hi! This deliberation is about: \"{deliberation.question}\". Feel free to ask questions or let me know when you'd like to join!"
 
     return greeting
 
+
+# --- Message Streaming ---
 
 def stream_message(
     db: Session,
@@ -254,24 +400,39 @@ def stream_message(
     session: AgentSession,
     user_content: str,
 ):
-    """Stream a deliberation chat turn with tool calling support.
+    """Stream a deliberation chat turn. Phase determines tools and prompt.
 
     Yields tuples: ("text", chunk), ("action_start", {...}), ("action_done", {...})
     """
+    phase = session.phase or "browsing"
     messages = list(session.messages or [])
     messages.append({"role": "user", "content": user_content})
 
-    context = _build_context(db, agent, deliberation)
     profile_context = _get_profile_context(db, agent)
 
-    system_prompt = DELIBERATION_CHAT_SYSTEM_PROMPT.format(
-        question=deliberation.question,
-        profile_context=profile_context,
-        **context,
-    )
+    # Pick system prompt and tools based on phase
+    if phase == "participating":
+        context = _build_participating_context(db, agent, deliberation)
+        system_prompt = PARTICIPATING_SYSTEM_PROMPT.format(
+            question=deliberation.question,
+            profile_context=profile_context,
+            **context,
+        )
+        tools = PARTICIPATING_TOOLS
+    else:  # browsing (handles both Q&A and opinion extraction)
+        deliberation_context = _get_deliberation_context(db, deliberation)
+        system_prompt = BROWSE_SYSTEM_PROMPT.format(
+            question=deliberation.question,
+            profile_context=profile_context,
+            deliberation_context=deliberation_context,
+        )
+        tools = INTERVIEW_TOOLS
 
     llm_messages = [{"role": "system", "content": system_prompt}]
-    llm_messages.extend(messages)
+    # Filter out action messages for LLM context (it doesn't understand them)
+    for m in messages:
+        if m.get("role") in ("user", "assistant"):
+            llm_messages.append({"role": m["role"], "content": m.get("content", "")})
 
     client = _get_llm_client(db, agent)
     client.set_trace_context(
@@ -281,7 +442,7 @@ def stream_message(
     )
 
     full_response_parts = []
-    completed_actions = []  # Track actions for persistence
+    completed_actions = []
 
     try:
         while True:
@@ -289,7 +450,7 @@ def stream_message(
             tool_calls_this_turn = []
 
             for event_type, event_data in client.chat_stream(
-                messages=llm_messages, temperature=0.7, tools=DELIBERATION_CHAT_TOOLS,
+                messages=llm_messages, temperature=0.7, tools=tools,
             ):
                 if event_type == "text":
                     accumulated_text.append(event_data)
@@ -330,12 +491,12 @@ def stream_message(
                     "tool_call_id": tc["id"],
                 })
 
-                result = _execute_tool(db, agent, deliberation, tc["name"], tc["arguments"])
+                result = _execute_tool(db, agent, deliberation, session, tc["name"], tc["arguments"])
 
                 action_event = {
                     "action": tc["name"],
                     "description": result.get("description", ""),
-                    "detail": result.get("detail", ""),
+                    "detail": result.get("detail", result.get("opinion_text", result.get("profile_text", ""))),
                     "status": "error" if "error" in result else "done",
                 }
 
@@ -365,7 +526,6 @@ def stream_message(
         if not response_text:
             response_text = "I'm sorry, I had trouble processing that. Could you try again?"
 
-        # Persist completed actions before the assistant text
         for action in completed_actions:
             messages.append({"role": "action", **action})
 
@@ -374,16 +534,25 @@ def stream_message(
         db.commit()
 
 
+# --- Tool Execution ---
+
 def _execute_tool(
     db: Session,
     agent: Agent,
     deliberation: Deliberation,
+    session: AgentSession,
     tool_name: str,
     arguments: dict,
 ) -> dict:
-    """Execute a deliberation chat tool."""
+    """Execute a tool based on the current phase."""
     try:
-        if tool_name == "update_opinion":
+        # Interview tools (browsing/joining phase)
+        if tool_name == "submit_opinion":
+            return _exec_submit_opinion(db, agent, deliberation, session, arguments["opinion_text"])
+        elif tool_name == "update_profile":
+            return _exec_update_profile(db, agent, arguments["profile_text"])
+        # Participating tools
+        elif tool_name == "update_opinion":
             return _exec_update_opinion(db, agent, deliberation, arguments["opinion_text"])
         elif tool_name == "rerank_statements":
             return _exec_rerank(db, agent, deliberation, arguments["ranked_statement_ids"])
@@ -394,6 +563,82 @@ def _execute_tool(
     except Exception as e:
         logger.error(f"Deliberation chat tool {tool_name} failed: {e}", exc_info=True)
         return {"error": str(e)}
+
+
+def _exec_submit_opinion(
+    db: Session,
+    agent: Agent,
+    deliberation: Deliberation,
+    session: AgentSession,
+    opinion_text: str,
+) -> dict:
+    """Submit opinion and kick off background setup (seed statements, ranking, consensus)."""
+    service = ContinuousDeliberationService(db)
+
+    try:
+        service.submit_opinion(deliberation, agent, opinion_text)
+    except ValueError as e:
+        return {"error": str(e)}
+
+    # Determine what background work is needed
+    is_creator = deliberation.created_by_agent_id == agent.id
+    has_statements = db.query(Statement).filter(
+        Statement.deliberation_id == deliberation.id
+    ).first() is not None
+    needs_seed = is_creator and not has_statements
+
+    # Update session phase and initialize progress tracking
+    session.phase = "setup"
+    session.status = "setup_running"
+    session.setup_progress = {
+        "current_step": "seed_statements" if needs_seed else "ranking",
+        "completed_steps": ["opinion_submitted"],
+        "error": None,
+    }
+    db.commit()
+
+    # Launch background thread
+    session_id = session.id
+    agent_id = agent.id
+    deliberation_id = deliberation.id
+
+    thread = threading.Thread(
+        target=_run_setup_background,
+        args=(session_id, agent_id, deliberation_id, opinion_text, needs_seed),
+        daemon=True,
+    )
+    thread.start()
+
+    return {
+        "action": "submit_opinion",
+        "description": f"Opinion submitted for '{deliberation.question[:50]}'",
+        "opinion_text": opinion_text,
+        "status": "setup_running",
+    }
+
+
+def _exec_update_profile(db: Session, agent: Agent, profile_text: str) -> dict:
+    """Update the user's profile."""
+    hosted = db.query(HostedAgent).filter(HostedAgent.agent_id == agent.id).first()
+    if not hosted:
+        return {
+            "action": "update_profile",
+            "description": "Profile note recorded.",
+            "detail": profile_text,
+        }
+
+    if hosted.user_profile:
+        hosted.user_profile = hosted.user_profile.rstrip() + "\n\n" + profile_text
+    else:
+        hosted.user_profile = profile_text
+    hosted.profile_version += 1
+    db.commit()
+
+    return {
+        "action": "update_profile",
+        "description": "Profile updated successfully.",
+        "detail": profile_text,
+    }
 
 
 def _exec_update_opinion(
@@ -439,12 +684,7 @@ def _exec_propose(
     import asyncio
     service = ContinuousDeliberationService(db)
     try:
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        loop.run_until_complete(service.add_statement(deliberation, agent, statement_text, title))
+        asyncio.run(service.add_statement(deliberation, agent, statement_text, title))
     except ValueError as e:
         return {"error": str(e)}
 
@@ -453,3 +693,132 @@ def _exec_propose(
         "description": f"New consensus statement proposed: \"{title}\"",
         "detail": statement_text,
     }
+
+
+# --- Background Setup ---
+
+def _run_setup_background(
+    session_id: UUID,
+    agent_id: UUID,
+    deliberation_id: UUID,
+    opinion_text: str,
+    needs_seed: bool,
+):
+    """Background thread: generate seed statements, rank, and propose consensus.
+
+    On completion, sets session.phase = 'participating'.
+    """
+    from app.services.topic_interview_service import (
+        _generate_seed_statements,
+        _do_ranking_for_agent,
+        _do_propose_for_agent,
+    )
+
+    db = SessionLocal()
+    try:
+        session = db.query(AgentSession).get(session_id)
+        agent = db.query(Agent).get(agent_id)
+        deliberation = db.query(Deliberation).get(deliberation_id)
+
+        if not all([session, agent, deliberation]):
+            logger.error(f"Background setup: missing objects for session {session_id}")
+            return
+
+        def _update_progress(current_step: str, completed_step: str = None):
+            progress = dict(session.setup_progress or {})
+            progress["current_step"] = current_step
+            if completed_step:
+                steps = list(progress.get("completed_steps", []))
+                steps.append(completed_step)
+                progress["completed_steps"] = steps
+            session.setup_progress = progress
+            db.commit()
+
+        def _append_action(action: str, description: str, detail: str = ""):
+            """Persist a background action as a message in the session."""
+            msgs = list(session.messages or [])
+            msgs.append({
+                "role": "action",
+                "action": action,
+                "status": "done",
+                "description": description,
+                "detail": detail,
+            })
+            session.messages = msgs
+            db.commit()
+
+        # Step 1: Generate seed statements (if creator)
+        if needs_seed:
+            try:
+                import asyncio
+                asyncio.run(_generate_seed_statements(db, deliberation, opinion_text))
+                stmt_count = db.query(Statement).filter(
+                    Statement.deliberation_id == deliberation.id
+                ).count()
+                _append_action("seed_statements", f"Generated {stmt_count} consensus statements")
+            except Exception as e:
+                logger.error(f"Seed statement generation failed: {e}", exc_info=True)
+            _update_progress("ranking", "seed_statements")
+
+        # Step 2: Rank statements
+        _do_ranking_for_agent(db, agent, deliberation)
+        _append_action("rank_statements", "Ranked all statements based on your opinion")
+        _update_progress("proposing", "ranking")
+
+        # Step 3: Propose consensus
+        _do_propose_for_agent(db, agent, deliberation)
+        _append_action("propose_statement", "Proposed a consensus statement on your behalf")
+        _update_progress("completed", "proposing")
+
+        # Mark session as participating
+        session.phase = "participating"
+        session.status = "completed"
+        progress = dict(session.setup_progress or {})
+        progress["current_step"] = "completed"
+        progress["completed_steps"] = list(progress.get("completed_steps", [])) + ["completed"]
+        session.setup_progress = progress
+        db.commit()
+
+        logger.info(f"Background setup completed for session {session_id}")
+
+    except Exception as e:
+        logger.error(f"Background setup failed for session {session_id}: {e}", exc_info=True)
+        try:
+            session = db.query(AgentSession).get(session_id)
+            if session:
+                progress = dict(session.setup_progress or {})
+                progress["error"] = str(e)
+                session.setup_progress = progress
+                db.commit()
+        except Exception:
+            logger.error(f"Failed to update error status for session {session_id}", exc_info=True)
+    finally:
+        db.close()
+
+
+def retry_setup(db: Session, session: AgentSession):
+    """Retry a failed background setup from where it left off."""
+    progress = session.setup_progress or {}
+    if not progress.get("error"):
+        return
+
+    completed = set(progress.get("completed_steps", []))
+    needs_seed = "seed_statements" not in completed and progress.get("current_step") != "ranking"
+
+    opinion = db.query(Opinion).filter(
+        and_(Opinion.deliberation_id == session.deliberation_id, Opinion.agent_id == session.agent_id)
+    ).order_by(Opinion.version.desc()).first()
+    opinion_text = opinion.opinion_text if opinion else ""
+
+    progress["error"] = None
+    session.setup_progress = progress
+    session.phase = "setup"
+    session.status = "setup_running"
+    db.commit()
+
+    thread = threading.Thread(
+        target=_run_setup_background,
+        args=(session.id, session.agent_id, session.deliberation_id, opinion_text, needs_seed),
+        daemon=True,
+    )
+    thread.start()

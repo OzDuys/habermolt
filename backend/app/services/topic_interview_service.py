@@ -226,7 +226,8 @@ def create_session(
         agent_id=agent.id,
         deliberation_id=deliberation.id,
         user_id=user_id,
-        session_type="deliberation_join",
+        session_type="deliberation",
+        phase="browsing",
         messages=[],
         status="active",
     )
@@ -477,7 +478,8 @@ def _exec_submit_opinion(
     ).first() is not None
     needs_seed = is_creator and not has_statements
 
-    # Update session status and initialize progress tracking (clear browse_mode)
+    # Update session phase and initialize progress tracking
+    session.phase = "setup"
     session.status = "setup_running"
     session.setup_progress = {
         "current_step": "seed_statements" if needs_seed else "ranking",
@@ -535,31 +537,44 @@ def _run_setup_background(
             session.setup_progress = progress
             db.commit()
 
+        def _append_action(action: str, description: str, detail: str = ""):
+            """Persist a background action as a message in the session."""
+            msgs = list(session.messages or [])
+            msgs.append({
+                "role": "action",
+                "action": action,
+                "status": "done",
+                "description": description,
+                "detail": detail,
+            })
+            session.messages = msgs
+            db.commit()
+
         # Step 1: Generate seed statements (if creator)
         if needs_seed:
             try:
                 import asyncio
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                try:
-                    loop.run_until_complete(
-                        _generate_seed_statements(db, deliberation, opinion_text)
-                    )
-                finally:
-                    loop.close()
+                asyncio.run(_generate_seed_statements(db, deliberation, opinion_text))
+                stmt_count = db.query(Statement).filter(
+                    Statement.deliberation_id == deliberation.id
+                ).count()
+                _append_action("seed_statements", f"Generated {stmt_count} consensus statements")
             except Exception as e:
                 logger.error(f"Seed statement generation failed: {e}", exc_info=True)
             _update_progress("ranking", "seed_statements")
 
         # Step 2: Rank statements
         _do_ranking_for_agent(db, agent, deliberation)
+        _append_action("rank_statements", "Ranked all statements based on your opinion")
         _update_progress("proposing", "ranking")
 
         # Step 3: Propose consensus
         _do_propose_for_agent(db, agent, deliberation)
+        _append_action("propose_statement", "Proposed a consensus statement on your behalf")
         _update_progress("completed", "proposing")
 
         # Mark session complete
+        session.phase = "participating"
         session.status = "completed"
         progress = dict(session.setup_progress or {})
         progress["current_step"] = "completed"
@@ -602,6 +617,7 @@ def retry_setup(db: Session, session: AgentSession):
     # Clear error and restart
     progress["error"] = None
     session.setup_progress = progress
+    session.phase = "setup"
     session.status = "setup_running"
     db.commit()
 
@@ -808,11 +824,6 @@ def _do_propose_for_agent(db: Session, agent: Agent, deliberation: Deliberation)
     import asyncio
     service = ContinuousDeliberationService(db)
     try:
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        loop.run_until_complete(service.add_statement(deliberation, agent, statement_text, title))
+        asyncio.run(service.add_statement(deliberation, agent, statement_text, title))
     except ValueError as e:
         logger.warning(f"Statement submission failed: {e}")

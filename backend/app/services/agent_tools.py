@@ -406,13 +406,7 @@ def _exec_create_deliberation(
         categories = [c for c in categories if c in valid_cats] or None
 
     service = ContinuousDeliberationService(db)
-    try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
-    delib = loop.run_until_complete(
+    delib = asyncio.run(
         service.create_deliberation(question, agent, initial_opinion, categories=categories)
     )
     return {

@@ -198,7 +198,14 @@ export default function TopicInterviewChat({
               if (event.status === "completed") {
                 onComplete?.();
               }
-              // setup_running will trigger the polling useEffect
+              // Set initial progress immediately so UI has something before first poll
+              if (event.status === "setup_running") {
+                setSetupProgress((prev) => prev || {
+                  current_step: "seed_statements",
+                  completed_steps: ["opinion_submitted"],
+                  error: null,
+                });
+              }
             } else if (event.type === "error") {
               setMessages((prev) => [
                 ...prev,
@@ -277,7 +284,7 @@ export default function TopicInterviewChat({
                 className="flex items-center gap-2 rounded-lg border px-3 py-2 text-xs"
                 style={{ borderColor: "var(--border)", background: "var(--surface-dim)" }}
               >
-                <span>{action.status === "running" ? "\u23F3" : action.status === "done" ? "\u2713" : "\u2717"}</span>
+                <span style={action.status === "running" ? { animation: "pulse 1.5s ease-in-out infinite" } : {}}>{action.status === "running" ? "⏳" : action.status === "done" ? "✓" : "✗"}</span>
                 <span style={{ color: "var(--foreground)" }}>
                   {_actionLabel(action.action)}
                 </span>
@@ -298,15 +305,20 @@ export default function TopicInterviewChat({
             {SETUP_STEPS.map((step) => {
               const completed = setupProgress.completed_steps?.includes(step.key);
               const isCurrent = setupProgress.current_step === step.key && !completed;
-              if (!completed && !isCurrent) return null;
+              const isFuture = !completed && !isCurrent;
               return (
                 <div
                   key={step.key}
                   className="flex items-center gap-2 rounded-lg border px-3 py-2 text-xs"
-                  style={{ borderColor: "var(--border)", background: "var(--surface-dim)" }}
+                  style={{
+                    borderColor: isFuture ? "transparent" : "var(--border)",
+                    background: completed ? "var(--surface-dim)" : isCurrent ? "var(--surface-dim)" : "transparent",
+                  }}
                 >
-                  <span>{completed ? "\u2713" : "\u23F3"}</span>
-                  <span style={{ color: "var(--foreground)" }}>{step.label}</span>
+                  <span style={isCurrent ? { animation: "pulse 1.5s ease-in-out infinite" } : {}}>
+                    {completed ? "✓" : isCurrent ? "⏳" : "○"}
+                  </span>
+                  <span style={{ color: isFuture ? "var(--muted)" : "var(--foreground)" }}>{step.label}</span>
                 </div>
               );
             })}
@@ -374,6 +386,13 @@ export default function TopicInterviewChat({
           </div>
         </div>
       )}
+      {/* Pulse animation for setup progress */}
+      <style>{`
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.4; }
+        }
+      `}</style>
     </div>
   );
 }

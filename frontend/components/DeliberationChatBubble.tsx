@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback, useImperativeHandle, forwardRef } from "react";
 
 interface Message {
-  role: "user" | "assistant" | "action" | "divider";
+  role: "user" | "assistant" | "action";
   content?: string;
   action?: string;
   status?: string;
@@ -46,69 +46,45 @@ const SETUP_STEPS = [
 
 function actionLabel(action: string): string {
   switch (action) {
-    case "submit_opinion": return "Submitting opinion";
-    case "update_opinion": return "Updating opinion";
-    case "update_profile": return "Updating profile";
-    case "rerank_statements": return "Reranking statements";
-    case "rank_statements": return "Ranking statements";
-    case "propose_statement": return "Proposing consensus";
+    case "submit_opinion": return "Opinion submitted";
+    case "update_opinion": return "Opinion updated";
+    case "update_profile": return "Profile updated";
+    case "rerank_statements": return "Statements reranked";
+    case "rank_statements": return "Statements ranked";
+    case "seed_statements": return "Statements generated";
+    case "propose_statement": return "Consensus proposed";
     default: return action;
   }
 }
 
-type Mode = "browse" | "join" | "participate";
+type Phase = "browsing" | "setup" | "participating";
 
 const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, DeliberationChatBubbleProps>(
   function DeliberationChatBubble({ deliberationId, deliberationQuestion, alreadyParticipating, onJoinComplete, onScrollToAgents }, ref) {
-    const storageKey = `delib_chat_session_${deliberationId}`;
     const [open, setOpen] = useState(false);
-    const [mode, setMode] = useState<Mode>(alreadyParticipating ? "participate" : "browse");
-    const [sessionId, setSessionId] = useState<string | null>(() => {
-      if (typeof window !== "undefined") {
-        if (alreadyParticipating) {
-          // Clear stale topic-interview session IDs
-          sessionStorage.removeItem(`delib_chat_session_${deliberationId}`);
-          return null;
-        }
-        return sessionStorage.getItem(`delib_chat_session_${deliberationId}`) || null;
-      }
-      return null;
-    });
+    const [sessionId, setSessionId] = useState<string | null>(null);
+    const [phase, setPhase] = useState<Phase>(alreadyParticipating ? "participating" : "browsing");
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState("");
     const [sending, setSending] = useState(false);
     const [loading, setLoading] = useState(false);
     const [currentActions, setCurrentActions] = useState<ActionEvent[]>([]);
     const [setupProgress, setSetupProgress] = useState<SetupProgress | null>(null);
-    const [interviewStatus, setInterviewStatus] = useState<string>("active");
     const [retrying, setRetrying] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
-    const interviewMessagesRef = useRef<Message[]>([]);
     const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const pendingJoinRef = useRef(false);
-
-    // Sync mode when alreadyParticipating changes (e.g. data loads async)
-    useEffect(() => {
-      if (alreadyParticipating && mode !== "participate") {
-        setMode("participate");
-        setSessionId(null);
-        if (typeof window !== "undefined") {
-          sessionStorage.removeItem(storageKey);
-        }
-        setMessages([]);
-      }
-    }, [alreadyParticipating]);
 
     // Expose triggerJoin to parent
     useImperativeHandle(ref, () => ({
       triggerJoin: () => {
-        if (mode === "participate") return;
+        if (phase === "participating" || phase === "setup") return;
         if (!open) {
           pendingJoinRef.current = true;
           setOpen(true);
         } else if (sessionId) {
-          injectJoinMessage();
+          sendMessageText("I'd like to join this deliberation and share my views.", sessionId);
         }
       },
     }));
@@ -117,110 +93,48 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
     useEffect(() => {
       if (!open || sessionId) return;
 
-      if (mode === "participate") {
-        // Start deliberation-chat session
-        setLoading(true);
-        fetch("/api/deliberation-chat/start", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ deliberation_id: deliberationId }),
-        })
-          .then(async (res) => {
-            if (!res.ok) throw new Error("Failed to start chat");
-            const data = await res.json();
-            setSessionId(data.session_id);
-            if (typeof window !== "undefined") {
-              sessionStorage.setItem(storageKey, data.session_id);
-            }
-            const chatMessages = (data.history && data.history.length > 0)
-              ? data.history.map((m: Record<string, string>) => {
-                  if (m.role === "action") {
-                    return { role: "action" as const, action: m.action, status: m.status, description: m.description, detail: m.detail };
-                  }
-                  return { role: m.role as "user" | "assistant", content: m.content };
-                })
-              : [{ role: "assistant" as const, content: data.greeting }];
+      setLoading(true);
+      fetch("/api/deliberation-chat/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deliberation_id: deliberationId }),
+      })
+        .then(async (res) => {
+          if (!res.ok) throw new Error("Failed to start chat");
+          const data = await res.json();
+          setSessionId(data.session_id);
+          setPhase(data.phase || "browsing");
 
-            // Build full message list: interview history (from DB) → divider → chat messages
-            const saved = interviewMessagesRef.current;
-            const interviewMsgs = saved.length > 0
-              ? saved  // Just completed interview (in-memory)
-              : (data.interview_history && data.interview_history.length > 0)
-                ? [
-                    ...data.interview_history
-                      .filter((m: Record<string, string>) => m.role === "user" || m.role === "assistant" || m.role === "action")
-                      .map((m: Record<string, string>) => {
-                        if (m.role === "action") {
-                          return { role: "action" as const, action: m.action, status: m.status, description: m.description, detail: m.detail };
-                        }
-                        return { role: m.role as "user" | "assistant", content: m.content };
-                      }),
-                    { role: "divider" as const, content: "Now participating" },
-                  ]
-                : [];
-            interviewMessagesRef.current = [];
-            setMessages([...interviewMsgs, ...chatMessages]);
-          })
-          .catch(() => {
-            setMessages([{ role: "assistant", content: "Sorry, I couldn't connect. Please try again." }]);
-          })
-          .finally(() => setLoading(false));
-      } else {
-        // Start topic-interview session in browse mode
-        setLoading(true);
-        fetch("/api/topic-interview/start", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ deliberation_id: deliberationId, browse_mode: true }),
-        })
-          .then(async (res) => {
-            if (!res.ok) throw new Error("Failed to start session");
-            const data = await res.json();
-            setSessionId(data.session_id);
-            if (typeof window !== "undefined") {
-              sessionStorage.setItem(storageKey, data.session_id);
-            }
-            // Restore full message history if resuming an existing session
-            if (data.messages && data.messages.length > 0) {
-              setMessages(data.messages.map((m: Record<string, string>) => ({
-                role: m.role as "user" | "assistant",
-                content: m.content,
-              })));
-              // Restore setup progress if mid-setup
-              if (data.setup_progress && data.status === "setup_running") {
-                setSetupProgress(data.setup_progress);
-                setInterviewStatus("setup_running");
-              } else if (data.status === "completed") {
-                setInterviewStatus("completed");
+          // Restore message history
+          if (data.history && data.history.length > 0) {
+            setMessages(data.history.map((m: Record<string, string>) => {
+              if (m.role === "action") {
+                return { role: "action" as const, action: m.action, status: m.status, description: m.description, detail: m.detail };
               }
-              // If opinion was already submitted, we're in join mode
-              if (data.status === "opinion_submitted" || data.status === "setup_running" || data.status === "completed") {
-                setMode("join");
-              }
-            } else {
-              setMessages([{ role: "assistant", content: data.greeting }]);
-            }
-            // If there was a pending join trigger, inject the message
-            if (pendingJoinRef.current) {
-              pendingJoinRef.current = false;
-              // Small delay to let state settle
-              setTimeout(() => injectJoinMessageWithSession(data.session_id), 100);
-            }
-          })
-          .catch(() => {
-            setMessages([{ role: "assistant", content: "Sorry, I couldn't connect. Please try again." }]);
-          })
-          .finally(() => setLoading(false));
-      }
-    }, [open, sessionId, deliberationId, mode]);
+              return { role: m.role as "user" | "assistant", content: m.content };
+            }));
+          } else {
+            setMessages([{ role: "assistant", content: data.greeting }]);
+          }
 
-    // Handle pending join after session is ready
-    useEffect(() => {
-      if (pendingJoinRef.current && sessionId && mode === "browse") {
-        pendingJoinRef.current = false;
-        injectJoinMessage();
-      }
-    }, [sessionId, mode]);
+          // Restore setup progress if mid-setup
+          if (data.phase === "setup" && data.setup_progress) {
+            setSetupProgress(data.setup_progress);
+          }
+
+          // Handle pending join trigger
+          if (pendingJoinRef.current && data.phase !== "participating" && data.phase !== "setup") {
+            pendingJoinRef.current = false;
+            setTimeout(() => {
+              sendMessageText("I'd like to join this deliberation and share my views.", data.session_id);
+            }, 100);
+          }
+        })
+        .catch(() => {
+          setMessages([{ role: "assistant", content: "Sorry, I couldn't connect. Please try again." }]);
+        })
+        .finally(() => setLoading(false));
+    }, [open, sessionId, deliberationId]);
 
     // Auto-scroll
     useEffect(() => {
@@ -236,7 +150,7 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
 
     // Poll for setup progress
     useEffect(() => {
-      if (interviewStatus !== "setup_running") {
+      if (phase !== "setup" || !sessionId) {
         if (pollRef.current) {
           clearInterval(pollRef.current);
           pollRef.current = null;
@@ -245,15 +159,37 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
       }
 
       const poll = async () => {
-        if (!sessionId) return;
         try {
-          const res = await fetch(`/api/topic-interview/${sessionId}/status`);
+          const res = await fetch(`/api/deliberation-chat/${sessionId}/status`);
           if (!res.ok) return;
           const data = await res.json();
           setSetupProgress(data.setup_progress);
-          if (data.status === "completed") {
-            setInterviewStatus("completed");
-            handleJoinCompleted();
+          if (data.phase === "participating") {
+            setPhase("participating");
+            setSetupProgress(null);
+            onJoinComplete?.();
+            setTimeout(() => { onScrollToAgents?.(); }, 2000);
+            // Reload session to get background action messages
+            try {
+              const startRes = await fetch("/api/deliberation-chat/start", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ deliberation_id: deliberationId }),
+              });
+              if (startRes.ok) {
+                const startData = await startRes.json();
+                if (startData.history?.length > 0) {
+                  setMessages(startData.history.map((m: Record<string, string>) => {
+                    if (m.role === "action") {
+                      return { role: "action" as const, action: m.action, status: m.status, description: m.description, detail: m.detail };
+                    }
+                    return { role: m.role as "user" | "assistant", content: m.content };
+                  }));
+                }
+              }
+            } catch {
+              // ignore — messages will load on next open
+            }
           }
         } catch {
           // ignore
@@ -269,56 +205,17 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
           pollRef.current = null;
         }
       };
-    }, [interviewStatus, sessionId]);
+    }, [phase, sessionId, onJoinComplete, onScrollToAgents]);
 
-    // Transition to participate mode after join completes
-    const handleJoinCompleted = useCallback(() => {
-      onJoinComplete?.();
-      // Scroll to agents section to show the user's opinion after a delay
-      setTimeout(() => { onScrollToAgents?.(); }, 3000);
-      // Transition to participate mode after a short delay
-      setTimeout(() => {
-        // Save interview messages so they persist across the mode transition
-        setMessages((prev) => {
-          interviewMessagesRef.current = [...prev, { role: "divider", content: "Now participating" }];
-          return interviewMessagesRef.current;
-        });
-        setMode("participate");
-        setSessionId(null);
-        if (typeof window !== "undefined") {
-          sessionStorage.removeItem(storageKey);
-        }
-        setSetupProgress(null);
-        setInterviewStatus("active");
-        setCurrentActions([]);
-      }, 2000);
-    }, [onJoinComplete]);
-
-    const injectJoinMessage = useCallback(() => {
-      if (!sessionId) return;
-      setMode("join");
-      // Send the join message
-      sendMessageText("I'd like to join this deliberation and share my views.", sessionId);
-    }, [sessionId]);
-
-    const injectJoinMessageWithSession = useCallback((sid: string) => {
-      setMode("join");
-      sendMessageText("I'd like to join this deliberation and share my views.", sid);
-    }, []);
-
+    // SSE message sending
     const sendMessageText = useCallback(async (text: string, sid: string) => {
       if (!text || sending) return;
       setSending(true);
       setMessages((prev) => [...prev, { role: "user", content: text }]);
       setCurrentActions([]);
 
-      const isParticipateMode = mode === "participate";
-      const endpoint = isParticipateMode
-        ? `/api/deliberation-chat/${sid}/message`
-        : `/api/topic-interview/${sid}/message`;
-
       try {
-        const res = await fetch(endpoint, {
+        const res = await fetch(`/api/deliberation-chat/${sid}/message`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ content: text }),
@@ -375,10 +272,19 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
                       : a
                   )
                 );
-              } else if (event.type === "status") {
-                setInterviewStatus(event.status);
-                if (event.status === "completed") {
-                  handleJoinCompleted();
+                // Persist action to messages on completion
+                setMessages((prev) => [...prev, {
+                  role: "action",
+                  action: event.action,
+                  status: "done",
+                  description: event.description,
+                  detail: event.detail,
+                }]);
+              } else if (event.type === "phase") {
+                // Phase update from backend (e.g. after submit_opinion triggers setup)
+                setPhase(event.phase);
+                if (event.phase === "setup" && event.setup_progress) {
+                  setSetupProgress(event.setup_progress);
                 }
               } else if (event.type === "error") {
                 setMessages((prev) => [
@@ -395,8 +301,10 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
         setMessages((prev) => [...prev, { role: "assistant", content: "Connection error. Please try again." }]);
       } finally {
         setSending(false);
+        // Clear completed actions (they're already in messages)
+        setCurrentActions([]);
       }
-    }, [sending, mode, handleJoinCompleted]);
+    }, [sending]);
 
     const sendMessage = useCallback(() => {
       const text = input.trim();
@@ -416,10 +324,10 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
       if (!sessionId) return;
       setRetrying(true);
       try {
-        const res = await fetch(`/api/topic-interview/${sessionId}/retry-setup`, { method: "POST" });
+        const res = await fetch(`/api/deliberation-chat/${sessionId}/retry-setup`, { method: "POST" });
         if (res.ok) {
           setSetupProgress((prev) => prev ? { ...prev, error: null } : prev);
-          setInterviewStatus("setup_running");
+          setPhase("setup");
         }
       } catch {
         // ignore
@@ -428,8 +336,13 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
       }
     };
 
-    const isSetupRunning = interviewStatus === "setup_running";
-    const chatDisabled = isSetupRunning || interviewStatus === "completed";
+    const headerTitle = phase === "participating" ? "Deliberation Chat"
+      : phase === "setup" ? "Setting Up..."
+      : "Ask About This";
+
+    const placeholder = phase === "participating"
+      ? "Ask about this deliberation..."
+      : "Ask a question or join...";
 
     return (
       <>
@@ -447,7 +360,7 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
             }}
             onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.1)")}
             onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
-            title={alreadyParticipating ? "Chat about this deliberation" : "Ask about this deliberation"}
+            title={phase === "participating" ? "Chat about this deliberation" : "Ask about this deliberation"}
           >
             💬
           </button>
@@ -470,7 +383,7 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
             }}>
               <div>
                 <div style={{ fontSize: 13, fontWeight: 600, color: "#333" }}>
-                  {mode === "participate" ? "Deliberation Chat" : mode === "join" ? "Joining Deliberation" : "Ask About This"}
+                  {headerTitle}
                 </div>
                 <div style={{ fontSize: 10, color: "#999", maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {deliberationQuestion}
@@ -499,16 +412,7 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
                 </div>
               )}
               {messages.map((msg, i) =>
-                msg.role === "divider" ? (
-                  <div key={i} style={{
-                    display: "flex", alignItems: "center", gap: 8,
-                    padding: "8px 0", fontSize: 10, color: "#999",
-                  }}>
-                    <div style={{ flex: 1, height: 1, background: "rgba(0,0,0,0.08)" }} />
-                    <span>{msg.content}</span>
-                    <div style={{ flex: 1, height: 1, background: "rgba(0,0,0,0.08)" }} />
-                  </div>
-                ) : msg.role === "action" ? (
+                msg.role === "action" ? (
                   <div key={i} style={{
                     display: "flex", alignItems: "center", gap: 6,
                     padding: "6px 10px", borderRadius: 8,
@@ -537,37 +441,44 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
                 )
               )}
 
-              {/* Action indicators */}
+              {/* Streaming action indicators */}
               {currentActions.map((a, i) => (
-                <div key={i} style={{
+                <div key={`action-${i}`} style={{
                   display: "flex", alignItems: "center", gap: 6,
                   padding: "6px 10px", borderRadius: 8,
                   background: a.status === "done" ? "#1a8a5010" : "#fff5e6",
                   fontSize: 11, color: a.status === "done" ? "#1a8a50" : "#c84a20",
                 }}>
-                  {a.status === "running" ? "⏳" : "✓"} {actionLabel(a.action)}
+                  <span style={a.status === "running" ? { animation: "pulse 1.5s ease-in-out infinite" } : {}}>
+                    {a.status === "running" ? "⏳" : "✓"}
+                  </span>
+                  {actionLabel(a.action)}
                   {a.description && <span style={{ color: "#999" }}>— {a.description}</span>}
                 </div>
               ))}
 
-              {/* Setup progress (join mode) */}
-              {isSetupRunning && setupProgress && (
+              {/* Setup progress */}
+              {phase === "setup" && setupProgress && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 6, paddingLeft: 4 }}>
                   <div style={{ fontSize: 11, fontWeight: 600, color: "#999" }}>
-                    Setting up your deliberation...
+                    Setting up your participation...
                   </div>
                   {SETUP_STEPS.map((step) => {
                     const completed = setupProgress.completed_steps?.includes(step.key);
                     const isCurrent = setupProgress.current_step === step.key && !completed;
-                    if (!completed && !isCurrent) return null;
+                    const isFuture = !completed && !isCurrent;
                     return (
                       <div key={step.key} style={{
                         display: "flex", alignItems: "center", gap: 6,
                         padding: "6px 10px", borderRadius: 8,
-                        background: completed ? "#1a8a5010" : "#fff5e6",
-                        fontSize: 11, color: completed ? "#1a8a50" : "#c84a20",
+                        background: completed ? "#1a8a5010" : isCurrent ? "#fff5e6" : "rgba(0,0,0,0.02)",
+                        fontSize: 11,
+                        color: completed ? "#1a8a50" : isCurrent ? "#c84a20" : "#ccc",
                       }}>
-                        {completed ? "✓" : "⏳"} {step.label}
+                        <span style={isCurrent ? { animation: "pulse 1.5s ease-in-out infinite" } : {}}>
+                          {completed ? "✓" : isCurrent ? "⏳" : "○"}
+                        </span>
+                        {step.label}
                       </div>
                     );
                   })}
@@ -610,19 +521,18 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
             </div>
 
             {/* Input */}
-            {!chatDisabled && (
-              <div style={{
-                padding: "10px 12px", borderTop: "1px solid rgba(0,0,0,0.06)",
-                display: "flex", gap: 8, alignItems: "flex-end",
-              }}>
-                <textarea
-                  ref={inputRef}
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  disabled={sending || !sessionId}
-                  placeholder={mode === "participate" ? "Ask about this deliberation..." : "Ask a question or join..."}
-                  rows={1}
+            <div style={{
+              padding: "10px 12px", borderTop: "1px solid rgba(0,0,0,0.06)",
+              display: "flex", gap: 8, alignItems: "flex-end",
+            }}>
+              <textarea
+                ref={inputRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                disabled={sending || !sessionId || phase === "setup"}
+                placeholder={phase === "setup" ? "Setting up — one moment..." : placeholder}
+                rows={1}
                   style={{
                     flex: 1, resize: "none", border: "1px solid rgba(0,0,0,0.1)",
                     borderRadius: 10, padding: "8px 12px", fontSize: 13,
@@ -630,21 +540,28 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
                     maxHeight: 80, overflowY: "auto",
                   }}
                 />
-                <button
-                  onClick={sendMessage}
-                  disabled={sending || !input.trim() || !sessionId}
-                  style={{
-                    background: "#c84a20", color: "#fff", border: "none",
-                    borderRadius: 10, padding: "8px 14px", cursor: "pointer",
-                    fontSize: 13, fontWeight: 600, opacity: sending || !input.trim() ? 0.5 : 1,
-                  }}
-                >
-                  Send
-                </button>
-              </div>
-            )}
+              <button
+                onClick={sendMessage}
+                disabled={sending || !input.trim() || !sessionId || phase === "setup"}
+                style={{
+                  background: "#c84a20", color: "#fff", border: "none",
+                  borderRadius: 10, padding: "8px 14px", cursor: "pointer",
+                  fontSize: 13, fontWeight: 600, opacity: sending || !input.trim() || phase === "setup" ? 0.5 : 1,
+                }}
+              >
+                Send
+              </button>
+            </div>
           </div>
         )}
+
+        {/* Pulse animation */}
+        <style>{`
+          @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+          }
+        `}</style>
       </>
     );
   }

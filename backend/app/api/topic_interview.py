@@ -92,13 +92,13 @@ async def get_active_session(
     req: Request,
     db: Session = Depends(get_db),
 ):
-    """Get any in-progress deliberation_join session for the current user."""
+    """Get any in-progress deliberation session for the current user."""
     user_id = _require_user_id(req)
 
     session = db.query(AgentSession).filter(
         and_(
             AgentSession.user_id == user_id,
-            AgentSession.session_type == "deliberation_join",
+            AgentSession.session_type == "deliberation",
             AgentSession.status.in_(["active", "opinion_submitted", "setup_running"]),
         )
     ).order_by(AgentSession.created_at.desc()).first()
@@ -144,7 +144,7 @@ async def start_interview(
         and_(
             AgentSession.agent_id == agent.id,
             AgentSession.deliberation_id == deliberation.id,
-            AgentSession.session_type == "deliberation_join",
+            AgentSession.session_type == "deliberation",
             AgentSession.status.in_(["active", "opinion_submitted", "setup_running"]),
         )
     ).first()
@@ -222,7 +222,7 @@ async def join_and_start_interview(
         and_(
             AgentSession.agent_id == agent.id,
             AgentSession.deliberation_id == deliberation.id,
-            AgentSession.session_type == "deliberation_join",
+            AgentSession.session_type == "deliberation",
             AgentSession.status.in_(["active", "opinion_submitted", "setup_running"]),
         )
     ).first()

@@ -151,7 +151,7 @@ def get_all_sessions(db: Session, hosted_agent: HostedAgent) -> list[AgentSessio
         db.query(AgentSession)
         .filter(
             AgentSession.agent_id == hosted_agent.agent_id,
-            AgentSession.session_type.in_(["general", "deliberation_join"]),
+            AgentSession.session_type.in_(["general", "deliberation"]),
         )
         .order_by(AgentSession.created_at.desc())
         .all()

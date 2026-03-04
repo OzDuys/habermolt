@@ -1,6 +1,8 @@
 """
-API routes for deliberation chat — ongoing chat for deliberation participants
-to update opinions, rerank statements, and propose consensus.
+API routes for deliberation chat — unified chat for deliberation participants.
+
+Single session per agent per deliberation with phases:
+browsing → joining → setup → participating.
 """
 
 import json
@@ -33,8 +35,15 @@ class ChatSessionResponse(BaseModel):
     deliberation_id: str
     question: str
     greeting: str
+    phase: str
     history: list
-    interview_history: list = []
+    setup_progress: dict | None = None
+
+class SessionStatusResponse(BaseModel):
+    session_id: str
+    phase: str
+    status: str
+    setup_progress: dict | None = None
 
 
 def _require_user_id(req: Request) -> str:
@@ -76,31 +85,73 @@ async def start_chat(
 
     # Generate greeting only for new sessions (no messages yet)
     if not session.messages:
-        greeting = deliberation_chat_service.generate_greeting(db, agent, deliberation)
+        greeting = deliberation_chat_service.generate_greeting(
+            db, agent, deliberation, phase=session.phase or "browsing"
+        )
         session.messages = [{"role": "assistant", "content": greeting}]
         db.commit()
     else:
         greeting = session.messages[0]["content"] if session.messages else ""
-
-    # Load completed topic interview history for this deliberation
-    interview_history = []
-    interview_session = db.query(AgentSession).filter(
-        AgentSession.agent_id == hosted.agent_id,
-        AgentSession.deliberation_id == deliberation.id,
-        AgentSession.session_type == "deliberation_join",
-        AgentSession.status == "completed",
-    ).order_by(AgentSession.created_at.desc()).first()
-    if interview_session and interview_session.messages:
-        interview_history = interview_session.messages
 
     return ChatSessionResponse(
         session_id=str(session.id),
         deliberation_id=str(deliberation.id),
         question=deliberation.question,
         greeting=greeting,
+        phase=session.phase or "browsing",
         history=session.messages,
-        interview_history=interview_history,
+        setup_progress=session.setup_progress,
     )
+
+
+@router.get("/{session_id}/status", response_model=SessionStatusResponse)
+async def get_session_status(
+    session_id: str,
+    req: Request,
+    db: Session = Depends(get_db),
+):
+    """Get the current status of a chat session (used for polling during setup)."""
+    user_id = _require_user_id(req)
+    hosted = _find_hosted_agent(db, user_id)
+
+    session = db.query(AgentSession).filter(
+        AgentSession.id == session_id,
+        AgentSession.agent_id == hosted.agent_id,
+    ).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Chat session not found.")
+
+    return SessionStatusResponse(
+        session_id=str(session.id),
+        phase=session.phase or "browsing",
+        status=session.status,
+        setup_progress=session.setup_progress,
+    )
+
+
+@router.post("/{session_id}/retry-setup")
+async def retry_setup(
+    session_id: str,
+    req: Request,
+    db: Session = Depends(get_db),
+):
+    """Retry a failed background setup."""
+    user_id = _require_user_id(req)
+    hosted = _find_hosted_agent(db, user_id)
+
+    session = db.query(AgentSession).filter(
+        AgentSession.id == session_id,
+        AgentSession.agent_id == hosted.agent_id,
+    ).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Chat session not found.")
+
+    progress = session.setup_progress or {}
+    if not progress.get("error"):
+        raise HTTPException(status_code=400, detail="No failed setup to retry.")
+
+    deliberation_chat_service.retry_setup(db, session)
+    return {"status": "retrying"}
 
 
 @router.post("/{session_id}/message")
@@ -120,6 +171,9 @@ async def send_chat_message(
     ).first()
     if not session:
         raise HTTPException(status_code=404, detail="Chat session not found.")
+
+    if session.phase == "setup":
+        raise HTTPException(status_code=400, detail="Setup is in progress. Please wait.")
 
     session_id_val = session.id
     agent_id_val = hosted.agent_id
@@ -147,6 +201,9 @@ async def send_chat_message(
                 elif event_type == "action_done":
                     yield f"data: {json.dumps({'type': 'action_done', 'action': event_data['action'], 'question': event_data.get('question', ''), 'description': event_data.get('description', ''), 'detail': event_data.get('detail', '')})}\n\n"
 
+            # Send current phase after stream completes (may have changed due to submit_opinion)
+            stream_db.refresh(stream_session)
+            yield f"data: {json.dumps({'type': 'phase', 'phase': stream_session.phase or 'browsing', 'setup_progress': stream_session.setup_progress})}\n\n"
             yield f"data: {json.dumps({'type': 'done'})}\n\n"
         except Exception as e:
             logger.error(f"Deliberation chat stream error: {e}", exc_info=True)

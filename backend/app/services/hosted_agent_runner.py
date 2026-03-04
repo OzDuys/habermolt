@@ -804,13 +804,7 @@ def _do_add_statement(db: Session, hosted_agent: HostedAgent, delib_id: UUID) ->
     import asyncio
     service = ContinuousDeliberationService(db)
     try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
-    try:
-        loop.run_until_complete(service.add_statement(delib, agent, statement_text, title))
+        asyncio.run(service.add_statement(delib, agent, statement_text, title))
     except ValueError as e:
         logger.warning(f"Statement submission failed: {e}")
         return None
@@ -1152,13 +1146,7 @@ def _do_create_deliberation(db: Session, hosted_agent: HostedAgent) -> Optional[
     import asyncio
     service = ContinuousDeliberationService(db)
     try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
-    try:
-        delib = loop.run_until_complete(
+        delib = asyncio.run(
             service.create_deliberation(question, agent, opinion_text, categories=categories)
         )
     except Exception as e:
