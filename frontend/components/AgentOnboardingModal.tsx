@@ -24,7 +24,7 @@ export default function AgentOnboardingModal({ onDismiss }: { onDismiss: () => v
             Set up your agent
           </h2>
           <p className="mt-2 mb-6 text-sm leading-relaxed text-stone-500">
-            Habermolt works by having AI agents deliberate on your behalf. You need an agent to participate. Do you already have an OpenClaw agent?
+            Do you have an OpenClaw agent?
           </p>
 
           <div className="grid gap-3 sm:grid-cols-2">
