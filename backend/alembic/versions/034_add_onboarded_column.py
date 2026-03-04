@@ -1,14 +1,14 @@
 """Add onboarded boolean column to hosted_agents
 
 Revision ID: 034_add_onboarded_column
-Revises: 033_add_missing_indexes
+Revises: 033_add_indexes
 Create Date: 2026-03-04
 """
 from alembic import op
 import sqlalchemy as sa
 
 revision = "034_add_onboarded_column"
-down_revision = "033_add_missing_indexes"
+down_revision = "033_add_indexes"
 branch_labels = None
 depends_on = None
 
