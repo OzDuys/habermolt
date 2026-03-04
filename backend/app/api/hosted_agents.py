@@ -55,6 +55,7 @@ class HostedAgentResponse(BaseModel):
     is_active: bool
     paused_reason: Optional[str]
     has_profile: bool
+    onboarded: bool
     profile_version: int
     tokens_used_period: int
     token_limit: Optional[int]
@@ -126,6 +127,7 @@ def _to_response(ha) -> HostedAgentResponse:
         is_active=ha.is_active,
         paused_reason=ha.paused_reason,
         has_profile=ha.user_profile is not None,
+        onboarded=ha.onboarded,
         profile_version=ha.profile_version,
         tokens_used_period=ha.tokens_used_period,
         token_limit=TOKEN_LIMITS.get(ha.pricing_tier),
@@ -260,6 +262,8 @@ async def create_hosted_agent(
         ha = hosted_agent_service.create_hosted_agent(
             db, user_id, body.display_name, body.pricing_tier, body.byok_api_key, body.model
         )
+        ha.onboarded = True
+        db.commit()
 
         # If user selected deliberations, create first chat session grounded in those topics
         if body.selected_deliberation_ids:
@@ -489,6 +493,7 @@ async def update_profile(body: ProfileUpdateRequest, req: Request, db: Session =
         raise HTTPException(status_code=404, detail="No hosted agent found")
     ha.user_profile = body.profile_markdown
     ha.profile_version += 1
+    ha.onboarded = True
     db.commit()
     return {
         "profile_markdown": ha.user_profile,

@@ -756,7 +756,7 @@ export default function LiveDeliberationPage() {
       if (hosted) {
         setAgentType("hosted");
         if (hosted.agent_id) setUserAgentId(hosted.agent_id);
-        setHasProfile(!!hosted.has_profile);
+        setHasProfile(!!hosted.onboarded);
       } else if (openclaw) {
         setAgentType("openclaw");
       } else {
