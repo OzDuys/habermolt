@@ -586,15 +586,16 @@ export default function HomePage() {
       ? fuse.search(q).map((r) => r.item)
       : baseDeliberations;
 
-    return candidates
-      .filter((d) => matchesCategory(d, activeCategory))
-      .sort((a, b) =>
-        activeCategory === "trending"
-          ? trendingScore(b) - trendingScore(a)
-          : activeCategory === "recent"
-          ? new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-          : new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      );
+    const filtered = candidates.filter((d) => matchesCategory(d, activeCategory));
+
+    // When searching, preserve Fuse.js relevance ordering
+    if (q) return filtered;
+
+    return filtered.sort((a, b) =>
+      activeCategory === "trending"
+        ? trendingScore(b) - trendingScore(a)
+        : new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
   })();
 
   // Masonry: measure each child and set grid-row span so items fill left-to-right
