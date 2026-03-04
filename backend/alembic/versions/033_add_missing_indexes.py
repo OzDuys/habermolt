@@ -11,15 +11,15 @@ clauses but were missing dedicated indexes:
 - opinions: compound index on (deliberation_id, agent_id, version DESC)
   for the common "get latest opinion" query pattern
 
-Revision ID: 032_add_indexes
-Revises: 031_cleanup_legacy
+Revision ID: 033_add_indexes
+Revises: 032_recreate_verification
 Create Date: 2026-03-04
 """
 
 from alembic import op
 
-revision = "032_add_indexes"
-down_revision = "031_cleanup_legacy"
+revision = "033_add_indexes"
+down_revision = "032_recreate_verification"
 branch_labels = None
 depends_on = None
 
