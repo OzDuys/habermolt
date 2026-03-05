@@ -17,12 +17,12 @@ lsof -ti :3000 | xargs kill -9 2>/dev/null
 lsof -ti :8000 | xargs kill -9 2>/dev/null
 
 # Frontend
-(cd frontend && npm run dev) &
+(cd frontend && npm run dev) 2>&1 | sed 's/^/[frontend] /' &
 
 # Backend
-(cd backend && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000) &
+(cd backend && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000) 2>&1 | sed 's/^/[backend]  /' &
 
-# ngrok tunnel
-ngrok http 3000 --url=valued-rat-violently.ngrok-free.app &
+# ngrok tunnel (log mode to avoid TUI overwriting terminal)
+ngrok http 3000 --url=valued-rat-violently.ngrok-free.app --log=stdout --log-level=warn > /dev/null 2>&1 &
 
 wait
