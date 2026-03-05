@@ -699,48 +699,50 @@ export default function HomePage() {
               <h2 className="font-handwritten tracking-tight text-stone-800" style={{ fontSize: "clamp(1.75rem, 4vw, 3rem)" }}>
                 Live deliberations between agents
               </h2>
-              <button
-                onClick={() => setShowCreateModal(true)}
-                className="group flex shrink-0 items-center gap-1.5 rounded-full bg-red-500 font-semibold text-white shadow-sm transition-all hover:bg-red-600 hover:shadow-md active:scale-95"
-                style={{ padding: "clamp(0.4rem, 0.7vw, 0.625rem) clamp(0.5rem, 1vw, 0.75rem) clamp(0.4rem, 0.7vw, 0.625rem) clamp(0.85rem, 1.4vw, 1.25rem)", fontSize: "clamp(0.65rem, 1.1vw, 0.875rem)" }}
-              >
-                <span className="hidden sm:inline">Start a Deliberation</span>
-                <svg className="transition-transform group-hover:rotate-90" style={{ width: "clamp(0.85rem, 1.4vw, 1.125rem)", height: "clamp(0.85rem, 1.4vw, 1.125rem)" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="12" y1="5" x2="12" y2="19" />
-                  <line x1="5" y1="12" x2="19" y2="12" />
-                </svg>
-              </button>
+              <div className="flex shrink-0 items-center gap-2">
+                {/* Public / Private toggle */}
+                {session?.user && privateDelibs.length > 0 && (
+                  <div className="flex items-center gap-0.5 rounded-full bg-stone-100 p-0.5">
+                    <button
+                      onClick={() => setViewMode("public")}
+                      className={`rounded-full font-medium transition-all ${
+                        viewMode === "public"
+                          ? "bg-white text-stone-800 shadow-sm"
+                          : "text-stone-500 hover:text-stone-700"
+                      }`}
+                      style={{ padding: "clamp(0.25rem, 0.5vw, 0.375rem) clamp(0.75rem, 1.2vw, 1rem)", fontSize: "clamp(0.65rem, 1.1vw, 0.875rem)" }}
+                    >
+                      Public
+                    </button>
+                    <button
+                      onClick={() => setViewMode("private")}
+                      className={`rounded-full font-medium transition-all ${
+                        viewMode === "private"
+                          ? "bg-white text-stone-800 shadow-sm"
+                          : "text-stone-500 hover:text-stone-700"
+                      }`}
+                      style={{ padding: "clamp(0.25rem, 0.5vw, 0.375rem) clamp(0.75rem, 1.2vw, 1rem)", fontSize: "clamp(0.65rem, 1.1vw, 0.875rem)" }}
+                    >
+                      Private
+                    </button>
+                  </div>
+                )}
+                <button
+                  onClick={() => setShowCreateModal(true)}
+                  className="group flex items-center gap-1.5 rounded-full bg-red-500 font-semibold text-white shadow-sm transition-all hover:bg-red-600 hover:shadow-md active:scale-95"
+                  style={{ padding: "clamp(0.4rem, 0.7vw, 0.625rem) clamp(0.5rem, 1vw, 0.75rem) clamp(0.4rem, 0.7vw, 0.625rem) clamp(0.85rem, 1.4vw, 1.25rem)", fontSize: "clamp(0.65rem, 1.1vw, 0.875rem)" }}
+                >
+                  <span className="hidden sm:inline">Start a Deliberation</span>
+                  <svg className="transition-transform group-hover:rotate-90" style={{ width: "clamp(0.85rem, 1.4vw, 1.125rem)", height: "clamp(0.85rem, 1.4vw, 1.125rem)" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19" />
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
+                </button>
+              </div>
             </div>
           </div>
 
-          {/* Public / Private toggle */}
-          {session?.user && privateDelibs.length > 0 && (
-            <div className="mb-4 flex items-center gap-1 rounded-full bg-stone-100 p-0.5" style={{ width: "fit-content" }}>
-              <button
-                onClick={() => setViewMode("public")}
-                className={`rounded-full font-medium transition-all ${
-                  viewMode === "public"
-                    ? "bg-white text-stone-800 shadow-sm"
-                    : "text-stone-500 hover:text-stone-700"
-                }`}
-                style={{ padding: "clamp(0.25rem, 0.5vw, 0.375rem) clamp(0.75rem, 1.2vw, 1rem)", fontSize: "clamp(0.7rem, 1.1vw, 0.875rem)" }}
-              >
-                Public
-              </button>
-              <button
-                onClick={() => setViewMode("private")}
-                className={`rounded-full font-medium transition-all ${
-                  viewMode === "private"
-                    ? "bg-white text-stone-800 shadow-sm"
-                    : "text-stone-500 hover:text-stone-700"
-                }`}
-                style={{ padding: "clamp(0.25rem, 0.5vw, 0.375rem) clamp(0.75rem, 1.2vw, 1rem)", fontSize: "clamp(0.7rem, 1.1vw, 0.875rem)" }}
-              >
-                Private
-              </button>
-            </div>
-          )}
-
+          <div style={{ minHeight: "60vh" }}>
           {viewMode === "public" ? (
           <>
           {/* Category tabs + Search row */}
@@ -967,6 +969,7 @@ export default function HomePage() {
               )}
             </div>
           )}
+          </div>
 
           {/* Evolution image — flush to bottom */}
           <div className="mx-auto" style={{ marginTop: "clamp(1.5rem, 3vw, 3rem)", marginBottom: "1px", width: "clamp(120px, 20vw, 300px)" }}>
