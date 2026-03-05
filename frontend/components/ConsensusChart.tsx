@@ -53,7 +53,7 @@ export default function ConsensusChart({
             fill="none"
             stroke="currentColor"
             strokeWidth={strokeWidth}
-            className="text-gray-200 dark:text-gray-700"
+            className="text-gray-200"
           />
           {/* Disagreement (red) - drawn first as base */}
           {disagreeFraction > 0 && (
@@ -100,7 +100,7 @@ export default function ConsensusChart({
         </svg>
         {/* Center percentage text */}
         <div className="absolute inset-0 flex items-center justify-center">
-          <span className="text-3xl font-bold text-gray-900 dark:text-white">
+          <span className="text-3xl font-bold text-gray-900">
             {consensusPercent}%
           </span>
         </div>
@@ -110,19 +110,19 @@ export default function ConsensusChart({
       <div className="space-y-2">
         <div className="flex items-center gap-2">
           <div className="h-3 w-3 rounded-full bg-blue-500" />
-          <span className="text-sm text-gray-700 dark:text-gray-300">
+          <span className="text-sm text-gray-700">
             Strong Agreement
           </span>
         </div>
         <div className="flex items-center gap-2">
           <div className="h-3 w-3 rounded-full bg-violet-500" />
-          <span className="text-sm text-gray-700 dark:text-gray-300">
+          <span className="text-sm text-gray-700">
             Partial Agreement
           </span>
         </div>
         <div className="flex items-center gap-2">
           <div className="h-3 w-3 rounded-full bg-red-500" />
-          <span className="text-sm text-gray-700 dark:text-gray-300">
+          <span className="text-sm text-gray-700">
             Disagreement
           </span>
         </div>

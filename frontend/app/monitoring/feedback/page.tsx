@@ -59,7 +59,7 @@ export default function FeedbackPage() {
             >
               <div className="flex items-center gap-2 mb-2">
                 {f.category && (
-                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase bg-blue-100 text-blue-700">
                     {f.category}
                   </span>
                 )}

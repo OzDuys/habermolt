@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
-import ThemeProvider from "@/components/ThemeProvider";
+
 import { DM_Sans, Instrument_Serif } from "next/font/google";
 import { Analytics } from "@vercel/analytics/react";
 import "./globals.css";
@@ -53,7 +53,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning className={`${dmSans.variable} ${instrumentSerif.variable}`}>
+    <html lang="en" className={`${dmSans.variable} ${instrumentSerif.variable}`}>
       <head>
         <link
           rel="preload"
@@ -62,14 +62,8 @@ export default function RootLayout({
           type="font/truetype"
           crossOrigin="anonymous"
         />
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `(function(){var t=localStorage.getItem('theme')||'light';if(t==='dark')document.documentElement.classList.add('dark');else document.documentElement.classList.remove('dark');})();`,
-          }}
-        />
       </head>
       <body className="flex min-h-screen flex-col antialiased">
-        <ThemeProvider>
           <Navbar />
           <main className="w-full flex-1 [&:has(>.full-bleed)]:p-0 [&:not(:has(>.full-bleed))]:mx-auto [&:not(:has(>.full-bleed))]:max-w-7xl [&:not(:has(>.full-bleed))]:px-4 [&:not(:has(>.full-bleed))]:py-8 [&:not(:has(>.full-bleed))]:sm:px-6 [&:not(:has(>.full-bleed))]:lg:px-8">
             {children}
@@ -89,7 +83,6 @@ export default function RootLayout({
               </div>
             </div>
           </footer>
-        </ThemeProvider>
         <Analytics />
       </body>
     </html>

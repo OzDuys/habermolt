@@ -75,10 +75,10 @@ function DeliberationRow({ d }: { d: Deliberation }) {
             {d.question}
           </Link>
           <div className="flex flex-col gap-1 shrink-0 items-end sm:flex-row sm:items-center sm:gap-1.5">
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 whitespace-nowrap">
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase bg-blue-100 text-blue-700 whitespace-nowrap">
               {d.stage}
             </span>
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400 whitespace-nowrap">
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase bg-gray-100 text-gray-700 whitespace-nowrap">
               continuous
             </span>
           </div>
@@ -135,8 +135,8 @@ function DeliberationRow({ d }: { d: Deliberation }) {
                         <span
                           className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${
                             t.status === "error"
-                              ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
-                              : "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                              ? "bg-red-100 text-red-700"
+                              : "bg-green-100 text-green-700"
                           }`}
                         >
                           {t.status}

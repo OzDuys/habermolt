@@ -276,7 +276,7 @@ export default function HostedAgentDashboard() {
         <StatusBadge active={agent.is_active} reason={agent.paused_reason} />
       </div>
 
-      {error && <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/20 dark:text-red-400">{error}</div>}
+      {error && <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</div>}
 
       {!agent.has_profile && (
         <div className="mb-6 rounded-xl border-2 border-dashed p-4" style={{ borderColor: "var(--accent)" }}>
@@ -547,7 +547,7 @@ export default function HostedAgentDashboard() {
             </button>
             <button
               onClick={handleDeleteAgent}
-              className="rounded-lg border px-3 py-1.5 text-xs font-medium text-red-600 transition-opacity hover:opacity-80 dark:text-red-400"
+              className="rounded-lg border px-3 py-1.5 text-xs font-medium text-red-600 transition-opacity hover:opacity-80"
               style={{ borderColor: "var(--border)" }}
             >
               Delete Agent
@@ -586,13 +586,13 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function StatusBadge({ active, reason }: { active: boolean; reason: string | null }) {
   if (!active) {
     return (
-      <span className="rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-medium text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400">
+      <span className="rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-medium text-yellow-800">
         {reason === "token_limit" ? "Token limit reached" : "Paused"}
       </span>
     );
   }
   return (
-    <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800 dark:bg-green-900/30 dark:text-green-400">
+    <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800">
       Active
     </span>
   );

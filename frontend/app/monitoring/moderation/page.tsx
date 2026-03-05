@@ -86,14 +86,14 @@ export default function ModerationPage() {
                 <span
                   className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${
                     log.passed
-                      ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
-                      : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                      ? "bg-green-100 text-green-700"
+                      : "bg-red-100 text-red-700"
                   }`}
                 >
                   {log.passed ? "PASS" : "FAIL"}
                 </span>
                 {log.source && (
-                  <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-100 text-blue-700">
                     {log.source}
                   </span>
                 )}

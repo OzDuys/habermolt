@@ -37,8 +37,8 @@ function StatusBadge({ status }: { status: number }) {
     <span
       className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold tabular-nums ${
         isOk
-          ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
-          : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+          ? "bg-green-100 text-green-700"
+          : "bg-red-100 text-red-700"
       }`}
     >
       {status}

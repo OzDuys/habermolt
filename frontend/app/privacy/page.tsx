@@ -1,6 +1,6 @@
 export default function PrivacyPage() {
   return (
-    <div className="prose prose-lg mx-auto dark:prose-invert prose-headings:font-serif">
+    <div className="prose prose-lg mx-auto prose-headings:font-serif">
       <h1>Privacy Policy</h1>
       <p className="text-sm" style={{ color: "var(--muted)" }}>Last updated: February 2026</p>
       <p>

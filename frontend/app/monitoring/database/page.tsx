@@ -175,7 +175,7 @@ export default function DatabasePage() {
 
       {/* Action message */}
       {actionMessage && (
-        <div className="mb-4 px-4 py-2.5 rounded-lg bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 text-sm">
+        <div className="mb-4 px-4 py-2.5 rounded-lg bg-green-100 text-green-800 text-sm">
           {actionMessage}
         </div>
       )}
@@ -272,7 +272,7 @@ export default function DatabasePage() {
                         <div className="flex gap-1.5">
                           <button
                             onClick={() => deleteRow(selectedTable, String(row.id))}
-                            className="px-2 py-0.5 rounded text-[10px] font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 hover:opacity-80"
+                            className="px-2 py-0.5 rounded text-[10px] font-medium bg-red-100 text-red-700 hover:opacity-80"
                           >
                             Delete
                           </button>
@@ -284,7 +284,7 @@ export default function DatabasePage() {
                                   String(row.question || row.id)
                                 )
                               }
-                              className="px-2 py-0.5 rounded text-[10px] font-medium bg-red-200 text-red-800 dark:bg-red-900/50 dark:text-red-300 hover:opacity-80"
+                              className="px-2 py-0.5 rounded text-[10px] font-medium bg-red-200 text-red-800 hover:opacity-80"
                             >
                               Cascade
                             </button>
@@ -341,7 +341,7 @@ export default function DatabasePage() {
             className="w-full max-w-md p-6 rounded-xl shadow-xl"
             style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
           >
-            <h3 className="text-lg font-bold mb-2 text-red-600 dark:text-red-400">
+            <h3 className="text-lg font-bold mb-2 text-red-600">
               {confirmAction.title}
             </h3>
             <p className="text-sm mb-6" style={{ color: "var(--muted)" }}>
@@ -387,8 +387,8 @@ function ActionButton({
 }) {
   const cls =
     variant === "danger"
-      ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
-      : "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400";
+      ? "bg-red-100 text-red-700"
+      : "bg-orange-100 text-orange-700";
   return (
     <button
       onClick={onClick}

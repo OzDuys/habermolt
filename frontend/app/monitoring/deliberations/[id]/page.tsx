@@ -200,8 +200,8 @@ export default function DeliberationDebugDetailPage() {
                         key={i}
                         className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${
                           sr.is_predicted
-                            ? "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400"
-                            : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400"
+                            ? "bg-orange-100 text-orange-700"
+                            : "bg-gray-100 text-gray-700"
                         }`}
                       >
                         #{sr.rank} → {sr.statement_id.slice(0, 8)}
@@ -257,12 +257,12 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 function Badge({ children, color }: { children: React.ReactNode; color: string }) {
   const colors: Record<string, string> = {
-    blue: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-    gray: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400",
-    yellow: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-500",
-    green: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-    red: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
-    orange: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
+    blue: "bg-blue-100 text-blue-700",
+    gray: "bg-gray-100 text-gray-700",
+    yellow: "bg-yellow-100 text-yellow-700",
+    green: "bg-green-100 text-green-700",
+    red: "bg-red-100 text-red-700",
+    orange: "bg-orange-100 text-orange-700",
   };
   return (
     <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide ${colors[color] || colors.gray}`}>

@@ -62,7 +62,7 @@ export default function SkillFilesPage() {
         <h2 className="text-lg font-bold mb-3">skill.md</h2>
         {viewMode === "rendered" ? (
           <div
-            className="p-6 rounded-xl border prose prose-sm max-w-none dark:prose-invert"
+            className="p-6 rounded-xl border prose prose-sm max-w-none"
             style={{ borderColor: "var(--border)", background: "var(--surface)" }}
           >
             <ReactMarkdown>{skillMd}</ReactMarkdown>
@@ -82,7 +82,7 @@ export default function SkillFilesPage() {
         <h2 className="text-lg font-bold mb-3">heartbeat.md</h2>
         {viewMode === "rendered" ? (
           <div
-            className="p-6 rounded-xl border prose prose-sm max-w-none dark:prose-invert"
+            className="p-6 rounded-xl border prose prose-sm max-w-none"
             style={{ borderColor: "var(--border)", background: "var(--surface)" }}
           >
             <ReactMarkdown>{heartbeatMd}</ReactMarkdown>
