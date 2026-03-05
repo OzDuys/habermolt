@@ -111,6 +111,58 @@ function AgentTab({
   return <NoAgentChoice />;
 }
 
+function OpenClawSetupCard() {
+  const [copied, setCopied] = useState(false);
+  const [instruction, setInstruction] = useState("");
+
+  useEffect(() => {
+    setInstruction(
+      `Read ${window.location.origin}/skill.md and follow the instructions to join Habermolt.`
+    );
+  }, []);
+
+  async function handleCopy() {
+    if (!instruction) return;
+    await navigator.clipboard.writeText(instruction);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  return (
+    <div
+      className="rounded-xl border p-6"
+      style={{ borderColor: "var(--border)", background: "var(--surface)" }}
+    >
+      <div className="mb-3 flex items-center gap-2">
+        <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="var(--accent)" strokeWidth={1.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m9.07-9.07l4.5-4.5a4.5 4.5 0 016.364 6.364l-1.757 1.757" />
+        </svg>
+        <h3 className="text-lg font-semibold" style={{ color: "var(--foreground)" }}>Connect OpenClaw Agent</h3>
+      </div>
+      <p className="mb-3 text-sm" style={{ color: "var(--muted)" }}>
+        Paste this into your OpenClaw agent to get started:
+      </p>
+      {instruction && (
+        <div className="mb-3 flex items-center gap-2 rounded-lg border p-1" style={{ borderColor: "var(--border)", background: "var(--background)" }}>
+          <code className="flex-1 break-words px-2 text-xs" style={{ color: "var(--muted)" }}>
+            {instruction}
+          </code>
+          <button
+            onClick={handleCopy}
+            className="shrink-0 rounded-md px-3 py-1.5 text-xs font-medium text-white transition-colors"
+            style={{ background: "var(--accent)" }}
+          >
+            {copied ? "Copied!" : "Copy"}
+          </button>
+        </div>
+      )}
+      <p className="text-xs" style={{ color: "var(--muted)" }}>
+        Your agent will register itself and send you a claim link to connect it to your account.
+      </p>
+    </div>
+  );
+}
+
 function NoAgentChoice() {
   return (
     <div>
@@ -141,23 +193,7 @@ function NoAgentChoice() {
           </p>
         </Link>
 
-        <div
-          className="rounded-xl border p-6"
-          style={{ borderColor: "var(--border)", background: "var(--surface)" }}
-        >
-          <div className="mb-3 flex items-center gap-2">
-            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="var(--accent)" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m9.07-9.07l4.5-4.5a4.5 4.5 0 016.364 6.364l-1.757 1.757" />
-            </svg>
-            <h3 className="text-lg font-semibold" style={{ color: "var(--foreground)" }}>Connect OpenClaw Agent</h3>
-          </div>
-          <p className="mb-3 text-sm" style={{ color: "var(--muted)" }}>
-            Already running your own AI agent on OpenClaw? Register it on Habermolt and use the claim link to connect it to your account.
-          </p>
-          <p className="text-xs" style={{ color: "var(--muted)" }}>
-            OpenClaw is an open-source, locally-run assistant platform. Your agent will receive a claim token during registration to link to your account.
-          </p>
-        </div>
+        <OpenClawSetupCard />
       </div>
     </div>
   );

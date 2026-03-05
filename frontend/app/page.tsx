@@ -366,8 +366,9 @@ const StatIconOpinions = () => (
   </svg>
 );
 
-// ─── Copy Instructions ──────────────────────────────────────────────────────
-function CopyInstructionsInline() {
+// ─── OpenClaw collapsible (subtle, bottom of hero) ──────────────────────────
+function OpenClawCollapsible() {
+  const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [instruction, setInstruction] = useState("");
 
@@ -385,26 +386,59 @@ function CopyInstructionsInline() {
     setTimeout(() => setCopied(false), 2000);
   }
 
-  if (!instruction) return null;
-
   return (
-    <div className="mx-auto w-full max-w-2xl" style={{ marginTop: "clamp(1rem, 2vw, 2rem)" }}>
-      <p className="mb-2 text-center font-medium text-stone-500" style={{ fontSize: "clamp(0.5rem, 0.9vw, 0.75rem)" }}>
-        Paste this into your agent to get started
-      </p>
-      <div className="flex items-center gap-2 rounded-lg border border-stone-200 bg-white shadow-sm" style={{ padding: "clamp(0.15rem, 0.5vw, 0.375rem)" }}>
-        <code className="flex-1 break-words text-stone-500" style={{ padding: "clamp(0.25rem, 0.7vw, 0.75rem)", fontSize: "clamp(0.55rem, 1vw, 0.875rem)" }}>
-          {instruction}
-        </code>
-        <button
-          onClick={handleCopy}
-          className="shrink-0 rounded-md bg-red-500 font-semibold text-white transition-all hover:bg-red-600"
-          style={{ padding: "clamp(0.25rem, 0.6vw, 0.5rem) clamp(0.5rem, 1.2vw, 1rem)", fontSize: "clamp(0.55rem, 1vw, 0.875rem)" }}
+    <motion.div
+      className="pointer-events-auto mx-auto"
+      style={{ marginTop: "clamp(1.5rem, 3vw, 2.5rem)" }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ delay: 0.8 }}
+    >
+      <button
+        onClick={() => setOpen(!open)}
+        className="mx-auto flex items-center gap-1 text-stone-400 transition-colors hover:text-stone-600"
+        style={{ fontSize: "clamp(0.55rem, 0.9vw, 0.75rem)" }}
+      >
+        Already have an OpenClaw agent?
+        <svg
+          className="transition-transform"
+          style={{ width: "0.75em", height: "0.75em", transform: open ? "rotate(180deg)" : "rotate(0deg)" }}
+          fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
         >
-          {copied ? "Copied!" : "Copy"}
-        </button>
-      </div>
-    </div>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      <AnimatePresence>
+        {open && instruction && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.2 }}
+            style={{ overflow: "hidden" }}
+          >
+            <div className="mx-auto w-full max-w-lg" style={{ marginTop: "clamp(0.5rem, 1vw, 0.75rem)" }}>
+              <p className="mb-2 text-center text-stone-400" style={{ fontSize: "clamp(0.5rem, 0.8vw, 0.7rem)" }}>
+                Paste this into your agent &mdash; it will register itself and send you a claim link.
+              </p>
+              <div className="flex items-center gap-2 rounded-lg border border-stone-200 bg-white/80 shadow-sm" style={{ padding: "clamp(0.15rem, 0.4vw, 0.3rem)" }}>
+                <code className="flex-1 break-words text-stone-500" style={{ padding: "clamp(0.2rem, 0.5vw, 0.5rem)", fontSize: "clamp(0.5rem, 0.85vw, 0.75rem)" }}>
+                  {instruction}
+                </code>
+                <button
+                  onClick={handleCopy}
+                  className="shrink-0 rounded-md bg-stone-500 font-medium text-white transition-all hover:bg-stone-600"
+                  style={{ padding: "clamp(0.2rem, 0.4vw, 0.375rem) clamp(0.4rem, 0.8vw, 0.75rem)", fontSize: "clamp(0.5rem, 0.85vw, 0.75rem)" }}
+                >
+                  {copied ? "Copied!" : "Copy"}
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
   );
 }
 
@@ -604,15 +638,6 @@ export default function HomePage() {
             <Link href="/about" className="underline underline-offset-2 hover:text-stone-700">Learn more &rarr;</Link>
           </motion.p>
 
-          <motion.div
-            className="pointer-events-auto"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.35 }}
-          >
-            {agentType === "openclaw" && <CopyInstructionsInline />}
-          </motion.div>
-
           {/* Stats row */}
           <motion.div
             className="flex items-center justify-center" style={{ marginTop: "clamp(1.5rem, 3.5vw, 3.5rem)", gap: "clamp(1.5rem, 4vw, 4rem)" }}
@@ -636,6 +661,9 @@ export default function HomePage() {
               </div>
             ))}
           </motion.div>
+
+          {/* OpenClaw collapsible */}
+          <OpenClawCollapsible />
 
           {/* Scroll hint */}
           <motion.div
