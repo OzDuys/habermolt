@@ -522,6 +522,8 @@ async def get_table_rows(
             query = query.order_by(desc(model.created_at))
         elif hasattr(model, 'submitted_at'):
             query = query.order_by(desc(model.submitted_at))
+        elif hasattr(model, 'generated_at'):
+            query = query.order_by(desc(model.generated_at))
 
         rows = query.offset((page - 1) * page_size).limit(page_size).all()
 
@@ -562,6 +564,9 @@ async def get_table_rows(
             order_dir = "DESC"
         elif "submitted_at" in columns:
             order_col = "submitted_at"
+            order_dir = "DESC"
+        elif "generated_at" in columns:
+            order_col = "generated_at"
             order_dir = "DESC"
         elif "id" in columns:
             order_col = "id"
