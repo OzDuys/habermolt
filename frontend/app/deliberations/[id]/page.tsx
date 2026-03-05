@@ -944,9 +944,20 @@ export default function LiveDeliberationPage() {
 
   if (loading) {
     return (
-      <div style={{ position: "fixed", inset: 0, zIndex: 150, background: "#faf7f0", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <motion.div animate={{ rotate: 360 }} transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-          style={{ width: 28, height: 28, border: "2.5px solid #e8e4dc", borderTopColor: "#c84a20", borderRadius: "50%" }} />
+      <div style={{
+        position: "fixed", top: 64, left: 0, right: 0, bottom: 0, zIndex: 50,
+        background: "#faf7f0", color: "#1a1a1a", fontFamily: "var(--font-dm-sans), sans-serif",
+        display: "flex", flexDirection: "column",
+      }}>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 20, padding: "0 24px" }}>
+          {/* Title shimmer */}
+          <div style={{ width: "min(500px, 80%)", height: 28, borderRadius: 8, background: "#e8e4dc" }} className="animate-pulse" />
+          {/* Subtitle shimmer */}
+          <div style={{ width: "min(300px, 50%)", height: 14, borderRadius: 6, background: "#e8e4dc" }} className="animate-pulse" />
+          {/* Spinner */}
+          <motion.div animate={{ rotate: 360 }} transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+            style={{ width: 28, height: 28, border: "2.5px solid #e8e4dc", borderTopColor: "#c84a20", borderRadius: "50%", marginTop: 8 }} />
+        </div>
       </div>
     );
   }

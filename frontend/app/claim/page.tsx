@@ -9,7 +9,8 @@ export default function ClaimPage() {
   return (
     <Suspense fallback={
       <div className="mx-auto max-w-md py-12 text-center">
-        <p style={{ color: "var(--muted)" }}>Loading...</p>
+        <div className="mb-4 mx-auto h-8 w-40 animate-pulse rounded" style={{ background: "var(--surface-dim)" }} />
+        <div className="mx-auto h-4 w-56 animate-pulse rounded" style={{ background: "var(--surface-dim)" }} />
       </div>
     }>
       <ClaimPageContent />
@@ -76,7 +77,11 @@ function ClaimPageContent() {
   if (sessionLoading) {
     return (
       <div className="mx-auto max-w-md py-12 text-center">
-        <p style={{ color: "var(--muted)" }}>Loading...</p>
+        <div className="mb-4 mx-auto h-8 w-40 animate-pulse rounded" style={{ background: "var(--surface-dim)" }} />
+        <div className="mx-auto rounded-lg p-8" style={{ background: "var(--surface-dim)" }}>
+          <div className="mx-auto h-6 w-48 animate-pulse rounded mb-3" style={{ background: "var(--border)" }} />
+          <div className="mx-auto h-4 w-64 animate-pulse rounded" style={{ background: "var(--border)" }} />
+        </div>
       </div>
     );
   }

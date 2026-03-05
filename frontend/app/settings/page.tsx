@@ -20,12 +20,50 @@ export default function ProfilePage() {
 function LoadingSkeleton() {
   return (
     <div className="mx-auto max-w-3xl py-8 px-4">
-      <div className="animate-pulse space-y-4">
-        <div className="mb-8 h-9 w-32 rounded" style={{ background: "var(--surface-dim)" }} />
-        <div className="h-48 rounded-xl" style={{ background: "var(--surface-dim)" }} />
-        <div className="h-px" style={{ background: "var(--border)" }} />
-        <div className="h-6 w-24 rounded" style={{ background: "var(--surface-dim)" }} />
-        <div className="h-24 rounded-xl" style={{ background: "var(--surface-dim)" }} />
+      <h1 className="mb-8 font-serif text-3xl" style={{ color: "var(--foreground)" }}>Profile</h1>
+
+      {/* Agent section placeholder */}
+      <AgentTabSkeleton />
+
+      {/* Divider */}
+      <hr className="my-10" style={{ borderColor: "var(--border)" }} />
+
+      {/* Account */}
+      <h2 className="mb-4 text-lg font-semibold" style={{ color: "var(--foreground)" }}>Account</h2>
+      <div className="animate-pulse rounded-xl border p-6" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+        <div className="space-y-3">
+          <div className="h-4 w-48 rounded" style={{ background: "var(--surface-dim)" }} />
+          <div className="h-4 w-32 rounded" style={{ background: "var(--surface-dim)" }} />
+        </div>
+      </div>
+
+      {/* Sign out */}
+      <hr className="my-10" style={{ borderColor: "var(--border)" }} />
+      <div className="h-10 w-24 animate-pulse rounded-lg" style={{ background: "var(--surface-dim)" }} />
+    </div>
+  );
+}
+
+function AgentTabSkeleton() {
+  return (
+    <div className="animate-pulse space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="h-6 w-40 rounded" style={{ background: "var(--surface-dim)" }} />
+        <div className="h-6 w-16 rounded-full" style={{ background: "var(--surface-dim)" }} />
+      </div>
+      <div className="rounded-xl border p-4" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+        <div className="mb-3 h-4 w-24 rounded" style={{ background: "var(--surface-dim)" }} />
+        <div className="space-y-2">
+          <div className="h-3 w-full rounded" style={{ background: "var(--surface-dim)" }} />
+          <div className="h-3 w-3/4 rounded" style={{ background: "var(--surface-dim)" }} />
+        </div>
+      </div>
+      <div className="rounded-xl border p-4" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+        <div className="mb-3 h-4 w-20 rounded" style={{ background: "var(--surface-dim)" }} />
+        <div className="flex items-center justify-between">
+          <div className="h-3 w-24 rounded" style={{ background: "var(--surface-dim)" }} />
+          <div className="h-8 w-32 rounded-lg" style={{ background: "var(--surface-dim)" }} />
+        </div>
       </div>
     </div>
   );
@@ -52,8 +90,7 @@ function ProfilePageContent() {
       .catch(() => setHasOpenClawAgent(false));
   }, [session, isPending, router]);
 
-  if (isPending) return <LoadingSkeleton />;
-  if (!session) return null;
+  if (isPending || !session) return <LoadingSkeleton />;
 
   return (
     <div className="mx-auto max-w-3xl py-8 px-4">
@@ -99,7 +136,7 @@ function AgentTab({
   onAgentUnlinked: () => void;
 }) {
   if (hasHostedAgent === null || hasOpenClawAgent === null) {
-    return <div className="py-8 text-center text-sm" style={{ color: "var(--muted)" }}>Loading...</div>;
+    return <AgentTabSkeleton />;
   }
 
   if (hasHostedAgent) {

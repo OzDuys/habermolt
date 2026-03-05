@@ -7,7 +7,11 @@ import CreateAgentFlow from "@/components/CreateAgentFlow";
 
 export default function CreateAgentPage() {
   return (
-    <Suspense fallback={<div />}>
+    <Suspense fallback={
+      <div style={{ minHeight: "80vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div className="animate-pulse" style={{ width: 120, height: 120, borderRadius: "50%", background: "var(--surface-dim)" }} />
+      </div>
+    }>
       <CreateAgentPageContent />
     </Suspense>
   );
@@ -47,6 +51,10 @@ function CreateAgentPageContent() {
     });
   }, [session, isPending, router]);
 
-  if (isPending || !ready) return null;
+  if (isPending || !ready) return (
+    <div style={{ minHeight: "80vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div className="animate-pulse" style={{ width: 120, height: 120, borderRadius: "50%", background: "var(--surface-dim)" }} />
+    </div>
+  );
   return <CreateAgentFlow isUpdate={isUpdate} />;
 }

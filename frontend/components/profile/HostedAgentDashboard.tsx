@@ -261,7 +261,7 @@ export default function HostedAgentDashboard() {
   };
 
   if (loading) {
-    return <div className="py-8 text-center text-sm" style={{ color: "var(--muted)" }}>Loading...</div>;
+    return <HostedAgentDashboardSkeleton />;
   }
 
   if (notFound) return null;
@@ -560,6 +560,62 @@ export default function HostedAgentDashboard() {
           <Field label="Last heartbeat">{agent.last_heartbeat_at ? new Date(agent.last_heartbeat_at).toLocaleString() : "Never"}</Field>
           <Field label="Created">{new Date(agent.created_at).toLocaleDateString()}</Field>
         </Section>
+      </div>
+    </div>
+  );
+}
+
+function HostedAgentDashboardSkeleton() {
+  return (
+    <div>
+      <div className="mb-6 flex items-center justify-between">
+        <div className="h-6 w-40 animate-pulse rounded" style={{ background: "var(--surface-dim)" }} />
+        <div className="h-6 w-16 animate-pulse rounded-full" style={{ background: "var(--surface-dim)" }} />
+      </div>
+      <div className="space-y-4">
+        {/* Profile section */}
+        <div className="rounded-xl border p-4" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+          <h2 className="mb-3 text-sm font-medium" style={{ color: "var(--muted)" }}>Your Profile</h2>
+          <div className="animate-pulse space-y-2">
+            <div className="h-3 w-full rounded" style={{ background: "var(--surface-dim)" }} />
+            <div className="h-3 w-5/6 rounded" style={{ background: "var(--surface-dim)" }} />
+            <div className="h-3 w-4/6 rounded" style={{ background: "var(--surface-dim)" }} />
+            <div className="h-3 w-3/4 rounded" style={{ background: "var(--surface-dim)" }} />
+          </div>
+        </div>
+        {/* Token usage section */}
+        <div className="rounded-xl border p-4" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+          <h2 className="mb-3 text-sm font-medium" style={{ color: "var(--muted)" }}>Weekly Token Usage</h2>
+          <div className="h-4 w-full animate-pulse rounded-full" style={{ background: "var(--surface-dim)" }} />
+        </div>
+        {/* Settings section */}
+        <div className="rounded-xl border p-4" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+          <h2 className="mb-3 text-sm font-medium" style={{ color: "var(--muted)" }}>Settings</h2>
+          <div className="animate-pulse space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="h-3 w-16 rounded" style={{ background: "var(--surface-dim)" }} />
+              <div className="h-8 w-48 rounded-lg" style={{ background: "var(--surface-dim)" }} />
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="h-3 w-24 rounded" style={{ background: "var(--surface-dim)" }} />
+              <div className="h-8 w-36 rounded-lg" style={{ background: "var(--surface-dim)" }} />
+            </div>
+          </div>
+        </div>
+        {/* Info section */}
+        <div className="rounded-xl border p-4" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+          <h2 className="mb-3 text-sm font-medium" style={{ color: "var(--muted)" }}>Info</h2>
+          <div className="animate-pulse space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="h-3 w-28 rounded" style={{ background: "var(--surface-dim)" }} />
+              <div className="h-3 w-12 rounded" style={{ background: "var(--surface-dim)" }} />
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="h-3 w-24 rounded" style={{ background: "var(--surface-dim)" }} />
+              <div className="h-3 w-32 rounded" style={{ background: "var(--surface-dim)" }} />
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

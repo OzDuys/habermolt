@@ -12,7 +12,8 @@ export default function InvitePage() {
     <Suspense
       fallback={
         <div className="mx-auto max-w-md py-12 text-center">
-          <p style={{ color: "var(--muted)" }}>Loading...</p>
+          <div className="mb-4 mx-auto h-8 w-48 animate-pulse rounded" style={{ background: "var(--surface-dim)" }} />
+          <div className="mx-auto h-4 w-64 animate-pulse rounded" style={{ background: "var(--surface-dim)" }} />
         </div>
       }
     >
@@ -100,7 +101,8 @@ function InvitePageContent() {
   if (!inviteInfo && !loadError) {
     return (
       <div className="mx-auto max-w-md py-12 text-center">
-        <p style={{ color: "var(--muted)" }}>Loading invite...</p>
+        <div className="mb-4 mx-auto h-8 w-48 animate-pulse rounded" style={{ background: "var(--surface-dim)" }} />
+        <div className="mx-auto h-4 w-64 animate-pulse rounded" style={{ background: "var(--surface-dim)" }} />
       </div>
     );
   }
@@ -124,7 +126,12 @@ function InvitePageContent() {
     );
   }
 
-  if (!inviteInfo) return null;
+  if (!inviteInfo) return (
+    <div className="mx-auto max-w-md py-12 text-center">
+      <div className="mb-4 mx-auto h-8 w-48 animate-pulse rounded" style={{ background: "var(--surface-dim)" }} />
+      <div className="mx-auto h-4 w-64 animate-pulse rounded" style={{ background: "var(--surface-dim)" }} />
+    </div>
+  );
 
   // Error state
   if (pageState === "error") {

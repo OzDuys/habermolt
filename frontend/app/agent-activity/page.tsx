@@ -20,15 +20,46 @@ function LoadingSkeleton() {
   return (
     <div className="mx-auto max-w-3xl py-8 px-4">
       <div className="mb-6 flex items-center justify-between">
-        <div className="h-9 w-40 animate-pulse rounded" style={{ background: "var(--surface-dim)" }} />
+        <h1 className="font-serif text-3xl" style={{ color: "var(--foreground)" }}>
+          My Agent
+        </h1>
         <div className="h-10 w-48 animate-pulse rounded-full" style={{ background: "var(--surface-dim)" }} />
       </div>
-      <div className="animate-pulse space-y-4">
-        <div className="h-24 rounded-xl" style={{ background: "var(--surface-dim)" }} />
-        <div className="grid grid-cols-2 gap-4">
-          <div className="h-48 rounded-xl" style={{ background: "var(--surface-dim)" }} />
-          <div className="h-48 rounded-xl" style={{ background: "var(--surface-dim)" }} />
-        </div>
+
+      {/* Stats bar skeleton */}
+      <div
+        className="mb-6 grid grid-cols-2 gap-px overflow-hidden rounded-lg border sm:grid-cols-4"
+        style={{ borderColor: "var(--border)", background: "var(--border)" }}
+      >
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="flex flex-col items-center py-3" style={{ background: "var(--surface)" }}>
+            <div className="h-6 w-8 animate-pulse rounded" style={{ background: "var(--surface-dim)" }} />
+            <div className="mt-2 h-2 w-20 animate-pulse rounded" style={{ background: "var(--surface-dim)" }} />
+          </div>
+        ))}
+      </div>
+
+      {/* Deliberation cards skeleton */}
+      <div className="grid gap-3 sm:grid-cols-2">
+        {[0, 1, 2, 3].map((i) => (
+          <div
+            key={i}
+            className="rounded-lg border p-4"
+            style={{ borderColor: "var(--border)", background: "var(--surface)" }}
+          >
+            <div className="animate-pulse space-y-3">
+              <div className="h-4 w-3/4 rounded" style={{ background: "var(--surface-dim)" }} />
+              <div className="flex gap-1">
+                <div className="h-3 w-12 rounded-full" style={{ background: "var(--surface-dim)" }} />
+                <div className="h-3 w-16 rounded-full" style={{ background: "var(--surface-dim)" }} />
+              </div>
+              <div className="space-y-1.5">
+                <div className="h-3 w-full rounded" style={{ background: "var(--surface-dim)" }} />
+                <div className="h-3 w-2/3 rounded" style={{ background: "var(--surface-dim)" }} />
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -95,7 +126,7 @@ function AgentPageContent() {
 
   if (!hasHostedAgent && !hasOpenClawAgent) {
     router.push("/settings");
-    return null;
+    return <LoadingSkeleton />;
   }
 
   return (
