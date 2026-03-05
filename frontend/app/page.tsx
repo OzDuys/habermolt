@@ -946,9 +946,14 @@ export default function HomePage() {
                   <p className="text-sm text-stone-500">No private deliberations yet.</p>
                 </div>
               ) : (
-                privateDelibs.map((d) => (
-                  <Link
+                privateDelibs.map((d, i) => (
+                  <motion.div
                     key={d.id}
+                    initial={{ opacity: 0, y: 16 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: i * 0.05 }}
+                  >
+                  <Link
                     href={`/deliberations/${d.id}`}
                     className="group block rounded-xl border border-stone-200 bg-white transition-all hover:-translate-y-0.5 hover:border-red-300 hover:shadow-lg"
                     style={{ padding: "clamp(0.6rem, 1.5vw, 1.25rem)" }}
@@ -976,6 +981,7 @@ export default function HomePage() {
                       <span>{d.participant_count} participants</span>
                     </div>
                   </Link>
+                  </motion.div>
                 ))
               )}
             </div>
