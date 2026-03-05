@@ -466,6 +466,7 @@ export default function HomePage() {
   const [heroHeight, setHeroHeight] = useState<number | null>(null);
   const masonryRef = useRef<HTMLDivElement>(null);
   const [privateDelibs, setPrivateDelibs] = useState<PrivateDeliberationListItem[]>([]);
+  const [viewMode, setViewMode] = useState<"public" | "private">("public");
   const [agentType, setAgentType] = useState<"loading" | "none" | "hosted" | "openclaw">("loading");
   const [showCreateModal, setShowCreateModal] = useState(false);
   // Check agent type and fetch private deliberations when session is available
@@ -712,6 +713,36 @@ export default function HomePage() {
             </div>
           </div>
 
+          {/* Public / Private toggle */}
+          {session?.user && privateDelibs.length > 0 && (
+            <div className="mb-4 flex items-center gap-1 rounded-full bg-stone-100 p-0.5" style={{ width: "fit-content" }}>
+              <button
+                onClick={() => setViewMode("public")}
+                className={`rounded-full font-medium transition-all ${
+                  viewMode === "public"
+                    ? "bg-white text-stone-800 shadow-sm"
+                    : "text-stone-500 hover:text-stone-700"
+                }`}
+                style={{ padding: "clamp(0.25rem, 0.5vw, 0.375rem) clamp(0.75rem, 1.2vw, 1rem)", fontSize: "clamp(0.7rem, 1.1vw, 0.875rem)" }}
+              >
+                Public
+              </button>
+              <button
+                onClick={() => setViewMode("private")}
+                className={`rounded-full font-medium transition-all ${
+                  viewMode === "private"
+                    ? "bg-white text-stone-800 shadow-sm"
+                    : "text-stone-500 hover:text-stone-700"
+                }`}
+                style={{ padding: "clamp(0.25rem, 0.5vw, 0.375rem) clamp(0.75rem, 1.2vw, 1rem)", fontSize: "clamp(0.7rem, 1.1vw, 0.875rem)" }}
+              >
+                Private
+              </button>
+            </div>
+          )}
+
+          {viewMode === "public" ? (
+          <>
           {/* Category tabs + Search row */}
           <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             {/* Category tabs */}
@@ -893,6 +924,50 @@ export default function HomePage() {
             </>
           )}
 
+          </>
+          ) : (
+            /* Private deliberations view */
+            <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-4">
+              {privateDelibs.length === 0 ? (
+                <div className="col-span-full rounded-xl bg-stone-100 p-16 text-center">
+                  <p className="text-sm text-stone-500">No private deliberations yet.</p>
+                </div>
+              ) : (
+                privateDelibs.map((d) => (
+                  <Link
+                    key={d.id}
+                    href={`/deliberations/${d.id}`}
+                    className="group block rounded-xl border border-stone-200 bg-white transition-all hover:-translate-y-0.5 hover:border-red-300 hover:shadow-lg"
+                    style={{ padding: "clamp(0.6rem, 1.5vw, 1.25rem)" }}
+                  >
+                    <div className="flex items-center gap-2" style={{ marginBottom: "clamp(0.4rem, 0.8vw, 0.75rem)" }}>
+                      <span
+                        style={{ fontSize: "clamp(8px, 1vw, 11px)", padding: "clamp(1px, 0.3vw, 2px) clamp(4px, 0.8vw, 10px)" }}
+                        className="inline-flex rounded-full bg-amber-50 font-semibold text-amber-600"
+                      >
+                        Private
+                      </span>
+                      {d.is_creator && (
+                        <span
+                          style={{ fontSize: "clamp(8px, 1vw, 11px)", padding: "clamp(1px, 0.3vw, 2px) clamp(4px, 0.8vw, 10px)" }}
+                          className="inline-flex rounded-full bg-stone-100 font-semibold text-stone-500"
+                        >
+                          Creator
+                        </span>
+                      )}
+                    </div>
+                    <h3 className="font-semibold leading-snug text-stone-800 group-hover:text-red-600 group-hover:underline group-hover:decoration-1 group-hover:underline-offset-2" style={{ marginBottom: "clamp(0.3rem, 0.5vw, 0.5rem)", fontSize: "clamp(0.7rem, 1.3vw, 1rem)" }}>
+                      {d.question}
+                    </h3>
+                    <div className="flex items-center justify-between text-stone-500" style={{ fontSize: "clamp(0.55rem, 1vw, 0.75rem)" }}>
+                      <span>{d.participant_count} participants</span>
+                    </div>
+                  </Link>
+                ))
+              )}
+            </div>
+          )}
+
           {/* Evolution image — flush to bottom */}
           <div className="mx-auto" style={{ marginTop: "clamp(1.5rem, 3vw, 3rem)", marginBottom: "1px", width: "clamp(120px, 20vw, 300px)" }}>
             <Image
@@ -909,55 +984,6 @@ export default function HomePage() {
 
       <CreateDeliberationModal open={showCreateModal} onClose={() => setShowCreateModal(false)} />
 
-      {/* ===== PRIVATE DELIBERATIONS ===== */}
-      {session?.user && privateDelibs.length > 0 && (
-        <section style={{ background: "#fafaf9" }}>
-          <div className="mx-auto max-w-screen-2xl px-4 sm:w-[82%] sm:px-6" style={{ paddingTop: "clamp(2.5rem, 5vw, 5rem)", paddingBottom: "clamp(2.5rem, 5vw, 5rem)" }}>
-            <div style={{ marginBottom: "clamp(1rem, 2vw, 2rem)" }}>
-              <p className="font-semibold uppercase tracking-widest text-stone-400" style={{ marginBottom: "clamp(0.25rem, 0.5vw, 0.5rem)", fontSize: "clamp(0.6rem, 1vw, 0.75rem)" }}>
-                Invite only
-              </p>
-              <h2 className="font-handwritten tracking-tight text-stone-800" style={{ fontSize: "clamp(1.75rem, 4vw, 3rem)" }}>
-                Your private deliberations
-              </h2>
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {privateDelibs.map((d) => (
-                <Link
-                  key={d.id}
-                  href={`/deliberations/${d.id}`}
-                  className="group block rounded-xl border border-stone-200 bg-white transition-all hover:-translate-y-0.5 hover:border-red-300 hover:shadow-lg"
-                  style={{ padding: "clamp(0.6rem, 1.5vw, 1.25rem)" }}
-                >
-                  <div className="flex items-center gap-2" style={{ marginBottom: "clamp(0.4rem, 0.8vw, 0.75rem)" }}>
-                    <span
-                      style={{ fontSize: "clamp(8px, 1vw, 11px)", padding: "clamp(1px, 0.3vw, 2px) clamp(4px, 0.8vw, 10px)" }}
-                      className="inline-flex rounded-full bg-amber-50 font-semibold text-amber-600"
-                    >
-                      Private
-                    </span>
-                    {d.is_creator && (
-                      <span
-                        style={{ fontSize: "clamp(8px, 1vw, 11px)", padding: "clamp(1px, 0.3vw, 2px) clamp(4px, 0.8vw, 10px)" }}
-                        className="inline-flex rounded-full bg-stone-100 font-semibold text-stone-500"
-                      >
-                        Creator
-                      </span>
-                    )}
-                  </div>
-                  <h3 className="font-semibold leading-snug text-stone-800 group-hover:text-red-600 group-hover:underline group-hover:decoration-1 group-hover:underline-offset-2" style={{ marginBottom: "clamp(0.3rem, 0.5vw, 0.5rem)", fontSize: "clamp(0.7rem, 1.3vw, 1rem)" }}>
-                    {d.question}
-                  </h3>
-                  <div className="flex items-center justify-between text-stone-500" style={{ fontSize: "clamp(0.55rem, 1vw, 0.75rem)" }}>
-                    <span>{d.participant_count} participants</span>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </div>
-        </section>
-      )}
     </div>
   );
 }
