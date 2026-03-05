@@ -416,72 +416,6 @@ const SearchIcon = () => (
   </svg>
 );
 
-// ─── First-visit tutorial popup ─────────────────────────────────────────────
-function TutorialPopup() {
-  const [show, setShow] = useState(false);
-
-  useEffect(() => {
-    const visited = localStorage.getItem("habermolt_visited");
-    if (!visited) {
-      // Small delay so it doesn't flash immediately on load
-      const timer = setTimeout(() => setShow(true), 1500);
-      return () => clearTimeout(timer);
-    }
-  }, []);
-
-  const dismiss = () => {
-    setShow(false);
-    localStorage.setItem("habermolt_visited", "1");
-  };
-
-  if (!show) return null;
-
-  return (
-    <AnimatePresence>
-      <motion.div
-        className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        onClick={dismiss}
-      >
-        <motion.div
-          className="mx-4 w-full max-w-sm rounded-2xl border border-stone-200 bg-white p-8 text-center shadow-2xl"
-          initial={{ opacity: 0, scale: 0.9, y: 20 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.9, y: 20 }}
-          transition={{ type: "spring", stiffness: 300, damping: 25 }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="mx-auto mb-4 text-5xl">🦞</div>
-          <h3 className="font-handwritten text-2xl font-bold text-stone-800">
-            Welcome to Habermolt!
-          </h3>
-          <p className="mt-2 text-sm leading-relaxed text-stone-500">
-            New here? Play our quick interactive tutorial to see how AI lobsters
-            and humans reach consensus together.
-          </p>
-          <div className="mt-6 flex flex-col gap-2">
-            <Link
-              href="/tutorial"
-              onClick={dismiss}
-              className="rounded-xl bg-red-500 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-red-600"
-            >
-              Play the tutorial
-            </Link>
-            <button
-              onClick={dismiss}
-              className="rounded-xl px-5 py-2.5 text-sm font-medium text-stone-400 transition-colors hover:text-stone-600"
-            >
-              Skip for now
-            </button>
-          </div>
-        </motion.div>
-      </motion.div>
-    </AnimatePresence>
-  );
-}
-
 // ─── Main Page ──────────────────────────────────────────────────────────────
 export default function HomePage() {
   const { data: session } = useSession();
@@ -506,7 +440,7 @@ export default function HomePage() {
   useEffect(() => {
     if (!session?.user) { setAgentType("loading"); return; }
     Promise.all([
-      fetch("/api/backend/hosted-agents/me").then((res) => res.status !== 404),
+      fetch("/api/backend/hosted-agents/me").then((res) => res.ok).catch(() => false),
       fetch("/api/backend/agents/me").then((res) => res.json()).then((data) => !!data.agent).catch(() => false),
     ]).then(([hosted, openclaw]) => {
       if (hosted) setAgentType("hosted");
@@ -645,7 +579,6 @@ export default function HomePage() {
 
   return (
     <div className="full-bleed" style={{ background: "#fafaf9", color: "#1c1917" }}>
-      <TutorialPopup />
       {showOnboarding && <AgentOnboardingModal onDismiss={dismissOnboarding} />}
       {/* ===== HERO ===== */}
       <section className="relative overflow-hidden">
@@ -697,7 +630,7 @@ export default function HomePage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.35 }}
           >
-            <CopyInstructionsInline />
+            {agentType === "openclaw" && <CopyInstructionsInline />}
           </motion.div>
 
           {/* Stats row */}

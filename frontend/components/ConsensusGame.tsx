@@ -3060,20 +3060,6 @@ function ContinueScene({
 export default function ConsensusGame() {
   const [phase, setPhase] = useState<Phase>("intro");
   const prevPhaseRef = useRef<Phase>("intro");
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [muted, setMuted] = useState(false);
-
-  useEffect(() => {
-    const audio = new Audio("/crab_rave.mp3");
-    audio.loop = true;
-    audio.volume = 0.4;
-    audio.play().catch(() => {});
-    audioRef.current = audio;
-    return () => {
-      audio.pause();
-    };
-  }, []);
-
   // Game state
   const [question, setQuestion] = useState("");
   const [userOpinion, setUserOpinion] = useState("");
@@ -3714,42 +3700,6 @@ export default function ConsensusGame() {
         </AnimatePresence>
       </div>
 
-      {/* Mute button */}
-      <button
-        onPointerDown={(e) => {
-          e.preventDefault();
-          const audio = audioRef.current;
-          if (!audio) return;
-          if (muted) { audio.volume = 0.4; audio.play().catch(() => {}); }
-          else { audio.volume = 0; }
-          setMuted(!muted);
-        }}
-        style={{
-          position: "fixed",
-          bottom: "max(20px, env(safe-area-inset-bottom, 0px))",
-          right: 20,
-          zIndex: 200,
-          width: 44,
-          height: 44,
-          borderRadius: "50%",
-          border: "1.5px solid rgba(0,0,0,0.1)",
-          background: "rgba(255,252,247,1)",
-          backdropFilter: "blur(8px)",
-          WebkitBackdropFilter: "blur(8px)",
-          cursor: "pointer",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: 18,
-          boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-          touchAction: "manipulation",
-          WebkitTapHighlightColor: "transparent",
-          userSelect: "none",
-        }}
-        aria-label={muted ? "Unmute" : "Mute"}
-      >
-        {muted ? "🔇" : "🔊"}
-      </button>
     </>
   );
 }
