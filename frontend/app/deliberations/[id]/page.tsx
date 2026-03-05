@@ -1460,48 +1460,64 @@ export default function LiveDeliberationPage() {
         )}
       </AnimatePresence>
 
-      {/* Setup prompt for bare agents */}
+      {/* Setup prompt modal for bare agents */}
       <AnimatePresence>
         {showSetupPrompt && (
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 20 }}
-            style={{
-              position: "fixed", bottom: 90, left: "50%", transform: "translateX(-50%)",
-              zIndex: 1000, background: "#fff", borderRadius: 16,
-              padding: "16px 20px", boxShadow: "0 4px 24px rgba(0,0,0,0.12)",
-              border: "1.5px solid rgba(200,74,32,0.15)",
-              display: "flex", alignItems: "center", gap: 14, maxWidth: 480,
-            }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
           >
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, color: "#333", marginBottom: 4 }}>
-                Your agent just represented you!
-              </div>
-              <div style={{ fontSize: 12, color: "#888" }}>
-                Set up its profile so it can do even better next time.
-              </div>
-            </div>
-            <Link
-              href="/create-agent"
-              style={{
-                padding: "8px 16px", borderRadius: 999, border: "none",
-                background: "#c84a20", color: "#fff", fontSize: 12,
-                fontWeight: 600, textDecoration: "none", whiteSpace: "nowrap",
-              }}
-            >
-              Set up my agent
-            </Link>
-            <button
+            <motion.div
+              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
               onClick={() => setShowSetupPrompt(false)}
-              style={{
-                background: "none", border: "none", cursor: "pointer",
-                fontSize: 18, color: "#ccc", padding: 0, lineHeight: 1,
-              }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            />
+            <motion.div
+              className="relative w-full max-w-md overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl"
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              transition={{ duration: 0.2 }}
             >
-              ×
-            </button>
+              <button
+                onClick={() => setShowSetupPrompt(false)}
+                className="absolute right-3 top-3 rounded-full p-1.5 text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-600"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+
+              <div className="p-8 text-center">
+                <div className="mb-3 text-4xl">🦞</div>
+                <h2 className="font-handwritten text-2xl font-bold text-stone-800">
+                  Your agent just represented you!
+                </h2>
+                <p className="mt-2 mb-6 text-sm leading-relaxed text-stone-500">
+                  Set up its profile so it can do even better next time.
+                </p>
+
+                <Link
+                  href="/create-agent"
+                  onClick={() => setShowSetupPrompt(false)}
+                  className="inline-flex items-center justify-center gap-2 rounded-full bg-red-500 px-8 py-3 text-sm font-semibold text-white shadow-sm transition-all hover:bg-red-600 hover:shadow-md active:scale-[0.98]"
+                >
+                  Set up my agent
+                </Link>
+
+                <button
+                  onClick={() => setShowSetupPrompt(false)}
+                  className="mt-4 block w-full text-sm text-stone-400 transition-colors hover:text-stone-600"
+                >
+                  Skip for now
+                </button>
+              </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
