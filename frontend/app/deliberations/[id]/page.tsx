@@ -968,7 +968,7 @@ export default function LiveDeliberationPage() {
       <div style={{
         position: "fixed", top: 64, left: 0, right: 0, bottom: 0, zIndex: 50,
         background: "#faf7f0",
-        color: "#1a1a1a", fontFamily: "'DM Sans', sans-serif",
+        color: "#1a1a1a", fontFamily: "var(--font-dm-sans), sans-serif",
         display: "flex", flexDirection: "column",
       }}>
         <BubbleField />
@@ -1343,7 +1343,7 @@ export default function LiveDeliberationPage() {
                     <div style={{
                       fontSize: 12, lineHeight: 1.6, color: "#555", marginBottom: 12,
                     }} className="prose-compact">
-                      &ldquo;<ReactMarkdown>{a.opinion}</ReactMarkdown>&rdquo;
+                      <ReactMarkdown>{`\u201C${a.opinion}\u201D`}</ReactMarkdown>
                     </div>
                   )}
 

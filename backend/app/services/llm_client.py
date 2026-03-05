@@ -8,6 +8,7 @@ Automatically logs all calls (including cost) to llm_traces table for monitoring
 
 import json
 import logging
+import re
 import time
 from dataclasses import dataclass, field
 from typing import Optional
@@ -16,6 +17,17 @@ from uuid import UUID
 from openai import OpenAI
 
 from app.config import settings
+
+
+def sanitize_llm_text(text: str) -> str:
+    """Strip control characters from LLM output to prevent storage corruption.
+
+    Preserves newlines, tabs, and carriage returns. Removes all other
+    C0/C1 control characters (U+0000-U+001F except \\t\\n\\r, and U+007F-U+009F).
+    """
+    if not text:
+        return text
+    return re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]', '', text)
 
 logger = logging.getLogger(__name__)
 
@@ -117,7 +129,7 @@ class LLMClient:
         try:
             response = self._client.chat.completions.create(**kwargs)
             latency_ms = int((time.time() - start_time) * 1000)
-            output_text = response.choices[0].message.content or ""
+            output_text = sanitize_llm_text(response.choices[0].message.content or "")
 
             # Extract token counts if available
             usage = getattr(response, 'usage', None)
@@ -183,7 +195,7 @@ class LLMClient:
             response = self._client.chat.completions.create(**kwargs)
             latency_ms = int((time.time() - start_time) * 1000)
             message = response.choices[0].message
-            output_text = message.content or ""
+            output_text = sanitize_llm_text(message.content or "")
 
             usage = getattr(response, 'usage', None)
             tokens_in = usage.prompt_tokens if usage else None
@@ -278,8 +290,10 @@ class LLMClient:
 
                 # Text content
                 if delta.content:
-                    accumulated.append(delta.content)
-                    yield ("text", delta.content)
+                    clean = sanitize_llm_text(delta.content)
+                    if clean:
+                        accumulated.append(clean)
+                        yield ("text", clean)
 
                 # Tool calls (arrive incrementally across chunks)
                 if hasattr(delta, 'tool_calls') and delta.tool_calls:
