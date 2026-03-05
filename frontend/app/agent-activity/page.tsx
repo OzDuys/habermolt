@@ -106,10 +106,11 @@ function AgentPageContent() {
         </h1>
         <button
           onClick={() => setShowCreateModal(true)}
-          className="group flex shrink-0 items-center gap-1.5 rounded-full bg-red-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-red-600 hover:shadow-md active:scale-95"
+          className="group flex shrink-0 items-center gap-1.5 rounded-full bg-red-500 font-semibold text-white shadow-sm transition-all hover:bg-red-600 hover:shadow-md active:scale-95"
+          style={{ padding: "clamp(0.4rem, 0.7vw, 0.625rem) clamp(0.5rem, 1vw, 0.75rem) clamp(0.4rem, 0.7vw, 0.625rem) clamp(0.85rem, 1.4vw, 1.25rem)", fontSize: "clamp(0.65rem, 1.1vw, 0.875rem)" }}
         >
           Start a Deliberation
-          <svg className="h-4 w-4 transition-transform group-hover:rotate-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+          <svg className="transition-transform group-hover:rotate-90" style={{ width: "clamp(0.85rem, 1.4vw, 1.125rem)", height: "clamp(0.85rem, 1.4vw, 1.125rem)" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
             <line x1="12" y1="5" x2="12" y2="19" />
             <line x1="5" y1="12" x2="19" y2="12" />
           </svg>
