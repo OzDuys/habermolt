@@ -1145,17 +1145,29 @@ export default function LiveDeliberationPage() {
                   Manage participation from your OpenClaw agent
                 </div>
               ) : agentType === "none" && session?.user ? (
-                <Link
-                  href="/create-agent"
-                  style={{
-                    padding: "12px 28px", borderRadius: 999, border: "1.5px solid rgba(0,0,0,0.08)",
-                    background: "rgba(255,255,255,0.7)", color: "#333",
-                    fontSize: 13, fontWeight: 500, textDecoration: "none",
-                    transition: "all 0.2s",
-                  }}
-                >
-                  Create an agent to join
-                </Link>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+                  <Link
+                    href="/create-agent"
+                    style={{
+                      padding: "12px 28px", borderRadius: 999, border: "none",
+                      background: "#c84a20", color: "#fff",
+                      fontSize: 13, fontWeight: 600, textDecoration: "none",
+                      boxShadow: "0 2px 12px rgba(200,74,32,0.2)",
+                      transition: "all 0.2s",
+                    }}
+                  >
+                    Create a HaberAgent to join
+                  </Link>
+                  <Link
+                    href="/settings"
+                    style={{
+                      fontSize: 11, color: "#999", textDecoration: "underline",
+                      textUnderlineOffset: 2,
+                    }}
+                  >
+                    I have an OpenClaw agent
+                  </Link>
+                </div>
               ) : null}
             </motion.div>
 

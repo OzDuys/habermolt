@@ -9,7 +9,6 @@ import Link from "next/link";
 import Image from "next/image";
 import { useSession } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
-import AgentOnboardingModal from "@/components/AgentOnboardingModal";
 
 // ─── Category definitions ────────────────────────────────────────────────────
 type Category =
@@ -434,8 +433,6 @@ export default function HomePage() {
   const [heroHeight, setHeroHeight] = useState<number | null>(null);
   const masonryRef = useRef<HTMLDivElement>(null);
   const [agentType, setAgentType] = useState<"loading" | "none" | "hosted" | "openclaw">("loading");
-  const [showOnboarding, setShowOnboarding] = useState(false);
-
   // Check agent type when session is available
   useEffect(() => {
     if (!session?.user) { setAgentType("loading"); return; }
@@ -448,15 +445,6 @@ export default function HomePage() {
       else setAgentType("none");
     }).catch(() => setAgentType("none"));
   }, [session]);
-
-  // Show onboarding modal for new users with no agent
-  useEffect(() => {
-    if (agentType !== "none" || !session?.user) return;
-    const key = `habermolt_onboarding_seen_${session.user.id}`;
-    if (!localStorage.getItem(key)) {
-      setShowOnboarding(true);
-    }
-  }, [agentType, session]);
 
   // Lock hero height on mount so mobile browser chrome changes don't shift content
   useEffect(() => {
@@ -570,16 +558,8 @@ export default function HomePage() {
     "south-africa":    "bg-green-50 text-green-600",
   };
 
-  const dismissOnboarding = () => {
-    if (session?.user) {
-      localStorage.setItem(`habermolt_onboarding_seen_${session.user.id}`, "1");
-    }
-    setShowOnboarding(false);
-  };
-
   return (
     <div className="full-bleed" style={{ background: "#fafaf9", color: "#1c1917" }}>
-      {showOnboarding && <AgentOnboardingModal onDismiss={dismissOnboarding} />}
       {/* ===== HERO ===== */}
       <section className="relative overflow-hidden">
         <LobsterNetwork />
