@@ -712,32 +712,30 @@ export default function HomePage() {
               </h2>
               <div className="flex shrink-0 items-center gap-2">
                 {/* Public / Private toggle */}
-                {session?.user && privateDelibs.length > 0 && (
-                  <div className="flex items-center gap-0.5 rounded-full bg-stone-100 p-0.5">
-                    <button
-                      onClick={() => setViewMode("public")}
-                      className={`rounded-full font-medium transition-all ${
-                        viewMode === "public"
-                          ? "bg-white text-stone-800 shadow-sm"
-                          : "text-stone-500 hover:text-stone-700"
-                      }`}
-                      style={{ padding: "clamp(0.25rem, 0.5vw, 0.375rem) clamp(0.75rem, 1.2vw, 1rem)", fontSize: "clamp(0.65rem, 1.1vw, 0.875rem)" }}
-                    >
-                      Public
-                    </button>
-                    <button
-                      onClick={() => setViewMode("private")}
-                      className={`rounded-full font-medium transition-all ${
-                        viewMode === "private"
-                          ? "bg-white text-stone-800 shadow-sm"
-                          : "text-stone-500 hover:text-stone-700"
-                      }`}
-                      style={{ padding: "clamp(0.25rem, 0.5vw, 0.375rem) clamp(0.75rem, 1.2vw, 1rem)", fontSize: "clamp(0.65rem, 1.1vw, 0.875rem)" }}
-                    >
-                      Private
-                    </button>
-                  </div>
-                )}
+                <div className="flex items-center gap-0.5 rounded-full bg-stone-100 p-0.5">
+                  <button
+                    onClick={() => setViewMode("public")}
+                    className={`rounded-full font-medium transition-all ${
+                      viewMode === "public"
+                        ? "bg-white text-stone-800 shadow-sm"
+                        : "text-stone-500 hover:text-stone-700"
+                    }`}
+                    style={{ padding: "clamp(0.25rem, 0.5vw, 0.375rem) clamp(0.75rem, 1.2vw, 1rem)", fontSize: "clamp(0.65rem, 1.1vw, 0.875rem)" }}
+                  >
+                    Public
+                  </button>
+                  <button
+                    onClick={() => setViewMode("private")}
+                    className={`rounded-full font-medium transition-all ${
+                      viewMode === "private"
+                        ? "bg-white text-stone-800 shadow-sm"
+                        : "text-stone-500 hover:text-stone-700"
+                    }`}
+                    style={{ padding: "clamp(0.25rem, 0.5vw, 0.375rem) clamp(0.75rem, 1.2vw, 1rem)", fontSize: "clamp(0.65rem, 1.1vw, 0.875rem)" }}
+                  >
+                    Private
+                  </button>
+                </div>
                 <button
                   onClick={() => setShowCreateModal(true)}
                   className="group flex items-center gap-1.5 rounded-full bg-red-500 font-semibold text-white shadow-sm transition-all hover:bg-red-600 hover:shadow-md active:scale-95"
@@ -941,9 +939,16 @@ export default function HomePage() {
           ) : (
             /* Private deliberations view */
             <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-4">
-              {privateDelibs.length === 0 ? (
+              {!session?.user ? (
                 <div className="col-span-full rounded-xl bg-stone-100 p-16 text-center">
-                  <p className="text-sm text-stone-500">No private deliberations yet.</p>
+                  <p className="text-sm text-stone-500">Sign in to create and join private deliberations.</p>
+                  <Link href="/sign-in" className="mt-3 inline-block text-sm font-medium text-red-500 underline underline-offset-2 hover:text-red-700">
+                    Sign in &rarr;
+                  </Link>
+                </div>
+              ) : privateDelibs.length === 0 ? (
+                <div className="col-span-full rounded-xl bg-stone-100 p-16 text-center">
+                  <p className="text-sm text-stone-500">No private deliberations yet. Start one or join via an invite link.</p>
                 </div>
               ) : (
                 privateDelibs.map((d, i) => (
