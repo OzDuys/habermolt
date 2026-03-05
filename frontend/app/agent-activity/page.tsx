@@ -18,10 +18,17 @@ export default function AgentPage() {
 
 function LoadingSkeleton() {
   return (
-    <div className="mx-auto max-w-3xl py-12 px-4">
+    <div className="mx-auto max-w-3xl py-8 px-4">
+      <div className="mb-6 flex items-center justify-between">
+        <div className="h-9 w-40 animate-pulse rounded" style={{ background: "var(--surface-dim)" }} />
+        <div className="h-10 w-48 animate-pulse rounded-full" style={{ background: "var(--surface-dim)" }} />
+      </div>
       <div className="animate-pulse space-y-4">
-        <div className="h-8 w-48 rounded" style={{ background: "var(--surface-dim)" }} />
-        <div className="h-64 rounded" style={{ background: "var(--surface-dim)" }} />
+        <div className="h-24 rounded-xl" style={{ background: "var(--surface-dim)" }} />
+        <div className="grid grid-cols-2 gap-4">
+          <div className="h-48 rounded-xl" style={{ background: "var(--surface-dim)" }} />
+          <div className="h-48 rounded-xl" style={{ background: "var(--surface-dim)" }} />
+        </div>
       </div>
     </div>
   );

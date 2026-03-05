@@ -19,11 +19,13 @@ export default function ProfilePage() {
 
 function LoadingSkeleton() {
   return (
-    <div className="mx-auto max-w-3xl py-12 px-4">
+    <div className="mx-auto max-w-3xl py-8 px-4">
       <div className="animate-pulse space-y-4">
-        <div className="h-8 w-48 rounded" style={{ background: "var(--surface-dim)" }} />
-        <div className="h-4 w-64 rounded" style={{ background: "var(--surface-dim)" }} />
-        <div className="h-32 rounded" style={{ background: "var(--surface-dim)" }} />
+        <div className="mb-8 h-9 w-32 rounded" style={{ background: "var(--surface-dim)" }} />
+        <div className="h-48 rounded-xl" style={{ background: "var(--surface-dim)" }} />
+        <div className="h-px" style={{ background: "var(--border)" }} />
+        <div className="h-6 w-24 rounded" style={{ background: "var(--surface-dim)" }} />
+        <div className="h-24 rounded-xl" style={{ background: "var(--surface-dim)" }} />
       </div>
     </div>
   );
