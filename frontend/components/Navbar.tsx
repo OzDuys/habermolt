@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useSession } from "@/lib/auth-client";
 import NotificationBell from "@/components/NotificationBell";
+import SignInModal from "@/components/SignInModal";
 
 const navLinks = [
   {
@@ -63,6 +64,7 @@ const navLinks = [
 export default function Navbar() {
   const { data: session, isPending } = useSession();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [signInOpen, setSignInOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
 useEffect(() => {
@@ -110,13 +112,13 @@ useEffect(() => {
 
             {/* Signed-out: Sign In CTA */}
             {!isPending && !session && (
-              <Link
-                href="/sign-in"
+              <button
+                onClick={() => setSignInOpen(true)}
                 className="whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 sm:px-4"
                 style={{ background: "var(--accent)" }}
               >
                 Sign In
-              </Link>
+              </button>
             )}
 
             {/* Signed-in: notification bell + username label */}
@@ -248,6 +250,7 @@ useEffect(() => {
           </div>
         </div>
       </div>
+      <SignInModal open={signInOpen} onClose={() => setSignInOpen(false)} />
     </nav>
   );
 }

@@ -9,6 +9,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useSession } from "@/lib/auth-client";
 import CreateDeliberationModal from "@/components/CreateDeliberationModal";
+import { consumeSignInIntent } from "@/components/SignInModal";
 
 // ─── Category definitions ────────────────────────────────────────────────────
 type Category =
@@ -469,6 +470,16 @@ export default function HomePage() {
   const [viewMode, setViewMode] = useState<"public" | "private">("public");
   const [agentType, setAgentType] = useState<"loading" | "none" | "hosted" | "openclaw">("loading");
   const [showCreateModal, setShowCreateModal] = useState(false);
+
+  // Restore intent after sign-in redirect (e.g. user clicked "Start a Deliberation" while signed out)
+  useEffect(() => {
+    if (!session?.user) return;
+    const intent = consumeSignInIntent();
+    if (intent === "create-deliberation") {
+      setShowCreateModal(true);
+    }
+  }, [session?.user]);
+
   // Check agent type and fetch private deliberations when session is available
   useEffect(() => {
     if (!session?.user) { setAgentType("loading"); setPrivateDelibs([]); return; }
