@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Fuse from "fuse.js";
 import { api } from "@/lib/api";
-import type { Deliberation, StatsResponse } from "@/lib/types";
+import type { Deliberation, StatsResponse, PrivateDeliberationListItem } from "@/lib/types";
 import Link from "next/link";
 import Image from "next/image";
 import { useSession } from "@/lib/auth-client";
@@ -466,10 +466,11 @@ export default function HomePage() {
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [heroHeight, setHeroHeight] = useState<number | null>(null);
   const masonryRef = useRef<HTMLDivElement>(null);
+  const [privateDelibs, setPrivateDelibs] = useState<PrivateDeliberationListItem[]>([]);
   const [agentType, setAgentType] = useState<"loading" | "none" | "hosted" | "openclaw">("loading");
-  // Check agent type when session is available
+  // Check agent type and fetch private deliberations when session is available
   useEffect(() => {
-    if (!session?.user) { setAgentType("loading"); return; }
+    if (!session?.user) { setAgentType("loading"); setPrivateDelibs([]); return; }
     Promise.all([
       fetch("/api/backend/hosted-agents/me").then((res) => res.ok).catch(() => false),
       fetch("/api/backend/agents/me").then((res) => res.json()).then((data) => !!data.agent).catch(() => false),
@@ -478,6 +479,7 @@ export default function HomePage() {
       else if (openclaw) setAgentType("openclaw");
       else setAgentType("none");
     }).catch(() => setAgentType("none"));
+    api.getMyPrivateDeliberations().then((res) => setPrivateDelibs(res.deliberations)).catch(() => {});
   }, [session]);
 
   // Lock hero height on mount so mobile browser chrome changes don't shift content
@@ -910,6 +912,56 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+
+      {/* ===== PRIVATE DELIBERATIONS ===== */}
+      {session?.user && privateDelibs.length > 0 && (
+        <section style={{ background: "#fafaf9" }}>
+          <div className="mx-auto max-w-screen-2xl px-4 sm:w-[82%] sm:px-6" style={{ paddingTop: "clamp(2.5rem, 5vw, 5rem)", paddingBottom: "clamp(2.5rem, 5vw, 5rem)" }}>
+            <div style={{ marginBottom: "clamp(1rem, 2vw, 2rem)" }}>
+              <p className="font-semibold uppercase tracking-widest text-stone-400" style={{ marginBottom: "clamp(0.25rem, 0.5vw, 0.5rem)", fontSize: "clamp(0.6rem, 1vw, 0.75rem)" }}>
+                Invite only
+              </p>
+              <h2 className="font-handwritten tracking-tight text-stone-800" style={{ fontSize: "clamp(1.75rem, 4vw, 3rem)" }}>
+                Your private deliberations
+              </h2>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {privateDelibs.map((d) => (
+                <Link
+                  key={d.id}
+                  href={`/deliberations/${d.id}`}
+                  className="group block rounded-xl border border-stone-200 bg-white transition-all hover:-translate-y-0.5 hover:border-red-300 hover:shadow-lg"
+                  style={{ padding: "clamp(0.6rem, 1.5vw, 1.25rem)" }}
+                >
+                  <div className="flex items-center gap-2" style={{ marginBottom: "clamp(0.4rem, 0.8vw, 0.75rem)" }}>
+                    <span
+                      style={{ fontSize: "clamp(8px, 1vw, 11px)", padding: "clamp(1px, 0.3vw, 2px) clamp(4px, 0.8vw, 10px)" }}
+                      className="inline-flex rounded-full bg-amber-50 font-semibold text-amber-600"
+                    >
+                      Private
+                    </span>
+                    {d.is_creator && (
+                      <span
+                        style={{ fontSize: "clamp(8px, 1vw, 11px)", padding: "clamp(1px, 0.3vw, 2px) clamp(4px, 0.8vw, 10px)" }}
+                        className="inline-flex rounded-full bg-stone-100 font-semibold text-stone-500"
+                      >
+                        Creator
+                      </span>
+                    )}
+                  </div>
+                  <h3 className="font-semibold leading-snug text-stone-800 group-hover:text-red-600 group-hover:underline group-hover:decoration-1 group-hover:underline-offset-2" style={{ marginBottom: "clamp(0.3rem, 0.5vw, 0.5rem)", fontSize: "clamp(0.7rem, 1.3vw, 1rem)" }}>
+                    {d.question}
+                  </h3>
+                  <div className="flex items-center justify-between text-stone-500" style={{ fontSize: "clamp(0.55rem, 1vw, 0.75rem)" }}>
+                    <span>{d.participant_count} participants</span>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
     </div>
   );
 }
