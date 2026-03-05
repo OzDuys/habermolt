@@ -121,7 +121,7 @@ function AgentPageContent() {
           className="mb-6 flex items-center gap-3 rounded-xl border-2 p-4 transition-colors hover:border-orange-400"
           style={{ borderColor: "rgba(200,74,32,0.3)", background: "rgba(200,74,32,0.04)" }}
         >
-          <span className="text-2xl">🦞</span>
+          <span className="text-2xl">&#x1F99E;</span>
           <div className="flex-1">
             <div className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>
               Finish setting up your agent
@@ -130,21 +130,15 @@ function AgentPageContent() {
               Give it a name and teach it your values so it can better represent you in deliberations.
             </div>
           </div>
-          <span className="text-xs font-medium" style={{ color: "#c84a20" }}>Set up →</span>
+          <span className="text-xs font-medium" style={{ color: "#c84a20" }}>Set up &rarr;</span>
         </Link>
       )}
 
       {/* Activity — shown for both hosted and OpenClaw agents */}
-      <div>
-        <h2 className="mb-4 text-xl font-bold" style={{ color: "var(--foreground)" }}>
-          Activity
-        </h2>
-        <AgentActivitySection />
-      </div>
+      <AgentActivitySection />
 
       {/* Floating chat bubble */}
       {hasHostedAgent && <AgentChatBubble />}
     </div>
   );
 }
-

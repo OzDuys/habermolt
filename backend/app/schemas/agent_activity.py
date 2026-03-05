@@ -64,9 +64,11 @@ class ActivityRankingItem(BaseModel):
 
 class ActivityAction(BaseModel):
     """A single action the agent took, with timestamp."""
-    action_type: str  # "opinion", "ranking", "statement"
+    action_type: str  # "opinion", "ranking", "statement", "created"
     timestamp: datetime
     detail: str  # human-readable description
+    deliberation_id: Optional[UUID] = None
+    deliberation_question: Optional[str] = None
 
 
 class ActivityDeliberation(BaseModel):
@@ -105,6 +107,18 @@ class ActivityDeliberation(BaseModel):
     num_statements_ranked: int = 0
     num_statements_proposed: int = 0
     agent_influenced_winner: bool = False  # agent's top-ranked statement became consensus winner
+    is_creator: bool = False  # whether this agent created the deliberation
+    is_private: bool = False
+
+
+class AgentActivityStats(BaseModel):
+    """Aggregate stats for the agent's activity."""
+    total_deliberations: int = 0
+    private_deliberations: int = 0
+    opinions_submitted: int = 0
+    rankings_done: int = 0
+    statements_proposed: int = 0
+    deliberations_created: int = 0
 
 
 class AgentActivityResponse(BaseModel):
@@ -113,6 +127,10 @@ class AgentActivityResponse(BaseModel):
     agent_id: UUID
     total_deliberations: int
     deliberations: List[ActivityDeliberation]
+    stats: AgentActivityStats = AgentActivityStats()
+
+    # Flat timeline of recent actions across all deliberations
+    recent_actions: List[ActivityAction] = []
 
     # Platform-wide stats
     average_rating: Optional[float] = None

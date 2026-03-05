@@ -19,6 +19,8 @@ interface ActivityAction {
   action_type: string;
   timestamp: string;
   detail: string;
+  deliberation_id: string | null;
+  deliberation_question: string | null;
 }
 
 interface AgentRating {
@@ -68,6 +70,17 @@ interface ActivityDeliberation {
   num_statements_ranked: number;
   num_statements_proposed: number;
   agent_influenced_winner: boolean;
+  is_creator: boolean;
+  is_private: boolean;
+}
+
+interface AgentActivityStats {
+  total_deliberations: number;
+  private_deliberations: number;
+  opinions_submitted: number;
+  rankings_done: number;
+  statements_proposed: number;
+  deliberations_created: number;
 }
 
 interface AgentActivityData {
@@ -75,8 +88,49 @@ interface AgentActivityData {
   agent_id: string;
   total_deliberations: number;
   deliberations: ActivityDeliberation[];
+  stats: AgentActivityStats;
+  recent_actions: ActivityAction[];
   average_rating: number | null;
   total_ratings: number;
+}
+
+// --- Helpers ---
+
+const ACTION_ICONS: Record<string, string> = {
+  created: "\uD83D\uDE80",
+  opinion: "\uD83D\uDCAC",
+  ranking: "\uD83D\uDCCA",
+  statement: "\uD83D\uDCDD",
+};
+
+const ACTION_LABELS: Record<string, string> = {
+  created: "Started",
+  opinion: "Opinion",
+  ranking: "Ranked",
+  statement: "Proposed",
+};
+
+function formatRelativeTime(dateStr: string): string {
+  const now = Date.now();
+  const then = new Date(dateStr).getTime();
+  const diffMs = now - then;
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return "just now";
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDay = Math.floor(diffHr / 24);
+  if (diffDay < 7) return `${diffDay}d ago`;
+  return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function formatDate(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 // --- Helper components ---
@@ -91,7 +145,6 @@ function StarRating({
   interactive?: boolean;
 }) {
   const [hover, setHover] = useState(0);
-
   const Tag = interactive ? "button" : "span";
 
   return (
@@ -102,10 +155,7 @@ function StarRating({
           {...(interactive ? { type: "button" as const } : {})}
           className={`text-xl transition-colors ${interactive ? "cursor-pointer hover:scale-110" : "cursor-default"}`}
           style={{
-            color:
-              star <= (hover || rating)
-                ? "var(--accent)"
-                : "var(--border)",
+            color: star <= (hover || rating) ? "var(--accent)" : "var(--border)",
           }}
           onClick={(e: React.MouseEvent) => {
             if (interactive) {
@@ -116,7 +166,7 @@ function StarRating({
           onMouseEnter={() => interactive && setHover(star)}
           onMouseLeave={() => interactive && setHover(0)}
         >
-          ★
+          &#x2605;
         </Tag>
       ))}
     </div>
@@ -136,13 +186,6 @@ function RankBadge({ rank, label }: { rank: number | null; label: string }) {
       {label} #{rank}
     </span>
   );
-}
-
-function ActionIcon({ type }: { type: string }) {
-  if (type === "opinion") return <span title="Opinion">💬</span>;
-  if (type === "ranking") return <span title="Ranking">📊</span>;
-  if (type === "statement") return <span title="Statement">📝</span>;
-  return <span>•</span>;
 }
 
 function DimensionRating({
@@ -177,9 +220,77 @@ function DimensionRating({
             onMouseEnter={() => interactive && setHover(n)}
             onMouseLeave={() => interactive && setHover(0)}
           >
-            ★
+            &#x2605;
           </button>
         ))}
+      </div>
+    </div>
+  );
+}
+
+// --- Stats Bar ---
+
+function StatsBar({ stats }: { stats: AgentActivityStats }) {
+  const publicCount = stats.total_deliberations - stats.private_deliberations;
+
+  return (
+    <div
+      className="mb-6 grid grid-cols-2 gap-px overflow-hidden rounded-lg border sm:grid-cols-4"
+      style={{ borderColor: "var(--border)", background: "var(--border)" }}
+    >
+      {/* Deliberations — with public/private breakdown */}
+      <div
+        className="flex flex-col items-center py-3"
+        style={{ background: "var(--surface)" }}
+      >
+        <p className="text-xl font-semibold leading-none" style={{ color: "var(--foreground)" }}>
+          {stats.total_deliberations}
+        </p>
+        <p className="mt-1 text-[10px] uppercase tracking-wide" style={{ color: "var(--muted)" }}>
+          Deliberations
+        </p>
+        <p className="mt-0.5 text-[10px]" style={{ color: "var(--muted)" }}>
+          {publicCount} public &#183; {stats.private_deliberations} private
+        </p>
+      </div>
+
+      {/* Opinions submitted */}
+      <div
+        className="flex flex-col items-center py-3"
+        style={{ background: "var(--surface)" }}
+      >
+        <p className="text-xl font-semibold leading-none" style={{ color: "var(--foreground)" }}>
+          {stats.opinions_submitted}
+        </p>
+        <p className="mt-1 text-[10px] uppercase tracking-wide" style={{ color: "var(--muted)" }}>
+          Opinions submitted
+        </p>
+      </div>
+
+      {/* Consensus statements proposed */}
+      <div
+        className="flex flex-col items-center py-3"
+        style={{ background: "var(--surface)" }}
+      >
+        <p className="text-xl font-semibold leading-none" style={{ color: "var(--foreground)" }}>
+          {stats.statements_proposed}
+        </p>
+        <p className="mt-1 text-[10px] uppercase tracking-wide" style={{ color: "var(--muted)" }}>
+          Statements proposed
+        </p>
+      </div>
+
+      {/* Deliberations started */}
+      <div
+        className="flex flex-col items-center py-3"
+        style={{ background: "var(--surface)" }}
+      >
+        <p className="text-xl font-semibold leading-none" style={{ color: "var(--foreground)" }}>
+          {stats.deliberations_created}
+        </p>
+        <p className="mt-1 text-[10px] uppercase tracking-wide" style={{ color: "var(--muted)" }}>
+          Deliberations started
+        </p>
       </div>
     </div>
   );
@@ -209,95 +320,127 @@ function DeliberationCard({
   const [consensusUsefulness, setConsensusUsefulness] = useState(delib.my_consensus_rating?.usefulness || 0);
   const [consensusFeedback, setConsensusFeedback] = useState(delib.my_consensus_rating?.feedback || "");
 
-  const formatDate = (dateStr: string) =>
-    new Date(dateStr).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-
   return (
     <div
       className="rounded-lg border transition-shadow hover:shadow-md"
       style={{ borderColor: "var(--border)", background: "var(--surface)" }}
     >
-      {/* Header */}
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="flex w-full items-start gap-4 p-5 text-left"
-      >
-        <div className="min-w-0 flex-1">
-          {(delib.creator_agent_name || delib.created_at) && (
-            <p className="mb-1 text-xs" style={{ color: "var(--muted)" }}>
-              {delib.creator_agent_name && <>Started by {delib.creator_agent_name}</>}
-              {delib.creator_agent_name && delib.created_at && <> · </>}
-              {delib.created_at && new Date(delib.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-            </p>
-          )}
-
-          <h3 className="font-serif text-lg leading-snug" style={{ color: "var(--foreground)" }}>
-            {delib.question}
-          </h3>
-
-          <div className="mt-2 flex flex-wrap items-center gap-1.5">
-            {delib.categories.map((cat) => (
+      <div className="p-4">
+        {/* Badges */}
+        {(delib.is_private || delib.is_creator || delib.agent_influenced_winner) && (
+          <div className="mb-1.5 flex flex-wrap gap-1.5">
+            {delib.is_private && (
               <span
-                key={cat}
-                className="rounded-full px-2 py-0.5 text-xs"
+                className="rounded-full px-2 py-0.5 text-[10px] font-medium"
                 style={{ background: "var(--surface-dim)", color: "var(--muted)" }}
               >
-                {cat}
+                Private
               </span>
-            ))}
+            )}
+            {delib.is_creator && (
+              <span
+                className="rounded-full px-2 py-0.5 text-[10px] font-medium"
+                style={{ background: "var(--accent-light)", color: "var(--accent)" }}
+              >
+                Created by you
+              </span>
+            )}
             {delib.agent_influenced_winner && (
               <span
-                className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium"
+                className="rounded-full px-2 py-0.5 text-[10px] font-medium"
                 style={{ background: "var(--accent-light)", color: "var(--accent)" }}
               >
                 Influenced winner
               </span>
             )}
-            {delib.my_rating && (
-              <span className="flex items-center gap-1 rounded-full px-2 py-0.5 text-xs" style={{ background: "var(--surface-dim)", color: "var(--muted)" }}>
-                <StarRating rating={delib.my_rating.rating} /> rated
-              </span>
-            )}
           </div>
+        )}
+
+        {/* Title — clearly a link */}
+        <Link
+          href={`/deliberations/${delib.deliberation_id}`}
+          className="block font-serif text-[15px] leading-snug underline decoration-transparent transition-all hover:decoration-current"
+          style={{ color: "var(--accent)" }}
+        >
+          {delib.question}
+        </Link>
+
+        {/* Categories */}
+        {delib.categories.length > 0 && (
+          <div className="mt-1.5 flex flex-wrap gap-1">
+            {delib.categories.map((cat) => (
+              <span
+                key={cat}
+                className="rounded-full px-1.5 py-0.5 text-[10px]"
+                style={{ background: "var(--surface-dim)", color: "var(--muted)" }}
+              >
+                {cat}
+              </span>
+            ))}
+            <span className="text-[10px]" style={{ color: "var(--muted)" }}>
+              &#183; {delib.num_agents} agents
+            </span>
+          </div>
+        )}
+
+        {/* Actions timeline — each with its own timestamp */}
+        <div className="mt-3 space-y-1">
+          {delib.actions.map((action, i) => (
+            <div
+              key={`${action.action_type}-${i}`}
+              className="flex items-center gap-2 text-xs"
+            >
+              <span className="w-4 text-center text-sm leading-none">
+                {ACTION_ICONS[action.action_type] || "\u26A1"}
+              </span>
+              <span className="font-medium" style={{ color: "var(--foreground)" }}>
+                {ACTION_LABELS[action.action_type] || action.action_type}
+              </span>
+              {action.action_type === "ranking" && (
+                <span style={{ color: "var(--muted)" }}>
+                  {delib.num_statements_ranked} statements
+                </span>
+              )}
+              {action.action_type === "statement" && (
+                <span className="min-w-0 truncate" style={{ color: "var(--muted)" }}>
+                  {action.detail.replace(/^Proposed statement: "?/, "").replace(/"$/, "")}
+                </span>
+              )}
+              <span className="ml-auto shrink-0" style={{ color: "var(--muted)" }}>
+                {formatRelativeTime(action.timestamp)}
+              </span>
+            </div>
+          ))}
+          {delib.actions.length === 0 && (
+            <p className="text-xs" style={{ color: "var(--muted)" }}>
+              No agent activity yet
+            </p>
+          )}
         </div>
 
-        <div className="flex shrink-0 items-center gap-4">
-          <div className="flex gap-3 text-center">
-            <div>
-              <p className="text-lg font-semibold leading-none" style={{ color: "var(--foreground)" }}>{delib.num_agents}</p>
-              <p className="mt-0.5 text-[10px] uppercase tracking-wide" style={{ color: "var(--muted)" }}>agents</p>
-            </div>
-            <div>
-              <p className="text-lg font-semibold leading-none" style={{ color: "var(--foreground)" }}>{delib.num_statements_ranked}</p>
-              <p className="mt-0.5 text-[10px] uppercase tracking-wide" style={{ color: "var(--muted)" }}>ranked</p>
-            </div>
-            <div>
-              <p className="text-lg font-semibold leading-none" style={{ color: "var(--foreground)" }}>{delib.num_statements_proposed}</p>
-              <p className="mt-0.5 text-[10px] uppercase tracking-wide" style={{ color: "var(--muted)" }}>proposed</p>
-            </div>
-          </div>
-
+        {/* Expand toggle */}
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="mt-3 flex items-center gap-1 text-xs font-medium transition-opacity hover:opacity-80"
+          style={{ color: "var(--muted)" }}
+        >
+          {expanded ? "Hide details" : "Details"}
           <svg
-            className="h-5 w-5 shrink-0 transition-transform duration-200"
-            style={{ color: "var(--muted)", transform: expanded ? "rotate(180deg)" : "rotate(0deg)" }}
+            className="h-3 w-3 transition-transform duration-200"
+            style={{ transform: expanded ? "rotate(180deg)" : "rotate(0deg)" }}
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
-            strokeWidth={2}
+            strokeWidth={2.5}
           >
             <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
           </svg>
-        </div>
-      </button>
+        </button>
+      </div>
 
       {/* Expanded content */}
       {expanded && (
-        <div className="border-t px-5 pb-5" style={{ borderColor: "var(--border)" }}>
+        <div className="border-t px-4 pb-4" style={{ borderColor: "var(--border)" }}>
           {/* Current winning statement */}
           {delib.winning_statement_text && (
             <div className="mt-4">
@@ -436,22 +579,6 @@ function DeliberationCard({
             </div>
           )}
 
-          {/* Timeline */}
-          {delib.actions.length > 0 && (
-            <div className="mt-5">
-              <h4 className="mb-2 text-sm font-semibold" style={{ color: "var(--foreground)" }}>Timeline</h4>
-              <div className="space-y-1.5">
-                {delib.actions.map((action, i) => (
-                  <div key={i} className="flex items-start gap-2 text-xs">
-                    <ActionIcon type={action.action_type} />
-                    <span style={{ color: "var(--muted)" }}>{formatDate(action.timestamp)}</span>
-                    <span style={{ color: "var(--foreground)" }}>{action.detail}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
           {/* Rating section */}
           <div className="mt-5 border-t pt-4" style={{ borderColor: "var(--border)" }}>
             {!showRating && !delib.my_rating ? (
@@ -488,16 +615,6 @@ function DeliberationCard({
             )}
           </div>
 
-          {/* Link to full deliberation */}
-          <div className="mt-4">
-            <Link
-              href={`/deliberations/${delib.deliberation_id}`}
-              className="text-sm font-medium transition-opacity hover:opacity-80"
-              style={{ color: "var(--accent)" }}
-            >
-              View full deliberation →
-            </Link>
-          </div>
         </div>
       )}
     </div>
@@ -583,8 +700,11 @@ export default function AgentActivitySection() {
   if (loading) {
     return (
       <div className="animate-pulse space-y-4">
-        <div className="h-8 w-64 rounded" style={{ background: "var(--surface-dim)" }} />
-        <div className="h-40 rounded" style={{ background: "var(--surface-dim)" }} />
+        <div className="h-16 rounded-lg" style={{ background: "var(--surface-dim)" }} />
+        <div className="grid grid-cols-2 gap-3">
+          <div className="h-40 rounded-lg" style={{ background: "var(--surface-dim)" }} />
+          <div className="h-40 rounded-lg" style={{ background: "var(--surface-dim)" }} />
+        </div>
       </div>
     );
   }
@@ -601,44 +721,10 @@ export default function AgentActivitySection() {
 
   return (
     <div>
-      <p className="mb-4 text-sm" style={{ color: "var(--muted)" }}>
-        Everything your agent ({activity.agent_name}) has done across{" "}
-        {activity.total_deliberations} deliberation
-        {activity.total_deliberations !== 1 ? "s" : ""}.
-      </p>
-
       {/* Stats bar */}
-      <div
-        className="mb-6 flex flex-wrap items-center gap-4 rounded-lg border p-4"
-        style={{ borderColor: "var(--border)", background: "var(--surface)" }}
-      >
-        <div>
-          <p className="text-xs" style={{ color: "var(--muted)" }}>Deliberations</p>
-          <p className="text-2xl font-semibold" style={{ color: "var(--foreground)" }}>{activity.total_deliberations}</p>
-        </div>
-        <div className="h-8 w-px" style={{ background: "var(--border)" }} />
-        <div>
-          <p className="text-xs" style={{ color: "var(--muted)" }}>Your ratings</p>
-          <p className="text-2xl font-semibold" style={{ color: "var(--foreground)" }}>
-            {activity.deliberations.filter((d) => d.my_rating).length}
-          </p>
-        </div>
-        {activity.average_rating !== null && (
-          <>
-            <div className="h-8 w-px" style={{ background: "var(--border)" }} />
-            <div>
-              <p className="text-xs" style={{ color: "var(--muted)" }}>Platform avg rating</p>
-              <div className="flex items-center gap-1">
-                <p className="text-2xl font-semibold" style={{ color: "var(--foreground)" }}>{activity.average_rating}</p>
-                <span style={{ color: "var(--accent)" }}>★</span>
-                <span className="text-xs" style={{ color: "var(--muted)" }}>({activity.total_ratings} ratings)</span>
-              </div>
-            </div>
-          </>
-        )}
-      </div>
+      <StatsBar stats={activity.stats} />
 
-      {/* Deliberation cards */}
+      {/* Deliberation cards — 2-column grid */}
       {activity.total_deliberations === 0 ? (
         <div className="rounded-lg border p-8 text-center" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
           <p className="text-sm" style={{ color: "var(--muted)" }}>
@@ -646,7 +732,7 @@ export default function AgentActivitySection() {
           </p>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="grid gap-3 sm:grid-cols-2">
           {activity.deliberations.map((delib) => (
             <DeliberationCard
               key={delib.deliberation_id}

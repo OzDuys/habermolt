@@ -3,6 +3,7 @@ API routes for agent management.
 """
 
 import logging
+from datetime import datetime
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from slowapi import Limiter
@@ -21,7 +22,7 @@ from app.schemas import (
     UserProfileResponse, RefreshApiKeyResponse, AgentResponse,
     AgentRatingRequest, AgentRatingResponse,
     ConsensusRatingRequest, ConsensusRatingResponse,
-    AgentActivityResponse, ActivityDeliberation, ActivityRankingItem, ActivityAction,
+    AgentActivityResponse, AgentActivityStats, ActivityDeliberation, ActivityRankingItem, ActivityAction,
 )
 from app.services.auth_service import (
     create_agent_with_api_key, claim_agent_for_user, unlink_agent,
@@ -241,54 +242,65 @@ async def get_agent_activity(
 
     deliberation_ids = [o.deliberation_id for o in opinions]
 
+    # Also find deliberations created by this agent (may not have opinions yet)
+    created_deliberations = (
+        db.query(Deliberation)
+        .options(joinedload(Deliberation.creator))
+        .filter(Deliberation.created_by_agent_id == agent.id)
+        .all()
+    )
+    created_delib_ids = {d.id for d in created_deliberations}
+    # Merge IDs
+    all_delib_ids = list(set(deliberation_ids) | created_delib_ids)
+
     # Batch load all related data (eagerly load creator for name)
     deliberations = {
         d.id: d
         for d in db.query(Deliberation)
         .options(joinedload(Deliberation.creator))
-        .filter(Deliberation.id.in_(deliberation_ids))
+        .filter(Deliberation.id.in_(all_delib_ids))
         .all()
-    } if deliberation_ids else {}
+    } if all_delib_ids else {}
 
     rankings = {
         r.deliberation_id: r
         for r in db.query(Ranking)
-        .filter(Ranking.agent_id == agent.id, Ranking.deliberation_id.in_(deliberation_ids))
+        .filter(Ranking.agent_id == agent.id, Ranking.deliberation_id.in_(all_delib_ids))
         .all()
-    } if deliberation_ids else {}
+    } if all_delib_ids else {}
 
     # All statements for these deliberations (need them for ranking comparison)
     all_statements = {}
-    if deliberation_ids:
-        for s in db.query(Statement).filter(Statement.deliberation_id.in_(deliberation_ids)).all():
+    if all_delib_ids:
+        for s in db.query(Statement).filter(Statement.deliberation_id.in_(all_delib_ids)).all():
             all_statements.setdefault(s.deliberation_id, {})[s.id] = s
 
     # Agent's proposed statements
     proposed = {}
-    if deliberation_ids:
+    if all_delib_ids:
         for s in (
             db.query(Statement)
-            .filter(Statement.contributed_by_agent_id == agent.id, Statement.deliberation_id.in_(deliberation_ids))
+            .filter(Statement.contributed_by_agent_id == agent.id, Statement.deliberation_id.in_(all_delib_ids))
             .all()
         ):
             proposed.setdefault(s.deliberation_id, []).append(s)
 
     # Existing ratings by this user
     existing_ratings = {}
-    if deliberation_ids:
+    if all_delib_ids:
         for r in (
             db.query(AgentRating)
-            .filter(AgentRating.agent_id == agent.id, AgentRating.deliberation_id.in_(deliberation_ids))
+            .filter(AgentRating.agent_id == agent.id, AgentRating.deliberation_id.in_(all_delib_ids))
             .all()
         ):
             existing_ratings[r.deliberation_id] = r
 
     # Existing consensus ratings by this user
     existing_consensus_ratings = {}
-    if deliberation_ids:
+    if all_delib_ids:
         for cr in (
             db.query(ConsensusRating)
-            .filter(ConsensusRating.user_id == user_id, ConsensusRating.deliberation_id.in_(deliberation_ids))
+            .filter(ConsensusRating.user_id == user_id, ConsensusRating.deliberation_id.in_(all_delib_ids))
             .all()
         ):
             existing_consensus_ratings[cr.deliberation_id] = cr
@@ -297,18 +309,21 @@ async def get_agent_activity(
     avg_rating = db.query(func.avg(AgentRating.rating)).scalar()
     total_ratings = db.query(func.count(AgentRating.id)).scalar() or 0
 
-    # Build response
-    activity_deliberations = []
-    for opinion in opinions:
-        delib = deliberations.get(opinion.deliberation_id)
-        if not delib:
-            continue
+    # Build opinion lookup by deliberation
+    opinion_by_delib = {o.deliberation_id: o for o in opinions}
 
+    # Build response — iterate over all deliberations (participated + created)
+    activity_deliberations = []
+    all_actions_flat = []  # for the cross-deliberation timeline
+
+    for delib_id, delib in deliberations.items():
+        opinion = opinion_by_delib.get(delib_id)
         ranking = rankings.get(delib.id)
         delib_statements = all_statements.get(delib.id, {})
         delib_proposed = proposed.get(delib.id, [])
         existing_rating = existing_ratings.get(delib.id)
         existing_consensus_rating = existing_consensus_ratings.get(delib.id)
+        is_creator = delib.created_by_agent_id == agent.id
 
         # Build ranking comparison items
         ranking_items = []
@@ -338,23 +353,46 @@ async def get_agent_activity(
 
         # Build timeline
         actions = []
-        actions.append(ActivityAction(
-            action_type="opinion",
-            timestamp=opinion.submitted_at,
-            detail=f"Submitted opinion: \"{opinion.opinion_text[:100]}{'...' if len(opinion.opinion_text) > 100 else ''}\"",
-        ))
+        if is_creator and delib.created_at:
+            action = ActivityAction(
+                action_type="created",
+                timestamp=delib.created_at,
+                detail=f"Started deliberation: \"{delib.question[:100]}\"",
+                deliberation_id=delib.id,
+                deliberation_question=delib.question,
+            )
+            actions.append(action)
+            all_actions_flat.append(action)
+        if opinion:
+            action = ActivityAction(
+                action_type="opinion",
+                timestamp=opinion.submitted_at,
+                detail=f"Submitted opinion: \"{opinion.opinion_text[:100]}{'...' if len(opinion.opinion_text) > 100 else ''}\"",
+                deliberation_id=delib.id,
+                deliberation_question=delib.question,
+            )
+            actions.append(action)
+            all_actions_flat.append(action)
         if ranking:
-            actions.append(ActivityAction(
+            action = ActivityAction(
                 action_type="ranking",
                 timestamp=ranking.submitted_at,
                 detail=f"Ranked {len(ranking.statement_rankings)} statements",
-            ))
+                deliberation_id=delib.id,
+                deliberation_question=delib.question,
+            )
+            actions.append(action)
+            all_actions_flat.append(action)
         for stmt in delib_proposed:
-            actions.append(ActivityAction(
+            action = ActivityAction(
                 action_type="statement",
                 timestamp=stmt.generated_at,
                 detail=f"Proposed statement: \"{stmt.title or stmt.statement_text[:60]}\"",
-            ))
+                deliberation_id=delib.id,
+                deliberation_question=delib.question,
+            )
+            actions.append(action)
+            all_actions_flat.append(action)
         actions.sort(key=lambda a: a.timestamp)
 
         # Check if agent influenced the winner
@@ -373,8 +411,8 @@ async def get_agent_activity(
             winning_statement_title=winner_stmt.title if winner_stmt else None,
             winning_statement_text=winner_stmt.statement_text if winner_stmt else None,
             created_at=delib.created_at,
-            opinion_text=opinion.opinion_text,
-            opinion_submitted_at=opinion.submitted_at,
+            opinion_text=opinion.opinion_text if opinion else None,
+            opinion_submitted_at=opinion.submitted_at if opinion else None,
             rankings=ranking_items,
             proposed_statements=[
                 {
@@ -391,13 +429,36 @@ async def get_agent_activity(
             num_statements_ranked=len(ranking_items),
             num_statements_proposed=len(delib_proposed),
             agent_influenced_winner=agent_influenced,
+            is_creator=is_creator,
+            is_private=delib.is_private,
         ))
+
+    # Sort deliberations by most recent activity
+    activity_deliberations.sort(
+        key=lambda d: max((a.timestamp for a in d.actions), default=d.created_at or datetime.min),
+        reverse=True,
+    )
+
+    # Sort flat timeline by timestamp descending (most recent first)
+    all_actions_flat.sort(key=lambda a: a.timestamp, reverse=True)
+
+    # Compute aggregate stats
+    stats = AgentActivityStats(
+        total_deliberations=len(activity_deliberations),
+        private_deliberations=sum(1 for d in deliberations.values() if d.is_private),
+        opinions_submitted=sum(1 for d in activity_deliberations if d.opinion_text),
+        rankings_done=sum(1 for d in activity_deliberations if d.num_statements_ranked > 0),
+        statements_proposed=sum(d.num_statements_proposed for d in activity_deliberations),
+        deliberations_created=sum(1 for d in activity_deliberations if d.is_creator),
+    )
 
     return AgentActivityResponse(
         agent_name=agent.name,
         agent_id=agent.id,
         total_deliberations=len(activity_deliberations),
         deliberations=activity_deliberations,
+        stats=stats,
+        recent_actions=all_actions_flat,
         average_rating=round(float(avg_rating), 2) if avg_rating else None,
         total_ratings=total_ratings,
     )
