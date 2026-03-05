@@ -322,10 +322,10 @@ function DeliberationCard({
 
   return (
     <div
-      className="rounded-lg border transition-shadow hover:shadow-md"
+      className="min-w-0 rounded-lg border transition-shadow hover:shadow-md"
       style={{ borderColor: "var(--border)", background: "var(--surface)" }}
     >
-      <div className="p-3 sm:p-4">
+      <div className="min-w-0 p-3 sm:p-4">
         {/* Badges */}
         {(delib.is_private || delib.is_creator || delib.agent_influenced_winner) && (
           <div className="mb-1.5 flex flex-wrap gap-1.5">
@@ -359,7 +359,7 @@ function DeliberationCard({
         {/* Title — clearly a link */}
         <Link
           href={`/deliberations/${delib.deliberation_id}`}
-          className="block text-sm font-semibold leading-snug text-stone-800 hover:text-red-600 hover:underline hover:decoration-1 hover:underline-offset-2 sm:text-base"
+          className="block text-sm font-semibold leading-snug text-stone-800 hover:text-red-600 hover:underline hover:decoration-1 hover:underline-offset-2 sm:text-base line-clamp-2 break-words"
         >
           {delib.question}
         </Link>
