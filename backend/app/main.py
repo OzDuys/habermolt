@@ -123,6 +123,7 @@ async def root():
 # Include API routers
 app.include_router(agent_status.router, prefix=settings.API_V1_PREFIX)
 app.include_router(agents.router, prefix=settings.API_V1_PREFIX)
+app.include_router(private_deliberations.router, prefix=settings.API_V1_PREFIX)
 app.include_router(deliberations.router, prefix=settings.API_V1_PREFIX)
 app.include_router(continuous.router, prefix=settings.API_V1_PREFIX)
 app.include_router(feedback.router, prefix=settings.API_V1_PREFIX)
@@ -130,7 +131,6 @@ app.include_router(stats.router, prefix=settings.API_V1_PREFIX)
 app.include_router(monitoring.router, prefix=settings.API_V1_PREFIX)
 app.include_router(hosted_agents.router, prefix=settings.API_V1_PREFIX)
 app.include_router(notifications.router, prefix=settings.API_V1_PREFIX)
-app.include_router(private_deliberations.router, prefix=settings.API_V1_PREFIX)
 app.include_router(deliberation_chat.router, prefix=settings.API_V1_PREFIX)
 app.include_router(waitlist.router, prefix=settings.API_V1_PREFIX)
 
