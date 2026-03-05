@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useSession } from "@/lib/auth-client";
 import AgentActivitySection from "@/components/profile/AgentActivitySection";
 import AgentChatBubble from "@/components/AgentChatBubble";
+import CreateDeliberationModal from "@/components/CreateDeliberationModal";
 
 export default function AgentPage() {
   return (
@@ -32,6 +33,7 @@ function AgentPageContent() {
   const [hasHostedAgent, setHasHostedAgent] = useState<boolean | null>(null);
   const [hasOpenClawAgent, setHasOpenClawAgent] = useState<boolean | null>(null);
   const [isOnboarded, setIsOnboarded] = useState<boolean>(true);
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
   useEffect(() => {
     if (isPending) return;
@@ -95,23 +97,16 @@ function AgentPageContent() {
         <h1 className="font-serif text-3xl" style={{ color: "var(--foreground)" }}>
           My Agent
         </h1>
-        {hasOpenClawAgent && !hasHostedAgent ? (
-          <span
-            className="rounded-lg border px-3 py-1.5 text-xs"
-            style={{ borderColor: "var(--border)", color: "var(--muted)" }}
-            title="Your OpenClaw agent can start deliberations via chat. Site-based creation coming soon."
-          >
-            Create via OpenClaw
-          </span>
-        ) : (
-          <Link
-            href="/deliberations/create"
-            className="rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90"
-            style={{ background: "var(--accent)" }}
-          >
-            Start a Deliberation
-          </Link>
-        )}
+        <button
+          onClick={() => setShowCreateModal(true)}
+          className="group flex shrink-0 items-center gap-1.5 rounded-full bg-red-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-red-600 hover:shadow-md active:scale-95"
+        >
+          Start a Deliberation
+          <svg className="h-4 w-4 transition-transform group-hover:rotate-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+        </button>
       </div>
 
       {/* Prompt to finish onboarding for GuestAgent users */}
@@ -139,6 +134,8 @@ function AgentPageContent() {
 
       {/* Floating chat bubble */}
       {hasHostedAgent && <AgentChatBubble />}
+
+      <CreateDeliberationModal open={showCreateModal} onClose={() => setShowCreateModal(false)} />
     </div>
   );
 }

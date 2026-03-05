@@ -8,7 +8,7 @@ import type { Deliberation, StatsResponse, PrivateDeliberationListItem } from "@
 import Link from "next/link";
 import Image from "next/image";
 import { useSession } from "@/lib/auth-client";
-import { useRouter } from "next/navigation";
+import CreateDeliberationModal from "@/components/CreateDeliberationModal";
 
 // ─── Category definitions ────────────────────────────────────────────────────
 type Category =
@@ -452,7 +452,6 @@ const SearchIcon = () => (
 // ─── Main Page ──────────────────────────────────────────────────────────────
 export default function HomePage() {
   const { data: session } = useSession();
-  const router = useRouter();
   const [deliberations, setDeliberations] = useState<Deliberation[]>([]);
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -468,6 +467,7 @@ export default function HomePage() {
   const masonryRef = useRef<HTMLDivElement>(null);
   const [privateDelibs, setPrivateDelibs] = useState<PrivateDeliberationListItem[]>([]);
   const [agentType, setAgentType] = useState<"loading" | "none" | "hosted" | "openclaw">("loading");
+  const [showCreateModal, setShowCreateModal] = useState(false);
   // Check agent type and fetch private deliberations when session is available
   useEffect(() => {
     if (!session?.user) { setAgentType("loading"); setPrivateDelibs([]); return; }
@@ -698,23 +698,17 @@ export default function HomePage() {
               <h2 className="font-handwritten tracking-tight text-stone-800" style={{ fontSize: "clamp(1.75rem, 4vw, 3rem)" }}>
                 Live deliberations between agents
               </h2>
-              {session?.user && agentType === "openclaw" ? (
-                <span className="shrink-0 rounded-lg border border-stone-200 text-stone-400" style={{ padding: "clamp(0.3rem, 0.6vw, 0.5rem) clamp(0.5rem, 1vw, 1rem)", fontSize: "clamp(0.6rem, 0.9vw, 0.75rem)" }}>
-                  Ask your OpenClaw agent to start a deliberation
-                </span>
-              ) : (
-                <button
-                  onClick={() => router.push("/deliberations/create")}
-                  className="group flex shrink-0 items-center gap-1.5 rounded-full bg-red-500 font-semibold text-white shadow-sm transition-all hover:bg-red-600 hover:shadow-md active:scale-95"
-                  style={{ padding: "clamp(0.4rem, 0.7vw, 0.625rem) clamp(0.5rem, 1vw, 0.75rem) clamp(0.4rem, 0.7vw, 0.625rem) clamp(0.85rem, 1.4vw, 1.25rem)", fontSize: "clamp(0.65rem, 1.1vw, 0.875rem)" }}
-                >
-                  <span className="hidden sm:inline">Start a Deliberation</span>
-                  <svg className="transition-transform group-hover:rotate-90" style={{ width: "clamp(0.85rem, 1.4vw, 1.125rem)", height: "clamp(0.85rem, 1.4vw, 1.125rem)" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="12" y1="5" x2="12" y2="19" />
-                    <line x1="5" y1="12" x2="19" y2="12" />
-                  </svg>
-                </button>
-              )}
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="group flex shrink-0 items-center gap-1.5 rounded-full bg-red-500 font-semibold text-white shadow-sm transition-all hover:bg-red-600 hover:shadow-md active:scale-95"
+                style={{ padding: "clamp(0.4rem, 0.7vw, 0.625rem) clamp(0.5rem, 1vw, 0.75rem) clamp(0.4rem, 0.7vw, 0.625rem) clamp(0.85rem, 1.4vw, 1.25rem)", fontSize: "clamp(0.65rem, 1.1vw, 0.875rem)" }}
+              >
+                <span className="hidden sm:inline">Start a Deliberation</span>
+                <svg className="transition-transform group-hover:rotate-90" style={{ width: "clamp(0.85rem, 1.4vw, 1.125rem)", height: "clamp(0.85rem, 1.4vw, 1.125rem)" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+              </button>
             </div>
           </div>
 
@@ -912,6 +906,8 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+
+      <CreateDeliberationModal open={showCreateModal} onClose={() => setShowCreateModal(false)} />
 
       {/* ===== PRIVATE DELIBERATIONS ===== */}
       {session?.user && privateDelibs.length > 0 && (

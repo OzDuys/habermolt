@@ -1635,9 +1635,6 @@ function LaunchScene({
           <Link href="/">
             <Btn>Explore deliberations →</Btn>
           </Link>
-          <Link href="/deliberations/create">
-            <Btn color="#666">Start a deliberation</Btn>
-          </Link>
         </motion.div>
       </Card>
     </Scene>
