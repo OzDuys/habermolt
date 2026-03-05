@@ -266,12 +266,9 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
                   { action: event.action, status: "running" },
                 ]);
               } else if (event.type === "action_done") {
+                // Remove from streaming indicators (it'll be persisted to messages below)
                 setCurrentActions((prev) =>
-                  prev.map((a) =>
-                    a.action === event.action && a.status === "running"
-                      ? { ...a, status: "done", description: event.description, detail: event.detail }
-                      : a
-                  )
+                  prev.filter((a) => !(a.action === event.action && a.status === "running"))
                 );
                 // Persist action to messages on completion
                 setMessages((prev) => [...prev, {
