@@ -203,7 +203,7 @@ function DimensionRating({
 }) {
   const [hover, setHover] = useState(0);
   return (
-    <div className="flex items-center justify-between gap-3">
+    <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
       <div className="min-w-0">
         <p className="text-sm font-medium" style={{ color: "var(--foreground)" }}>{label}</p>
         <p className="text-xs" style={{ color: "var(--muted)" }}>{description}</p>
@@ -325,7 +325,7 @@ function DeliberationCard({
       className="rounded-lg border transition-shadow hover:shadow-md"
       style={{ borderColor: "var(--border)", background: "var(--surface)" }}
     >
-      <div className="p-4">
+      <div className="p-3 sm:p-4">
         {/* Badges */}
         {(delib.is_private || delib.is_creator || delib.agent_influenced_winner) && (
           <div className="mb-1.5 flex flex-wrap gap-1.5">
@@ -359,8 +359,7 @@ function DeliberationCard({
         {/* Title — clearly a link */}
         <Link
           href={`/deliberations/${delib.deliberation_id}`}
-          className="block font-serif text-[15px] leading-snug underline decoration-transparent transition-all hover:decoration-current"
-          style={{ color: "var(--accent)" }}
+          className="block text-sm font-semibold leading-snug text-stone-800 hover:text-red-600 hover:underline hover:decoration-1 hover:underline-offset-2 sm:text-base"
         >
           {delib.question}
         </Link>
@@ -440,7 +439,7 @@ function DeliberationCard({
 
       {/* Expanded content */}
       {expanded && (
-        <div className="border-t px-4 pb-4" style={{ borderColor: "var(--border)" }}>
+        <div className="border-t px-3 pb-3 sm:px-4 sm:pb-4" style={{ borderColor: "var(--border)" }}>
           {/* Current winning statement */}
           {delib.winning_statement_text && (
             <div className="mt-4">
@@ -536,17 +535,17 @@ function DeliberationCard({
                 {delib.rankings.map((item) => {
                   const rankDiff = item.social_ranking !== null ? item.agent_rank - item.social_ranking : null;
                   return (
-                    <div key={item.statement_id} className="flex items-start gap-3 rounded-lg p-3 text-sm" style={{ background: "var(--surface-dim)" }}>
-                      <div className="flex shrink-0 flex-col gap-1">
+                    <div key={item.statement_id} className="rounded-lg p-3 text-sm" style={{ background: "var(--surface-dim)" }}>
+                      <div className="mb-1.5 flex flex-wrap gap-1">
                         <RankBadge rank={item.agent_rank} label="Agent" />
                         <RankBadge rank={item.social_ranking} label="Group" />
                       </div>
-                      <div className="min-w-0 flex-1">
+                      <div className="min-w-0">
                         {item.statement_title && <p className="font-medium" style={{ color: "var(--foreground)" }}>{item.statement_title}</p>}
                         <p className="mt-0.5 leading-relaxed" style={{ color: "var(--muted)" }}>
                           {item.statement_text.length > 200 ? item.statement_text.slice(0, 200) + "..." : item.statement_text}
                         </p>
-                        <div className="mt-1 flex gap-2">
+                        <div className="mt-1 flex flex-wrap gap-2">
                           {item.contributed_by_agent && <span className="text-xs" style={{ color: "var(--accent)" }}>Proposed by your agent</span>}
                           {item.is_seed && <span className="text-xs" style={{ color: "var(--muted)" }}>Seed statement</span>}
                           {rankDiff !== null && rankDiff !== 0 && (
@@ -714,11 +713,11 @@ export default function AgentActivitySection() {
         </div>
 
         {/* Deliberation cards skeleton — matches grid layout */}
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="mx-auto grid max-w-md gap-3 sm:max-w-none sm:grid-cols-2">
           {[0, 1, 2, 3].map((i) => (
             <div
               key={i}
-              className="rounded-lg border p-4"
+              className="rounded-lg border p-3 sm:p-4"
               style={{ borderColor: "var(--border)", background: "var(--surface)" }}
             >
               <div className="animate-pulse space-y-3">
@@ -762,7 +761,7 @@ export default function AgentActivitySection() {
           </p>
         </div>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="mx-auto grid max-w-md gap-3 sm:max-w-none sm:grid-cols-2">
           {activity.deliberations.map((delib) => (
             <DeliberationCard
               key={delib.deliberation_id}
