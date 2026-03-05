@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 
 interface TableInfo {
   name: string;
@@ -38,6 +38,52 @@ export default function DatabasePage() {
     onConfirm: () => Promise<void>;
   } | null>(null);
   const [copiedCell, setCopiedCell] = useState<string | null>(null);
+  const [searchColumn, setSearchColumn] = useState<string>("__all__");
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
+  const resizing = useRef<{ col: string; startX: number; startW: number } | null>(null);
+
+  const onResizeStart = useCallback((col: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = columnWidths[col] || 150;
+    resizing.current = { col, startX, startW };
+
+    const onMouseMove = (ev: MouseEvent) => {
+      if (!resizing.current) return;
+      const diff = ev.clientX - resizing.current.startX;
+      const newW = Math.max(50, resizing.current.startW + diff);
+      setColumnWidths((prev) => ({ ...prev, [col]: newW }));
+    };
+
+    const onMouseUp = () => {
+      resizing.current = null;
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  }, [columnWidths]);
+
+  const filteredRows = tableData
+    ? tableData.rows.filter((row) => {
+        if (!searchQuery.trim()) return true;
+        const q = searchQuery.toLowerCase();
+        if (searchColumn === "__all__") {
+          return tableData.columns.some((col) => {
+            const val = row[col];
+            return val !== null && val !== undefined && String(val).toLowerCase().includes(q);
+          });
+        }
+        const val = row[searchColumn];
+        return val !== null && val !== undefined && String(val).toLowerCase().includes(q);
+      })
+    : [];
 
   const copyCell = (value: unknown, key: string) => {
     const text = value === null || value === undefined ? "" : typeof value === "object" ? JSON.stringify(value) : String(value);
@@ -210,6 +256,9 @@ export default function DatabasePage() {
             onClick={() => {
               setSelectedTable(t.name);
               setPage(1);
+              setSearchQuery("");
+              setSearchColumn("__all__");
+              setColumnWidths({});
             }}
             className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${
               selectedTable === t.name ? "" : "hover:opacity-80"
@@ -226,32 +275,73 @@ export default function DatabasePage() {
         ))}
       </div>
 
+      {/* Column Search */}
+      {selectedTable && tableData && tableData.columns.length > 0 && (
+        <div
+          className="mb-4 flex gap-2 items-center"
+        >
+          <select
+            value={searchColumn}
+            onChange={(e) => setSearchColumn(e.target.value)}
+            className="px-2.5 py-1.5 rounded-lg border text-xs"
+            style={{ borderColor: "var(--border)", background: "var(--surface)", color: "var(--foreground)" }}
+          >
+            <option value="__all__">All columns</option>
+            {tableData.columns.map((col) => (
+              <option key={col} value={col}>{col}</option>
+            ))}
+          </select>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search..."
+            className="px-2.5 py-1.5 rounded-lg border text-xs flex-1 max-w-xs"
+            style={{ borderColor: "var(--border)", background: "var(--surface)", color: "var(--foreground)" }}
+          />
+          {searchQuery && (
+            <span className="text-xs" style={{ color: "var(--muted)" }}>
+              {filteredRows.length} match{filteredRows.length !== 1 ? "es" : ""}
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Table Data */}
       {selectedTable && (
         <>
           {tableLoading ? (
             <div className="text-sm" style={{ color: "var(--muted)" }}>Loading rows...</div>
-          ) : tableData && tableData.rows.length > 0 ? (
+          ) : tableData && filteredRows.length > 0 ? (
             <div className="overflow-x-auto rounded-xl border" style={{ borderColor: "var(--border)" }}>
-              <table className="w-full text-xs">
+              <table className="text-xs" style={{ tableLayout: "fixed", width: "max-content", minWidth: "100%" }}>
                 <thead>
                   <tr style={{ background: "var(--surface)" }}>
                     {tableData.columns.map((col) => (
                       <th
                         key={col}
-                        className="px-2.5 py-2 text-left font-medium whitespace-nowrap"
-                        style={{ color: "var(--muted)" }}
+                        className="px-2.5 py-2 text-left font-medium whitespace-nowrap relative overflow-hidden"
+                        style={{
+                          color: "var(--muted)",
+                          width: `${columnWidths[col] || 150}px`,
+                          minWidth: "50px",
+                        }}
                       >
                         {col}
+                        <span
+                          onMouseDown={(e) => onResizeStart(col, e)}
+                          className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-blue-400/50"
+                          style={{ zIndex: 1 }}
+                        />
                       </th>
                     ))}
-                    <th className="px-2.5 py-2 text-left font-medium" style={{ color: "var(--muted)" }}>
+                    <th className="px-2.5 py-2 text-left font-medium" style={{ color: "var(--muted)", width: "100px" }}>
                       Actions
                     </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {tableData.rows.map((row, i) => (
+                  {filteredRows.map((row, i) => (
                     <tr key={i} className="border-t" style={{ borderColor: "var(--border)" }}>
                       {tableData.columns.map((col) => {
                         const cellKey = `${i}-${col}`;
@@ -259,7 +349,7 @@ export default function DatabasePage() {
                         return (
                           <td
                             key={col}
-                            className="px-2.5 py-2 max-w-[200px] truncate font-mono cursor-pointer select-none relative"
+                            className="px-2.5 py-2 truncate font-mono cursor-pointer select-none overflow-hidden"
                             title="Click to copy"
                             onClick={() => copyCell(row[col], cellKey)}
                             style={{ opacity: copied ? 0.6 : 1, transition: "opacity 0.15s" }}
@@ -298,7 +388,7 @@ export default function DatabasePage() {
             </div>
           ) : (
             <div className="text-sm" style={{ color: "var(--muted)" }}>
-              No rows in {selectedTable}
+              {searchQuery ? `No matches in ${selectedTable}` : `No rows in ${selectedTable}`}
             </div>
           )}
 
