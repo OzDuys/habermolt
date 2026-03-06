@@ -20,25 +20,21 @@ export default function ProfilePage() {
 function LoadingSkeleton() {
   return (
     <div className="mx-auto max-w-3xl py-8 px-4">
-      <h1 className="mb-8 font-serif text-3xl" style={{ color: "var(--foreground)" }}>Profile</h1>
+      <h1 className="mb-8 font-serif text-3xl" style={{ color: "var(--foreground)" }}>Settings</h1>
 
       {/* Agent section placeholder */}
       <AgentTabSkeleton />
 
-      {/* Divider */}
-      <hr className="my-10" style={{ borderColor: "var(--border)" }} />
-
-      {/* Account */}
-      <h2 className="mb-4 text-lg font-semibold" style={{ color: "var(--foreground)" }}>Account</h2>
-      <div className="animate-pulse rounded-xl border p-6" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+      {/* Account skeleton */}
+      <div className="mb-6 animate-pulse rounded-xl border p-5" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+        <div className="mb-3 h-4 w-16 rounded" style={{ background: "var(--surface-dim)" }} />
         <div className="space-y-3">
           <div className="h-4 w-48 rounded" style={{ background: "var(--surface-dim)" }} />
           <div className="h-4 w-32 rounded" style={{ background: "var(--surface-dim)" }} />
         </div>
       </div>
 
-      {/* Sign out */}
-      <hr className="my-10" style={{ borderColor: "var(--border)" }} />
+      {/* Sign out skeleton */}
       <div className="h-10 w-24 animate-pulse rounded-lg" style={{ background: "var(--surface-dim)" }} />
     </div>
   );
@@ -46,23 +42,24 @@ function LoadingSkeleton() {
 
 function AgentTabSkeleton() {
   return (
-    <div className="animate-pulse space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="h-6 w-40 rounded" style={{ background: "var(--surface-dim)" }} />
-        <div className="h-6 w-16 rounded-full" style={{ background: "var(--surface-dim)" }} />
+    <div className="mb-6 animate-pulse rounded-xl border p-5" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+      <div className="mb-5 flex items-center gap-3">
+        <div className="h-4 w-28 rounded" style={{ background: "var(--surface-dim)" }} />
+        <div className="h-4 w-16 rounded" style={{ background: "var(--surface-dim)" }} />
+        <div className="h-5 w-14 rounded-full" style={{ background: "var(--surface-dim)" }} />
       </div>
-      <div className="rounded-xl border p-4" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
-        <div className="mb-3 h-4 w-24 rounded" style={{ background: "var(--surface-dim)" }} />
-        <div className="space-y-2">
-          <div className="h-3 w-full rounded" style={{ background: "var(--surface-dim)" }} />
-          <div className="h-3 w-3/4 rounded" style={{ background: "var(--surface-dim)" }} />
-        </div>
-      </div>
-      <div className="rounded-xl border p-4" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
-        <div className="mb-3 h-4 w-20 rounded" style={{ background: "var(--surface-dim)" }} />
+      <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <div className="h-3 w-24 rounded" style={{ background: "var(--surface-dim)" }} />
-          <div className="h-8 w-32 rounded-lg" style={{ background: "var(--surface-dim)" }} />
+          <div className="space-y-1">
+            <div className="h-4 w-36 rounded" style={{ background: "var(--surface-dim)" }} />
+            <div className="h-3 w-48 rounded" style={{ background: "var(--surface-dim)" }} />
+          </div>
+          <div className="h-14 w-44 rounded-lg" style={{ background: "var(--surface-dim)" }} />
+        </div>
+        <div className="border-t" style={{ borderColor: "var(--border)" }} />
+        <div className="flex items-center justify-between">
+          <div className="h-4 w-16 rounded" style={{ background: "var(--surface-dim)" }} />
+          <div className="h-8 w-48 rounded-lg" style={{ background: "var(--surface-dim)" }} />
         </div>
       </div>
     </div>
@@ -94,7 +91,7 @@ function ProfilePageContent() {
 
   return (
     <div className="mx-auto max-w-3xl py-8 px-4">
-      <h1 className="mb-8 font-serif text-3xl" style={{ color: "var(--foreground)" }}>Profile</h1>
+      <h1 className="mb-8 font-serif text-3xl" style={{ color: "var(--foreground)" }}>Settings</h1>
 
       {/* Agent Settings */}
       <AgentTab
@@ -103,25 +100,8 @@ function ProfilePageContent() {
         onAgentUnlinked={() => { setHasOpenClawAgent(false); }}
       />
 
-      {/* Divider */}
-      <hr className="my-10" style={{ borderColor: "var(--border)" }} />
-
       {/* Account */}
-      <h2 className="mb-4 text-lg font-semibold" style={{ color: "var(--foreground)" }}>Account</h2>
-      <AccountSection session={session} />
-
-      {/* Sign out */}
-      <hr className="my-10" style={{ borderColor: "var(--border)" }} />
-      <button
-        onClick={async () => {
-          await signOut();
-          router.refresh();
-        }}
-        className="rounded-lg border px-4 py-2 text-sm font-medium transition-opacity hover:opacity-80"
-        style={{ borderColor: "var(--border)", color: "var(--muted)" }}
-      >
-        Sign out
-      </button>
+      <AccountSection session={session} onSignOut={async () => { await signOut(); router.refresh(); }} />
     </div>
   );
 }
