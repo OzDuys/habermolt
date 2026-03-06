@@ -8,9 +8,9 @@ export const authClient = createAuthClient();
 const DEV_PERSONAS: Record<string, { user: { id: string; name: string; email: string; createdAt: Date } } | null> = {
   haberagent: {
     user: {
-      id: "ylyqU7WVJYBl9O1vK0e1Tin1ua0OpgT3",
-      name: "Oscar Duys",
-      email: "oscar@martinduys.com",
+      id: process.env.NEXT_PUBLIC_DEV_USER_ID || "ylyqU7WVJYBl9O1vK0e1Tin1ua0OpgT3",
+      name: process.env.NEXT_PUBLIC_DEV_USER_NAME || "Oscar Duys",
+      email: process.env.NEXT_PUBLIC_DEV_USER_EMAIL || "oscar@martinduys.com",
       createdAt: new Date("2025-02-18T00:00:00Z"),
     },
   },
