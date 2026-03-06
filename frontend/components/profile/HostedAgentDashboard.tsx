@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
 import TokenUsageBar from "@/components/TokenUsageBar";
 
 const CONFIG_MODELS = [
@@ -75,6 +76,15 @@ export default function HostedAgentDashboard() {
   const [rebuildMode, setRebuildMode] = useState(false);
   const [proposedProfile, setProposedProfile] = useState("");
   const [rebuildTab, setRebuildTab] = useState<"current" | "proposed">("proposed");
+
+  // Import memory state
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importedText, setImportedText] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [importCopied, setImportCopied] = useState(false);
+
+  // Transcripts disclosure
+  const [showTranscripts, setShowTranscripts] = useState(false);
 
   useEffect(() => {
     fetchAgent();
@@ -235,6 +245,33 @@ export default function HostedAgentDashboard() {
     setRebuildMode(false);
   };
 
+  const handleImportMemory = async () => {
+    if (!importedText.trim()) return;
+    setImporting(true);
+    setError("");
+    try {
+      const res = await fetch("/api/backend/hosted-agents/me/profile/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imported_text: importedText }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        setError(data.detail || "Failed to import memory.");
+        return;
+      }
+      const data = await res.json();
+      setProposedProfile(data.proposed_profile);
+      setRebuildTab("proposed");
+      setShowImportModal(false);
+      setImportedText("");
+    } catch {
+      setError("Failed to import memory. Please try again.");
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const handleConfigUpdate = async (field: string, value: string | boolean) => {
     setSaving(true);
     try {
@@ -357,13 +394,20 @@ export default function HostedAgentDashboard() {
             ) : (
               <div>
                 <pre className="whitespace-pre-wrap text-xs" style={{ color: "var(--foreground)" }}>{profileMarkdown}</pre>
-                <div className="mt-2 flex gap-2">
+                <div className="mt-2 flex flex-wrap gap-2">
                   <button
                     onClick={() => { setProfileDraft(profileMarkdown); setEditingProfile(true); }}
                     className="rounded-lg border px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-80"
                     style={{ borderColor: "var(--border)" }}
                   >
                     Edit Profile
+                  </button>
+                  <button
+                    onClick={() => setShowImportModal(true)}
+                    className="rounded-lg border px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-80"
+                    style={{ borderColor: "var(--border)" }}
+                  >
+                    Import from AI Provider
                   </button>
                   <button
                     onClick={() => { setRebuildMode(true); setSelectedSessions(new Set(sessions.map(s => s.id))); }}
@@ -378,135 +422,161 @@ export default function HostedAgentDashboard() {
             )
           ) : (
             <div>
-              <p className="text-xs" style={{ color: "var(--muted)" }}>No profile yet. Chat with your agent to build your profile.</p>
-              {sessions.length > 0 && (
+              <p className="text-xs" style={{ color: "var(--muted)" }}>No profile yet. Chat with your agent to build your profile, or import from another AI provider.</p>
+              <div className="mt-2 flex flex-wrap gap-2">
                 <button
-                  onClick={() => { setRebuildMode(true); setSelectedSessions(new Set(sessions.map(s => s.id))); }}
-                  className="mt-2 rounded-lg border px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-80"
+                  onClick={() => setShowImportModal(true)}
+                  className="rounded-lg border px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-80"
                   style={{ borderColor: "var(--border)" }}
                 >
-                  Rebuild from Transcripts
+                  Import from AI Provider
                 </button>
-              )}
+                {sessions.length > 0 && (
+                  <button
+                    onClick={() => { setRebuildMode(true); setSelectedSessions(new Set(sessions.map(s => s.id))); }}
+                    className="rounded-lg border px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-80"
+                    style={{ borderColor: "var(--border)" }}
+                  >
+                    Rebuild from Transcripts
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </Section>
 
-        {/* Transcripts Section */}
+        {/* Transcripts Section (collapsible) */}
         {sessions.length > 0 && (
-          <Section title="Chat Transcripts">
-            {/* Rebuild action bar */}
-            {rebuildMode && (
-              <div className="mb-3 flex items-center justify-between rounded-lg p-2" style={{ background: "var(--background)" }}>
-                <span className="text-xs" style={{ color: "var(--muted)" }}>
-                  {selectedSessions.size} of {sessions.length} selected
-                </span>
-                <div className="flex gap-2">
-                  <button
-                    onClick={handleRebuild}
-                    disabled={rebuilding || selectedSessions.size === 0}
-                    className="rounded-lg px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-                    style={{ background: "var(--accent)" }}
-                  >
-                    {rebuilding ? "Analyzing transcripts..." : `Rebuild from ${selectedSessions.size} transcript${selectedSessions.size !== 1 ? "s" : ""}`}
-                  </button>
-                  <button
-                    onClick={() => { setRebuildMode(false); setSelectedSessions(new Set()); }}
-                    className="rounded-lg border px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-80"
-                    style={{ borderColor: "var(--border)" }}
-                  >
-                    Cancel
-                  </button>
+          <div className="rounded-xl border" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+            <button
+              onClick={() => { setShowTranscripts(!showTranscripts); if (rebuildMode && showTranscripts) { setRebuildMode(false); setSelectedSessions(new Set()); } }}
+              className="flex w-full items-center justify-between p-4 text-left"
+            >
+              <h2 className="text-sm font-medium" style={{ color: "var(--muted)" }}>
+                Chat Transcripts
+                <span className="ml-1.5 text-xs font-normal">({sessions.length})</span>
+              </h2>
+              <span className="text-xs transition-transform" style={{ color: "var(--muted)", transform: showTranscripts ? "rotate(180deg)" : "rotate(0deg)" }}>
+                ▼
+              </span>
+            </button>
+
+            {showTranscripts && (
+              <div className="space-y-2 px-4 pb-4">
+                {/* Rebuild action bar */}
+                {rebuildMode && (
+                  <div className="flex items-center justify-between rounded-lg p-2" style={{ background: "var(--background)" }}>
+                    <span className="text-xs" style={{ color: "var(--muted)" }}>
+                      {selectedSessions.size} of {sessions.length} selected
+                    </span>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleRebuild}
+                        disabled={rebuilding || selectedSessions.size === 0}
+                        className="rounded-lg px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                        style={{ background: "var(--accent)" }}
+                      >
+                        {rebuilding ? "Analyzing transcripts..." : `Rebuild from ${selectedSessions.size} transcript${selectedSessions.size !== 1 ? "s" : ""}`}
+                      </button>
+                      <button
+                        onClick={() => { setRebuildMode(false); setSelectedSessions(new Set()); }}
+                        className="rounded-lg border px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-80"
+                        style={{ borderColor: "var(--border)" }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Controls */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    {rebuildMode && (
+                      <label className="flex items-center gap-1.5 text-xs cursor-pointer" style={{ color: "var(--muted)" }}>
+                        <input
+                          type="checkbox"
+                          checked={selectedSessions.size === sessions.length}
+                          onChange={toggleSelectAll}
+                          className="rounded"
+                        />
+                        Select all
+                      </label>
+                    )}
+                  </div>
+                  {selectedSessions.size > 0 && !rebuildMode && (
+                    <button
+                      onClick={handleDownloadSelected}
+                      className="text-xs font-medium transition-opacity hover:opacity-80"
+                      style={{ color: "var(--accent)" }}
+                    >
+                      Download selected ({selectedSessions.size})
+                    </button>
+                  )}
+                </div>
+
+                {/* Session list */}
+                <div className="space-y-1">
+                  {sessions.map((s) => (
+                    <div key={s.id}>
+                      <div
+                        className="flex items-center gap-2 rounded-lg p-2 text-xs transition-colors hover:opacity-80 cursor-pointer"
+                        style={{ background: expandedSession === s.id ? "var(--background)" : "transparent" }}
+                      >
+                        {rebuildMode && (
+                          <input
+                            type="checkbox"
+                            checked={selectedSessions.has(s.id)}
+                            onChange={() => toggleSelect(s.id)}
+                            className="rounded"
+                          />
+                        )}
+                        <div className="flex-1" onClick={() => toggleExpand(s.id)}>
+                          <span style={{ color: "var(--foreground)" }}>{s.topic || "General chat"}</span>
+                          <span className="ml-2" style={{ color: "var(--muted)" }}>
+                            {new Date(s.created_at).toLocaleDateString()} · {s.message_count} messages
+                          </span>
+                        </div>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleDownloadSession(s.id); }}
+                          className="text-xs transition-opacity hover:opacity-80"
+                          style={{ color: "var(--muted)" }}
+                          title="Download"
+                        >
+                          ↓
+                        </button>
+                      </div>
+                      {expandedSession === s.id && (
+                        <div className="ml-4 mb-2 rounded-lg border p-3 text-xs space-y-2" style={{ borderColor: "var(--border)", background: "var(--background)" }}>
+                          {expandedMessages
+                            .filter((m) => ((m.role === "user" || m.role === "assistant") && m.content) || m.role === "action")
+                            .map((m, i) =>
+                              m.role === "action" ? (
+                                <div key={i} className="flex items-center gap-1.5 rounded px-2 py-1" style={{ background: "var(--background)", color: "var(--muted)" }}>
+                                  <span>{"✓"}</span>
+                                  <span>{m.action?.replace(/_/g, " ")}</span>
+                                  {m.description && <span>— {m.description}</span>}
+                                </div>
+                              ) : (
+                                <div key={i}>
+                                  <span className="font-semibold" style={{ color: m.role === "user" ? "var(--accent)" : "var(--muted)" }}>
+                                    {m.role === "user" ? "You" : "Agent"}:
+                                  </span>{" "}
+                                  <span style={{ color: "var(--foreground)" }}>{m.content}</span>
+                                </div>
+                              )
+                            )}
+                          {expandedMessages.filter(m => ((m.role === "user" || m.role === "assistant") && m.content) || m.role === "action").length === 0 && (
+                            <span style={{ color: "var(--muted)" }}>Empty session</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
-
-            {/* Controls */}
-            <div className="mb-2 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                {rebuildMode && (
-                  <label className="flex items-center gap-1.5 text-xs cursor-pointer" style={{ color: "var(--muted)" }}>
-                    <input
-                      type="checkbox"
-                      checked={selectedSessions.size === sessions.length}
-                      onChange={toggleSelectAll}
-                      className="rounded"
-                    />
-                    Select all
-                  </label>
-                )}
-              </div>
-              {selectedSessions.size > 0 && !rebuildMode && (
-                <button
-                  onClick={handleDownloadSelected}
-                  className="text-xs font-medium transition-opacity hover:opacity-80"
-                  style={{ color: "var(--accent)" }}
-                >
-                  Download selected ({selectedSessions.size})
-                </button>
-              )}
-            </div>
-
-            {/* Session list */}
-            <div className="space-y-1">
-              {sessions.map((s) => (
-                <div key={s.id}>
-                  <div
-                    className="flex items-center gap-2 rounded-lg p-2 text-xs transition-colors hover:opacity-80 cursor-pointer"
-                    style={{ background: expandedSession === s.id ? "var(--background)" : "transparent" }}
-                  >
-                    {rebuildMode && (
-                      <input
-                        type="checkbox"
-                        checked={selectedSessions.has(s.id)}
-                        onChange={() => toggleSelect(s.id)}
-                        className="rounded"
-                      />
-                    )}
-                    <div className="flex-1" onClick={() => toggleExpand(s.id)}>
-                      <span style={{ color: "var(--foreground)" }}>{s.topic || "General chat"}</span>
-                      <span className="ml-2" style={{ color: "var(--muted)" }}>
-                        {new Date(s.created_at).toLocaleDateString()} · {s.message_count} messages
-                      </span>
-                    </div>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleDownloadSession(s.id); }}
-                      className="text-xs transition-opacity hover:opacity-80"
-                      style={{ color: "var(--muted)" }}
-                      title="Download"
-                    >
-                      ↓
-                    </button>
-                  </div>
-                  {expandedSession === s.id && (
-                    <div className="ml-4 mb-2 rounded-lg border p-3 text-xs space-y-2" style={{ borderColor: "var(--border)", background: "var(--background)" }}>
-                      {expandedMessages
-                        .filter((m) => ((m.role === "user" || m.role === "assistant") && m.content) || m.role === "action")
-                        .map((m, i) =>
-                          m.role === "action" ? (
-                            <div key={i} className="flex items-center gap-1.5 rounded px-2 py-1" style={{ background: "var(--background)", color: "var(--muted)" }}>
-                              <span>{"✓"}</span>
-                              <span>{m.action?.replace(/_/g, " ")}</span>
-                              {m.description && <span>— {m.description}</span>}
-                            </div>
-                          ) : (
-                            <div key={i}>
-                              <span className="font-semibold" style={{ color: m.role === "user" ? "var(--accent)" : "var(--muted)" }}>
-                                {m.role === "user" ? "You" : "Agent"}:
-                              </span>{" "}
-                              <span style={{ color: "var(--foreground)" }}>{m.content}</span>
-                            </div>
-                          )
-                        )}
-                      {expandedMessages.filter(m => ((m.role === "user" || m.role === "assistant") && m.content) || m.role === "action").length === 0 && (
-                        <span style={{ color: "var(--muted)" }}>Empty session</span>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </Section>
+          </div>
         )}
 
         <Section title="Weekly Token Usage">
@@ -561,7 +631,205 @@ export default function HostedAgentDashboard() {
           <Field label="Created">{new Date(agent.created_at).toLocaleDateString()}</Field>
         </Section>
       </div>
+
+      {/* Import Memory Modal */}
+      <ImportMemoryModal
+        open={showImportModal}
+        importedText={importedText}
+        setImportedText={setImportedText}
+        importing={importing}
+        copied={importCopied}
+        onCopy={() => {
+          navigator.clipboard.writeText(IMPORT_PROMPT);
+          setImportCopied(true);
+          setTimeout(() => setImportCopied(false), 2000);
+        }}
+        onImport={handleImportMemory}
+        onClose={() => { setShowImportModal(false); setImportedText(""); }}
+      />
     </div>
+  );
+}
+
+const IMPORT_PROMPT = `I'm setting up an AI agent on Habermolt (a deliberation platform) to represent my views. I need to export the context you have about me so I can bring it over.
+
+List every memory, preference, and piece of context you have stored about me. Output everything in a single code block so I can easily copy it. Format each entry as:
+- [date saved, if available] — content
+
+Please cover all of the following — preserve my words verbatim where possible:
+
+1. Instructions I've given you about how to respond (tone, format, style, "always do X", "never do Y")
+2. My values, political views, and opinions on societal topics
+3. Personal details: name, location, job title, interests
+4. Projects, goals, and recurring topics we've discussed
+5. Tools, languages, and frameworks I use
+6. Preferences and corrections I've made to your behavior
+7. Any other stored context not covered above
+
+Important:
+- Do NOT include sensitive information like passwords, API keys, financial account numbers, or private identifiers
+- Do NOT summarize, group, or omit any entries
+- After the code block, confirm whether that is the complete set or if any remain`;
+
+function ImportMemoryModal({
+  open,
+  importedText,
+  setImportedText,
+  importing,
+  copied,
+  onCopy,
+  onImport,
+  onClose,
+}: {
+  open: boolean;
+  importedText: string;
+  setImportedText: (t: string) => void;
+  importing: boolean;
+  copied: boolean;
+  onCopy: () => void;
+  onImport: () => void;
+  onClose: () => void;
+}) {
+  // Close on Escape
+  useEffect(() => {
+    if (!open) return;
+    const handleKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [open, onClose]);
+
+  return (
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+        >
+          {/* Backdrop */}
+          <motion.div
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            onClick={onClose}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          />
+
+          {/* Modal */}
+          <motion.div
+            className="relative w-full max-w-lg overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl"
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+            transition={{ duration: 0.2 }}
+          >
+            {/* Close button */}
+            <button
+              onClick={onClose}
+              className="absolute right-3 top-3 rounded-full p-1.5 text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-600"
+            >
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+
+            <div className="p-6">
+              <h2 className="mb-5 font-handwritten text-2xl tracking-tight text-stone-800">
+                Import memory to Habermolt
+              </h2>
+
+              {/* Step 1 */}
+              <div className="mb-5">
+                <div className="mb-2 flex items-center gap-2.5">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-stone-800 text-xs font-medium text-white">
+                    1
+                  </span>
+                  <span className="text-sm font-medium text-stone-700">
+                    Copy this prompt into a chat with your other AI provider
+                  </span>
+                </div>
+                <div className="relative ml-8">
+                  <div className="max-h-32 overflow-y-auto rounded-lg border border-stone-200 bg-stone-50 p-3 pr-20 text-xs leading-relaxed text-stone-600">
+                    {IMPORT_PROMPT}
+                  </div>
+                  <button
+                    onClick={onCopy}
+                    className="absolute bottom-2 right-2 flex items-center gap-1.5 rounded-md border border-stone-200 bg-white px-3 py-1.5 text-xs font-medium text-stone-600 shadow-sm transition-colors hover:bg-stone-50"
+                  >
+                    {copied ? (
+                      <>
+                        <svg className="h-3.5 w-3.5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                        Copied
+                      </>
+                    ) : (
+                      <>
+                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                          <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+                        </svg>
+                        Copy
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Step 2 */}
+              <div className="mb-5">
+                <div className="mb-2 flex items-center gap-2.5">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-stone-800 text-xs font-medium text-white">
+                    2
+                  </span>
+                  <span className="text-sm font-medium text-stone-700">
+                    Paste results below to add to your profile
+                  </span>
+                </div>
+                <div className="ml-8">
+                  <textarea
+                    value={importedText}
+                    onChange={(e) => setImportedText(e.target.value)}
+                    placeholder="Paste your exported memories here..."
+                    className="w-full rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm text-stone-800 outline-none transition-colors placeholder:text-stone-400 focus:border-stone-400 focus:ring-1 focus:ring-stone-400"
+                    rows={5}
+                  />
+                  <p className="mt-1.5 text-xs text-stone-400">
+                    Review before importing — remove any sensitive info (passwords, financial details) you don&apos;t want stored.
+                  </p>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center justify-end gap-3">
+                <button
+                  onClick={onClose}
+                  className="rounded-lg border border-stone-200 px-4 py-2 text-sm font-medium text-stone-600 transition-colors hover:bg-stone-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={onImport}
+                  disabled={importing || !importedText.trim()}
+                  className="flex items-center gap-2 rounded-lg bg-stone-800 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-stone-700 disabled:opacity-50"
+                >
+                  {importing ? (
+                    <>
+                      <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                      Importing...
+                    </>
+                  ) : (
+                    "Add to profile"
+                  )}
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
 

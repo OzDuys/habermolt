@@ -87,6 +87,9 @@ class RerankRequest(BaseModel):
 class RebuildProfileRequest(BaseModel):
     session_ids: list[str] = []  # empty = all sessions
 
+class ImportMemoryRequest(BaseModel):
+    imported_text: str
+
 class DownloadSessionsRequest(BaseModel):
     session_ids: list[str]
 
@@ -731,6 +734,71 @@ async def rebuild_profile(body: RebuildProfileRequest, req: Request, db: Session
     return {
         "proposed_profile": proposed.strip(),
         "sessions_used": len(sessions),
+        "current_profile": ha.user_profile or "",
+    }
+
+
+IMPORT_MEMORY_PROMPT = """\
+You are merging imported memory data into an existing user profile for Habermolt,
+a democratic deliberation platform where AI agents represent their humans' values.
+
+## Current Profile
+{current_profile}
+
+## Imported Memory (from another AI provider)
+{imported_text}
+
+## Instructions
+Produce an updated user profile in markdown by intelligently merging the imported memory
+into the current profile. Follow these rules strictly:
+
+1. PRESERVE everything from the current profile — it takes priority over imports
+2. ADD new information from the imported memory that is not already in the profile
+3. SKIP any entries that duplicate or closely match existing profile content
+4. IGNORE sensitive data like passwords, API keys, financial details, or private identifiers
+5. FOCUS on values, opinions, preferences, communication style, and interests — these are most useful for deliberation
+6. ORGANIZE into clear thematic sections matching the existing profile structure
+7. USE the person's own words where available — do not editorialize
+8. BE CONCISE — only include information that helps the agent represent this person's views
+9. FLAG any contradictions between existing profile and imported data
+
+Output ONLY the profile markdown. No preamble, no explanation, no wrapping code fences."""
+
+
+@router.post("/me/profile/import")
+async def import_memory(body: ImportMemoryRequest, req: Request, db: Session = Depends(get_db)):
+    """Use LLM to merge imported AI provider memory into agent profile."""
+    user_id = _require_user_id(req)
+    ha = hosted_agent_service.get_hosted_agent_by_user(db, user_id)
+    if not ha:
+        raise HTTPException(status_code=404, detail="No hosted agent found")
+
+    if not body.imported_text.strip():
+        raise HTTPException(status_code=400, detail="No imported text provided.")
+
+    if len(body.imported_text) > 50000:
+        raise HTTPException(status_code=400, detail="Imported text too long (max 50,000 characters).")
+
+    current_profile = ha.user_profile or "(No existing profile)"
+
+    prompt = IMPORT_MEMORY_PROMPT.format(
+        current_profile=current_profile,
+        imported_text=body.imported_text.strip(),
+    )
+
+    client = LLMClient(model_name=settings.HOSTED_AGENT_DEFAULT_MODEL)
+    client.set_trace_context(
+        trace_type="profile_import",
+        hosted_agent_id=ha.id,
+        agent_id=ha.agent_id,
+    )
+    proposed = client.sample_text(prompt=prompt, max_tokens=4096, temperature=0.5)
+
+    if not proposed.strip():
+        raise HTTPException(status_code=500, detail="Failed to generate profile. Please try again.")
+
+    return {
+        "proposed_profile": proposed.strip(),
         "current_profile": ha.user_profile or "",
     }
 
