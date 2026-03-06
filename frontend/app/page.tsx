@@ -11,6 +11,20 @@ import { useSession } from "@/lib/auth-client";
 import CreateDeliberationModal from "@/components/CreateDeliberationModal";
 import { consumeSignInIntent } from "@/components/SignInModal";
 
+// ─── Relative time helper ────────────────────────────────────────────────────
+function timeAgo(dateStr: string): string {
+  const seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  return `${months}mo ago`;
+}
+
 // ─── Category definitions ────────────────────────────────────────────────────
 type Category =
   | "trending"
@@ -564,6 +578,8 @@ export default function HomePage() {
     return filtered.sort((a, b) =>
       activeCategory === "trending"
         ? trendingScore(b) - trendingScore(a)
+        : activeCategory === "recent"
+        ? new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
         : new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     );
   })();
@@ -886,22 +902,27 @@ export default function HomePage() {
                           className="group block rounded-xl border border-stone-200 bg-white transition-all hover:-translate-y-0.5 hover:border-red-300 hover:shadow-lg"
                           style={{ padding: "clamp(0.6rem, 1.5vw, 1.25rem)" }}
                         >
-                          {/* Category badges */}
-                          {deliberation.categories?.length > 0 && (
-                            <div className="flex flex-wrap" style={{ marginBottom: "clamp(0.4rem, 0.8vw, 0.75rem)", gap: "clamp(0.2rem, 0.4vw, 0.375rem)" }}>
-                              {deliberation.categories.map((cat) => (
-                                <span
-                                  key={cat}
-                                  style={{ fontSize: "clamp(8px, 1vw, 11px)", padding: "clamp(1px, 0.3vw, 2px) clamp(4px, 0.8vw, 10px)" }}
-                                  className={`inline-flex rounded-full font-semibold ${
-                                    CATEGORY_COLORS[cat] || "bg-stone-100 text-stone-600"
-                                  }`}
-                                >
-                                  {CATEGORIES.find((c) => c.id === cat)?.label || cat}
-                                </span>
-                              ))}
-                            </div>
-                          )}
+                          {/* Category badges + timestamp */}
+                          <div className="flex items-start justify-between" style={{ marginBottom: "clamp(0.4rem, 0.8vw, 0.75rem)", gap: "clamp(0.2rem, 0.4vw, 0.375rem)" }}>
+                            {deliberation.categories?.length > 0 ? (
+                              <div className="flex flex-wrap" style={{ gap: "clamp(0.2rem, 0.4vw, 0.375rem)" }}>
+                                {deliberation.categories.map((cat) => (
+                                  <span
+                                    key={cat}
+                                    style={{ fontSize: "clamp(8px, 1vw, 11px)", padding: "clamp(1px, 0.3vw, 2px) clamp(4px, 0.8vw, 10px)" }}
+                                    className={`inline-flex rounded-full font-semibold ${
+                                      CATEGORY_COLORS[cat] || "bg-stone-100 text-stone-600"
+                                    }`}
+                                  >
+                                    {CATEGORIES.find((c) => c.id === cat)?.label || cat}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : <div />}
+                            <span className="shrink-0 text-stone-400" style={{ fontSize: "clamp(8px, 0.9vw, 11px)" }}>
+                              {timeAgo(deliberation.updated_at)}
+                            </span>
+                          </div>
 
                           {/* Question */}
                           <h3 className="font-semibold leading-snug text-stone-800 group-hover:text-red-600 group-hover:underline group-hover:decoration-1 group-hover:underline-offset-2" style={{ marginBottom: "clamp(0.3rem, 0.5vw, 0.5rem)", fontSize: "clamp(0.7rem, 1.3vw, 1rem)" }}>
