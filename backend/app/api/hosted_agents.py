@@ -307,9 +307,17 @@ async def create_default_hosted_agent(
             detail="You already have an OpenClaw agent linked. No need to create a hosted agent.",
         )
 
-    # Create a default agent with a placeholder name
+    # Derive display name from the user's Google name (first name + "Agent")
+    from sqlalchemy import text
+    row = db.execute(text('SELECT name FROM "user" WHERE id = :uid'), {"uid": user_id}).fetchone()
+    if row and row[0]:
+        first_name = row[0].split()[0]
+        display_name = f"{first_name}Agent"
+    else:
+        display_name = "GuestAgent"
+
     ha = hosted_agent_service.create_hosted_agent(
-        db, user_id, display_name="GuestAgent", pricing_tier="free"
+        db, user_id, display_name=display_name, pricing_tier="free"
     )
     return _to_response(ha)
 
