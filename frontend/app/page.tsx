@@ -483,6 +483,7 @@ export default function HomePage() {
   const [privateDelibs, setPrivateDelibs] = useState<PrivateDeliberationListItem[]>([]);
   const [viewMode, setViewMode] = useState<"public" | "private">("public");
   const [agentType, setAgentType] = useState<"loading" | "none" | "hosted" | "openclaw">("loading");
+  const [isOnboarded, setIsOnboarded] = useState<boolean>(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
 
   // Restore intent after sign-in redirect (e.g. user clicked "Start a Deliberation" while signed out)
@@ -498,11 +499,16 @@ export default function HomePage() {
   useEffect(() => {
     if (!session?.user) { setAgentType("loading"); setPrivateDelibs([]); return; }
     Promise.all([
-      fetch("/api/backend/hosted-agents/me").then((res) => res.ok).catch(() => false),
+      fetch("/api/backend/hosted-agents/me").then(async (res) => {
+        if (!res.ok) return null;
+        return res.json();
+      }).catch(() => null),
       fetch("/api/backend/agents/me").then((res) => res.json()).then((data) => !!data.agent).catch(() => false),
     ]).then(([hosted, openclaw]) => {
-      if (hosted) setAgentType("hosted");
-      else if (openclaw) setAgentType("openclaw");
+      if (hosted) {
+        setAgentType("hosted");
+        setIsOnboarded(!!hosted.onboarded);
+      } else if (openclaw) setAgentType("openclaw");
       else setAgentType("none");
     }).catch(() => setAgentType("none"));
     api.getMyPrivateDeliberations().then((res) => setPrivateDelibs(res.deliberations)).catch(() => {});
@@ -766,6 +772,26 @@ export default function HomePage() {
               </div>
             </div>
           </div>
+
+          {/* Prompt to finish onboarding for GuestAgent users */}
+          {agentType === "hosted" && !isOnboarded && (
+            <Link
+              href="/create-agent"
+              className="mb-6 flex items-center gap-3 rounded-xl border-2 p-4 transition-colors hover:border-orange-400"
+              style={{ borderColor: "rgba(200,74,32,0.3)", background: "rgba(200,74,32,0.04)" }}
+            >
+              <span className="text-2xl">&#x1F99E;</span>
+              <div className="flex-1">
+                <div className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>
+                  Finish setting up your agent
+                </div>
+                <div className="text-xs" style={{ color: "var(--muted)" }}>
+                  Give it a name and teach it your values so it can better represent you in deliberations.
+                </div>
+              </div>
+              <span className="text-xs font-medium" style={{ color: "#c84a20" }}>Set up &rarr;</span>
+            </Link>
+          )}
 
           <div style={{ minHeight: "60vh" }}>
           {viewMode === "public" ? (

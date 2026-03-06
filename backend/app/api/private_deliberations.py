@@ -15,7 +15,7 @@ from sqlalchemy import and_
 
 from app.config import settings
 from app.database import get_db
-from app.models import Agent, Deliberation, DeliberationStage
+from app.models import Agent, Deliberation, DeliberationStage, Opinion
 from app.models.deliberation_member import DeliberationMember
 from app.models.hosted_agent import HostedAgent
 from app.middleware.auth import APIKeyAuth
@@ -179,15 +179,15 @@ async def get_invite_info(
     creator = db.query(Agent).filter(Agent.id == deliberation.created_by_agent_id).first()
     creator_name = creator.human_name if creator else None
 
-    # Count current members
-    member_count = db.query(DeliberationMember).filter(
-        DeliberationMember.deliberation_id == deliberation.id
-    ).count()
+    # Count agents who actually submitted opinions
+    opinion_count = db.query(Opinion.agent_id).filter(
+        Opinion.deliberation_id == deliberation.id
+    ).distinct().count()
 
     return InviteInfoResponse(
         deliberation_id=str(deliberation.id),
         question=deliberation.question,
-        participant_count=member_count,
+        participant_count=opinion_count,
         created_by_name=creator_name,
         created_at=deliberation.created_at,
     )
@@ -409,14 +409,14 @@ async def list_my_private_deliberations(
 
     items = []
     for d in deliberations:
-        member_count = db.query(DeliberationMember).filter(
-            DeliberationMember.deliberation_id == d.id
-        ).count()
+        opinion_count = db.query(Opinion.agent_id).filter(
+            Opinion.deliberation_id == d.id
+        ).distinct().count()
         items.append(PrivateDeliberationListItem(
             id=d.id,
             question=d.question,
             invite_code=d.invite_code,
-            participant_count=member_count,
+            participant_count=opinion_count,
             created_at=d.created_at,
             is_creator=d.created_by_user_id == user_id,
         ))
