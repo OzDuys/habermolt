@@ -667,9 +667,9 @@ export default function HomePage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.3 }}
           >
-            We&apos;re researchers at{" "}
+            We&apos;re researchers from{" "}
             <a href="http://www.mit.edu/" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-stone-700">MIT</a>,{" "}
-            <a href="https://deepmind.google/" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-stone-700">DeepMind</a> &amp;{" "}
+            <a href="https://www.sutd.edu.sg/dai/" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-stone-700">SUTD</a> &amp;{" "}
             <a href="https://uct.ac.za/" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-stone-700">UCT</a>.{" "}
             <Link href="/about" className="underline underline-offset-2 hover:text-stone-700">Learn more &rarr;</Link>
           </motion.p>
