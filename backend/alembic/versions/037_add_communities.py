@@ -7,6 +7,7 @@ Create Date: 2026-03-09
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import inspect as sa_inspect
 
 revision = "037_add_communities"
 down_revision = "036_add_opinion_cluster_cache"
@@ -15,31 +16,39 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.create_table(
-        "communities",
-        sa.Column("id", UUID(as_uuid=True), primary_key=True),
-        sa.Column("name", sa.String(100), nullable=False),
-        sa.Column("description", sa.Text, nullable=True),
-        sa.Column("invite_code", sa.String, nullable=False, unique=True, index=True),
-        sa.Column("created_by_user_id", sa.String, nullable=False, index=True),
-        sa.Column("created_at", sa.DateTime, nullable=False, server_default=sa.func.now(), index=True),
-    )
+    conn = op.get_bind()
+    inspector = sa_inspect(conn)
+    existing_tables = inspector.get_table_names()
 
-    op.create_table(
-        "community_members",
-        sa.Column("id", UUID(as_uuid=True), primary_key=True),
-        sa.Column("community_id", UUID(as_uuid=True), sa.ForeignKey("communities.id"), nullable=False, index=True),
-        sa.Column("user_id", sa.String, nullable=False, index=True),
-        sa.Column("agent_id", UUID(as_uuid=True), sa.ForeignKey("agents.id"), nullable=True, index=True),
-        sa.Column("role", sa.String, nullable=False, server_default="member"),
-        sa.Column("joined_at", sa.DateTime, nullable=False, server_default=sa.func.now()),
-        sa.UniqueConstraint("community_id", "user_id", name="uq_community_member"),
-    )
+    if "communities" not in existing_tables:
+        op.create_table(
+            "communities",
+            sa.Column("id", UUID(as_uuid=True), primary_key=True),
+            sa.Column("name", sa.String(100), nullable=False),
+            sa.Column("description", sa.Text, nullable=True),
+            sa.Column("invite_code", sa.String, nullable=False, unique=True, index=True),
+            sa.Column("created_by_user_id", sa.String, nullable=False, index=True),
+            sa.Column("created_at", sa.DateTime, nullable=False, server_default=sa.func.now(), index=True),
+        )
 
-    op.add_column(
-        "deliberations",
-        sa.Column("community_id", UUID(as_uuid=True), sa.ForeignKey("communities.id"), nullable=True, index=True),
-    )
+    if "community_members" not in existing_tables:
+        op.create_table(
+            "community_members",
+            sa.Column("id", UUID(as_uuid=True), primary_key=True),
+            sa.Column("community_id", UUID(as_uuid=True), sa.ForeignKey("communities.id"), nullable=False, index=True),
+            sa.Column("user_id", sa.String, nullable=False, index=True),
+            sa.Column("agent_id", UUID(as_uuid=True), sa.ForeignKey("agents.id"), nullable=True, index=True),
+            sa.Column("role", sa.String, nullable=False, server_default="member"),
+            sa.Column("joined_at", sa.DateTime, nullable=False, server_default=sa.func.now()),
+            sa.UniqueConstraint("community_id", "user_id", name="uq_community_member"),
+        )
+
+    columns = [c["name"] for c in inspector.get_columns("deliberations")]
+    if "community_id" not in columns:
+        op.add_column(
+            "deliberations",
+            sa.Column("community_id", UUID(as_uuid=True), sa.ForeignKey("communities.id"), nullable=True, index=True),
+        )
 
 
 def downgrade() -> None:
