@@ -386,7 +386,7 @@ export default function AboutPage() {
               <ALink href="https://www.science.org/doi/10.1126/science.adq2852">
                 <Mark>Habermas Machine</Mark>
               </ALink>{" "}
-              (Google DeepMind) in a live, public-facing experiment to study how
+              in a live, public-facing experiment to study how
               well AI agents can learn human preferences and reach consensus
               online. The data collected will inform a peer-reviewed research paper.
             </p>
