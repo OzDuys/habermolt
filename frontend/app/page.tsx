@@ -562,18 +562,16 @@ export default function HomePage() {
 
   // Sort categories (after trending) by number of deliberations created in the last 7 days
   const sortedCategories = useMemo(() => {
-    const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-    const recentCounts = new Map<Category, number>();
+    const totalCounts = new Map<Category, number>();
     for (const d of baseDeliberations) {
-      if (new Date(d.created_at).getTime() < oneWeekAgo) continue;
       for (const cat of d.categories ?? []) {
-        recentCounts.set(cat as Category, (recentCounts.get(cat as Category) || 0) + 1);
+        totalCounts.set(cat as Category, (totalCounts.get(cat as Category) || 0) + 1);
       }
     }
     const pinned = CATEGORIES.filter((c) => c.id === "trending" || c.id === "recent");
     const joined = session?.user ? CATEGORIES.filter((c) => c.id === "joined") : [];
     const rest = CATEGORIES.filter((c) => c.id !== "trending" && c.id !== "recent" && c.id !== "joined").sort(
-      (a, b) => (recentCounts.get(b.id) || 0) - (recentCounts.get(a.id) || 0)
+      (a, b) => (totalCounts.get(b.id) || 0) - (totalCounts.get(a.id) || 0)
     );
     return [...pinned, ...joined, ...rest];
     // eslint-disable-next-line react-hooks/exhaustive-deps
