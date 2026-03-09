@@ -1047,14 +1047,12 @@ export default function LiveDeliberationPage() {
         <div ref={scrollContainerRef} style={{
           flex: 1, overflowY: "auto", overflowX: "hidden",
           position: "relative", zIndex: 1,
-          scrollSnapType: "y mandatory",
-          maxWidth: "100vw",
+          maxWidth: "100vw", paddingBottom: 60,
         }}>
 
           {/* ═══ CONSENSUS ═══ */}
           <div ref={(el) => { sectionRefs.current.consensus = el; }} data-tab="consensus" style={{
-            width: "100%", minHeight: "100%", scrollSnapAlign: "start",
-            display: "flex", flexDirection: "column",
+            width: "100%", minHeight: "100%",             display: "flex", flexDirection: "column",
             alignItems: "center", justifyContent: "center",
             padding: "60px 20px 48px",
           }}>
@@ -1250,8 +1248,7 @@ export default function LiveDeliberationPage() {
 
           {/* ═══ STATEMENTS ═══ */}
           <div ref={(el) => { sectionRefs.current.statements = el; }} data-tab="statements" style={{
-            width: "100%", minHeight: "100%", scrollSnapAlign: "start",
-            display: "flex", flexDirection: "column", alignItems: "center",
+            width: "100%", minHeight: "100%",             display: "flex", flexDirection: "column", alignItems: "center",
             padding: "32px 20px 48px", position: "relative",
           }}>
             <div style={{ width: "100%", maxWidth: 1200 }}>
@@ -1354,8 +1351,7 @@ export default function LiveDeliberationPage() {
 
           {/* ═══ AGENTS ═══ */}
           <div ref={(el) => { sectionRefs.current.agents = el; }} data-tab="agents" style={{
-            width: "100%", minHeight: "100%", scrollSnapAlign: "start",
-            padding: "32px 24px 80px", position: "relative",
+            width: "100%", minHeight: "100%",             padding: "32px 24px 80px", position: "relative",
           }}>
           <div style={{ maxWidth: 1200, margin: "0 auto" }}>
             <div style={{ textAlign: "center", marginBottom: 20 }}>
@@ -1502,36 +1498,30 @@ export default function LiveDeliberationPage() {
 
         </div>{/* end scroll container */}
 
-        {/* ─── Bottom Nav ─── */}
+        {/* ─── Floating Pill Nav ─── */}
         <div style={{
-          position: "relative", zIndex: 10,
-          display: "flex", justifyContent: "center",
-          padding: "12px 16px 20px",
-          background: "rgba(250,247,240,0.9)", backdropFilter: "blur(12px)",
-          WebkitBackdropFilter: "blur(12px)",
-          borderTop: "1px solid rgba(0,0,0,0.04)",
+          position: "absolute", bottom: "max(28px, env(safe-area-inset-bottom, 20px))", left: "50%", transform: "translateX(-50%)",
+          zIndex: 10, display: "flex", gap: 3, padding: 3,
+          borderRadius: 999, background: "rgba(255,255,255,0.7)",
+          backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)",
+          border: "1px solid rgba(0,0,0,0.06)",
+          boxShadow: "0 2px 16px rgba(0,0,0,0.06)",
         }}>
-          <div style={{
-            display: "flex", gap: 4, padding: 4,
-            borderRadius: 999, background: "rgba(0,0,0,0.04)",
-            border: "1px solid rgba(0,0,0,0.04)",
-          }}>
-            {TABS.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => scrollToTab(tab.id)}
-                style={{
-                  padding: "8px 20px", borderRadius: 999, border: "none",
-                  cursor: "pointer", fontSize: 12, fontWeight: activeTab === tab.id ? 700 : 400,
-                  background: activeTab === tab.id ? "#1a1a1a" : "transparent",
-                  color: activeTab === tab.id ? "#fff" : "#999",
-                  transition: "all 0.2s", whiteSpace: "nowrap",
-                }}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
+          {TABS.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => scrollToTab(tab.id)}
+              style={{
+                padding: "6px 16px", borderRadius: 999, border: "none",
+                cursor: "pointer", fontSize: 11, fontWeight: activeTab === tab.id ? 700 : 400,
+                background: activeTab === tab.id ? "#1a1a1a" : "transparent",
+                color: activeTab === tab.id ? "#fff" : "#999",
+                transition: "all 0.2s", whiteSpace: "nowrap",
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
       </div>
 
