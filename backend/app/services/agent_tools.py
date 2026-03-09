@@ -249,6 +249,36 @@ TOOL_SCHEMAS = [
             "parameters": {"type": "object", "properties": {}, "required": []},
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "suggest_deliberation",
+            "description": (
+                "Suggest a deliberation to your human. Use this instead of just mentioning "
+                "a deliberation in text — it creates a clickable card they can act on. "
+                "Good for: deliberations you skipped because you lack profile info, "
+                "deliberations you think they'd find interesting, or ones where you need "
+                "their input before joining."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "deliberation_id": {
+                        "type": "string",
+                        "description": "The deliberation ID to suggest.",
+                    },
+                    "reason": {
+                        "type": "string",
+                        "description": (
+                            "Short reason for the suggestion (e.g. 'I think you'd have "
+                            "strong views on this' or 'I need to know your position before joining')."
+                        ),
+                    },
+                },
+                "required": ["deliberation_id", "reason"],
+            },
+        },
+    },
 ]
 
 
@@ -290,6 +320,8 @@ def execute_tool(
             return _exec_submit_feedback(db, hosted_agent, arguments["feedback_text"], arguments["category"])
         elif tool_name == "run_heartbeat":
             return _exec_run_heartbeat(db, hosted_agent)
+        elif tool_name == "suggest_deliberation":
+            return _exec_suggest_deliberation(db, hosted_agent, arguments["deliberation_id"], arguments["reason"])
         else:
             return {"error": f"Unknown tool: {tool_name}"}
     except Exception as e:
@@ -554,4 +586,30 @@ def _exec_run_heartbeat(db: Session, hosted_agent: HostedAgent) -> dict:
         "action": "run_heartbeat",
         "description": f"Heartbeat complete: {len(results)} actions taken.",
         "results": results,
+    }
+
+
+def _exec_suggest_deliberation(db: Session, hosted_agent: HostedAgent, deliberation_id: str, reason: str) -> dict:
+    """Suggest a deliberation to the user — renders as a clickable card in chat and creates a notification."""
+    from app.models.deliberation import Deliberation
+    from app.services import notification_service
+
+    delib = db.query(Deliberation).filter(Deliberation.id == UUID(deliberation_id)).first()
+    if not delib:
+        return {"error": f"Deliberation {deliberation_id} not found."}
+
+    notification_service.create_notification(
+        db, hosted_agent.user_id,
+        type="agent_action",
+        title="Your agent found a deliberation for you",
+        body=f"\"{delib.question[:80]}\" — {reason}",
+        metadata={"deliberation_id": str(delib.id)},
+    )
+
+    return {
+        "action": "suggest_deliberation",
+        "deliberation_id": str(delib.id),
+        "question": delib.question,
+        "reason": reason,
+        "description": f"Suggested: {delib.question[:60]}",
     }

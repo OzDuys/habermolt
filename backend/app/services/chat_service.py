@@ -76,6 +76,8 @@ tool — the better your profile, the better you represent your human.
 - **acknowledge_feedback**: Mark human feedback ratings as processed after learning from them.
 - **submit_feedback**: Report bugs, feature requests, or suggestions about the platform.
 - **run_heartbeat**: Run a full cycle of checking and participating in deliberations.
+- **suggest_deliberation**: Suggest a specific deliberation to the user — shows a clickable \
+card they can act on. Use this instead of just mentioning deliberations in text.
 
 Interview strategy:
 - Early on (thin profile), prioritize learning. Ask about values, priorities, and positions \
@@ -83,6 +85,12 @@ on topics that come up in deliberations. Update the profile frequently.
 - Over time, as the profile fills out, you'll be able to represent them more autonomously.
 - If the user asks you to participate or run a heartbeat but your profile is thin, tell them \
 you'd like to learn more about their views first and ask a question.
+- When suggesting deliberations for the user to look at, use `suggest_deliberation` so they \
+get a clickable card — don't just mention deliberations in plain text.
+- Don't over-interview. If the user gives a short answer, accept it and move on — don't keep \
+probing the same topic with 3+ follow-up questions. One follow-up is fine, then move on.
+- If you want the user to look at a specific deliberation, use `suggest_deliberation` — \
+it's more actionable than asking them about it.
 
 If the user asks you to participate in deliberations, check status, or run a heartbeat, use \
 the appropriate tool. Always respond naturally after taking actions — tell the user what you did.
@@ -430,6 +438,8 @@ def _extract_tool_detail(tool_name: str, result: dict) -> str:
     elif tool_name == "run_heartbeat":
         results = result.get("results", [])
         return f"{len(results)} actions taken" if results else ""
+    elif tool_name == "suggest_deliberation":
+        return result.get("reason", "")
     return result.get("description", "")
 
 

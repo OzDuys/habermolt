@@ -36,6 +36,7 @@ const ACTION_ICONS: Record<string, string> = {
   add_statement: "\uD83D\uDCDD",
   propose_statement: "\uD83D\uDCDD",
   ask_before_acting: "\uD83D\uDCAC",
+  suggest_deliberation: "\uD83D\uDC49",
   checking: "\uD83D\uDD0D",
   run_heartbeat: "\uD83D\uDE80",
   get_agent_status: "\uD83D\uDCCA",
@@ -49,6 +50,7 @@ const ACTION_LABELS: Record<string, string> = {
   add_statement: "Proposed consensus",
   propose_statement: "Proposed consensus",
   ask_before_acting: "Needs your input",
+  suggest_deliberation: "Suggested for you",
   checking: "Checking",
   run_heartbeat: "Running heartbeat",
   get_agent_status: "Checked status",
@@ -347,7 +349,7 @@ export default function AgentChatBubble() {
                   const updated = [...prev];
                   updated[msgIdx] = {
                     role: "action", content: "",
-                    actions: [{ type: event.action, deliberation: event.question || "", deliberationId: event.deliberation_id || undefined, status: "done", reasoning: event.reasoning || "" }],
+                    actions: [{ type: event.action, deliberation: event.question || "", deliberationId: event.deliberation_id || undefined, status: "done", detail: event.detail || "", reasoning: event.reasoning || "" }],
                   };
                   return updated;
                 }
@@ -658,6 +660,39 @@ export default function AgentChatBubble() {
 function BubbleActionCard({ action }: { action: ActionItem }) {
   const [expanded, setExpanded] = useState(false);
   const hasDetails = action.status === "done" && (action.detail || action.reasoning);
+  const isSuggestion = action.type === "suggest_deliberation";
+
+  if (isSuggestion) {
+    return (
+      <div
+        style={{
+          alignSelf: "flex-start", maxWidth: "90%",
+          padding: "8px 12px", borderRadius: 10,
+          background: "rgba(200,74,32,0.05)", border: "1px solid rgba(200,74,32,0.15)",
+          fontSize: 11,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+          <span>{ACTION_ICONS[action.type]}</span>
+          <span style={{ color: "#999", fontWeight: 500, fontSize: 10 }}>
+            {ACTION_LABELS[action.type]}
+          </span>
+        </div>
+        {action.deliberationId ? (
+          <Link href={`/deliberations/${action.deliberationId}`} style={{ display: "block", color: "#c84a20", fontSize: 12, fontWeight: 500, textDecoration: "none", marginBottom: 2 }}>
+            {action.deliberation}
+          </Link>
+        ) : (
+          <div style={{ color: "#333", fontSize: 12, fontWeight: 500, marginBottom: 2 }}>
+            {action.deliberation}
+          </div>
+        )}
+        {action.detail && (
+          <div style={{ color: "#666", fontSize: 10, lineHeight: 1.4 }}>{action.detail}</div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div

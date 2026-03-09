@@ -161,7 +161,6 @@ Question: {question}
 Respond with ONLY a comma-separated list of categories, nothing else."""
 
 STALE_OPINION_DAYS = 7
-STALE_PROFILE_DAYS = 7
 
 
 def run_all_hosted_agents(db: Session) -> dict:
@@ -239,13 +238,16 @@ If you skip deliberations, briefly explain why (too little profile signal on tha
 If status includes pending feedback from your human, read it carefully, \
 learn from it (call update_profile if it reveals new information), then acknowledge it.
 
-### Step 6: Summarize
-After all actions, write a SHORT summary (2-3 sentences max) for your human:
-- Briefly state what you did (e.g. "I joined 1 deliberation and ranked statements in 2 others")
-- If you skipped deliberations because your profile lacks coverage, suggest ONE specific topic
-  the user could chat with you about to fill the gap. Only one suggestion — don't overwhelm them.
-
-Keep it conversational and concise. No bullet lists, no multi-paragraph breakdowns.
+### Step 6: Suggest & Summarize
+- For any deliberation you skipped (lack of profile info, uncertain position), call \
+`suggest_deliberation` with the deliberation ID and a short reason. This shows the user a \
+clickable card they can act on. Much better than writing about it in text.
+- After all actions and suggestions, write a short summary (3-5 sentences) for your human:
+  - What you found and what you did (e.g. "Checked status — 3 new deliberations, joined 1, ranked statements in 2")
+  - Brief reasoning for actions you took or skipped (e.g. "Skipped the Star Wars one because \
+your profile doesn't cover pop culture")
+  - If your profile has gaps, suggest ONE topic they could chat with you about to fill it
+- Keep it conversational. No bullet lists, no multi-paragraph breakdowns, no more than one question.
 """
 
 
@@ -346,6 +348,8 @@ def run_single_hosted_agent(db: Session, hosted_agent: HostedAgent) -> dict:
     hosted_agent.last_heartbeat_at = datetime.utcnow()
     db.commit()
 
+    _create_heartbeat_notification(db, hosted_agent, structured_actions)
+
     return {
         "status": "ok",
         "actions_taken": [a.get("description", "") for a in structured_actions],
@@ -444,6 +448,7 @@ def run_single_hosted_agent_stream(db: Session, hosted_agent: HostedAgent):
                     "question": question,
                     "deliberation_id": delib_id,
                     "description": tool_result.get("description", ""),
+                    "detail": tool_result.get("reason", ""),
                     "reasoning": text_this_turn.strip() if text_this_turn and text_this_turn.strip() else None,
                 }
             except Exception as e:
@@ -488,7 +493,46 @@ def run_single_hosted_agent_stream(db: Session, hosted_agent: HostedAgent):
     hosted_agent.last_heartbeat_at = datetime.utcnow()
     db.commit()
 
+    _create_heartbeat_notification(db, hosted_agent, structured_actions)
+
     yield {"type": "done"}
+
+
+def _create_heartbeat_notification(db: Session, hosted_agent: HostedAgent, actions: list[dict]) -> None:
+    """Create a single notification summarising a heartbeat run."""
+    if not actions:
+        return
+
+    # Count action types
+    joined = sum(1 for a in actions if a.get("action") == "join_deliberation")
+    ranked = sum(1 for a in actions if a.get("action") in ("rank_statements", "update_rankings", "review_predicted_rankings"))
+    proposed = sum(1 for a in actions if a.get("action") in ("propose_statement", "add_statement"))
+    suggested = sum(1 for a in actions if a.get("action") == "suggest_deliberation")
+    created = sum(1 for a in actions if a.get("action") == "create_deliberation")
+
+    parts = []
+    if joined:
+        parts.append(f"joined {joined} deliberation{'s' if joined != 1 else ''}")
+    if ranked:
+        parts.append(f"ranked statements in {ranked}")
+    if proposed:
+        parts.append(f"proposed {proposed} consensus statement{'s' if proposed != 1 else ''}")
+    if created:
+        parts.append(f"created {created} deliberation{'s' if created != 1 else ''}")
+    if suggested:
+        parts.append(f"suggested {suggested} deliberation{'s' if suggested != 1 else ''} for you")
+
+    if not parts:
+        return
+
+    body = "Your agent " + ", ".join(parts) + "."
+
+    notification_service.create_notification(
+        db, hosted_agent.user_id,
+        type="agent_action",
+        title="Heartbeat complete",
+        body=body,
+    )
 
 
 def _should_run_now(hosted_agent: HostedAgent) -> bool:
@@ -912,185 +956,6 @@ def _assess_confidence(hosted_agent: HostedAgent, question: str) -> dict:
         result["should_validate"] = True  # act but request feedback after
 
     return result
-
-
-def _ask_before_acting(db: Session, hosted_agent: HostedAgent, delib: Deliberation, confidence: dict) -> dict:
-    """Post a chat message asking the user for input before joining a deliberation."""
-    from app.services.chat_service import add_agent_message
-
-    msg = (
-        f"Hey! There's a new deliberation on Habermolt:\n\n"
-        f"> **{delib.question}**\n\n"
-        f"I'm not confident I know your position on this one "
-        f"(confidence: {confidence['confidence']}/5). "
-        f"Before I weigh in on your behalf, what's your take? "
-        f"Even a brief answer helps me represent you accurately.\n\n"
-        f"[View deliberation](/deliberations/{delib.id})"
-    )
-
-    add_agent_message(db, hosted_agent, msg)
-    notification_service.create_notification(
-        db, hosted_agent.user_id,
-        type="agent_needs_input",
-        title="Your agent needs your input",
-        body=f"New deliberation: \"{delib.question[:80]}\" — your agent isn't sure how you'd feel about this.",
-        metadata={"deliberation_id": str(delib.id)},
-    )
-
-    return {
-        "action": "ask_before_acting",
-        "deliberation_id": str(delib.id),
-        "question": delib.question,
-        "description": f"Asked for input on '{delib.question[:50]}'",
-        "confidence": confidence["confidence"],
-        "similarity": confidence["similarity"],
-    }
-
-
-def _request_validation(db: Session, hosted_agent: HostedAgent, action: dict) -> dict:
-    """Post a chat message asking the user to validate a recent action."""
-    from app.services.chat_service import add_agent_message
-
-    action_type = action.get("action", "unknown")
-    question = action.get("question", "a deliberation")
-
-    if action_type == "join_deliberation":
-        opinion = action.get("opinion_text", "")
-        msg = (
-            f"I just joined a deliberation:\n\n"
-            f"> **{question}**\n\n"
-            f"Here's what I said on your behalf:\n\n"
-            f"*\"{opinion[:300]}{'...' if len(opinion) > 300 else ''}\"*\n\n"
-            f"Does this sound right? Let me know if I got anything wrong and I'll update my opinion."
-        )
-    elif action_type == "revisit_opinion":
-        msg = (
-            f"I updated my opinion on:\n\n"
-            f"> **{question}**\n\n"
-            f"The deliberation evolved and I revised what I said. "
-            f"Want to take a look and tell me if the update reflects your views?"
-        )
-    else:
-        msg = (
-            f"I just took action on:\n\n"
-            f"> **{question}**\n\n"
-            f"Action: {action_type}. Does this look right to you?"
-        )
-
-    add_agent_message(db, hosted_agent, msg)
-    notification_service.create_notification(
-        db, hosted_agent.user_id,
-        type="agent_wants_feedback",
-        title="Your agent wants your feedback",
-        body=f"Check what your agent did on \"{question[:80]}\"",
-        metadata={"deliberation_id": action.get("deliberation_id")},
-    )
-
-    return {
-        "action": "request_validation",
-        "description": f"Asked for feedback on '{question[:50]}'",
-        **{k: v for k, v in action.items() if k != "description"},
-    }
-
-
-def _do_interview_request(db: Session, hosted_agent: HostedAgent) -> dict:
-    """Notify user to chat with their agent to build/update profile."""
-    from app.services.chat_service import add_agent_message
-
-    if not hosted_agent.user_profile:
-        msg = (
-            "Hi! I'd love to learn about your values and perspectives so I can represent you "
-            "in deliberations on Habermolt. Could we chat for a few minutes? I'll ask about "
-            "topics you care about — politics, society, tech, culture — so I can build a "
-            "profile of your views."
-        )
-        title = "Your agent wants to get to know you"
-        body = "Chat with your agent to build your profile so it can represent you in deliberations."
-    else:
-        msg = (
-            "Hey! It's been a while since we last chatted. Have any of your views changed, "
-            "or is there a new topic you've been thinking about? I want to make sure I'm "
-            "representing you accurately in deliberations."
-        )
-        title = "Your agent wants to check in"
-        body = "It's been a while — chat with your agent to keep your profile up to date."
-
-    add_agent_message(db, hosted_agent, msg)
-    notification_service.create_notification(
-        db, hosted_agent.user_id,
-        type="interview_request",
-        title=title,
-        body=body,
-    )
-
-    return {
-        "action": "interview_request",
-        "description": title,
-    }
-
-
-def _do_request_feedback(db: Session, hosted_agent: HostedAgent) -> dict:
-    """Ask user for feedback on their agent's performance or the platform."""
-    from app.services.chat_service import add_agent_message
-
-    # Count deliberations the agent has participated in
-    agent = hosted_agent.agent
-    participation_count = db.query(Opinion.deliberation_id).filter(
-        Opinion.agent_id == agent.id
-    ).distinct().count()
-
-    msg = (
-        f"I've participated in {participation_count} deliberation{'s' if participation_count != 1 else ''} "
-        f"on your behalf so far. How am I doing? Some things I'd love to know:\n\n"
-        f"- Am I representing your views accurately?\n"
-        f"- Are there topics I've been getting wrong?\n"
-        f"- Anything about Habermolt that could work better?\n\n"
-        f"Your feedback helps me improve — and I'll pass any platform feedback along too."
-    )
-
-    add_agent_message(db, hosted_agent, msg)
-    notification_service.create_notification(
-        db, hosted_agent.user_id,
-        type="request_feedback",
-        title="Your agent wants your feedback",
-        body="How is your agent doing? Share your thoughts to help it represent you better.",
-    )
-
-    return {
-        "action": "request_feedback",
-        "description": "Asked for feedback on performance",
-    }
-
-
-def _do_fallback(db: Session, hosted_agent: HostedAgent) -> Optional[dict]:
-    """When nothing else to do, pick a useful fallback action.
-
-    Priority:
-    1. Interview request — no profile or stale
-    2. Request feedback — has participated in 3+ deliberations
-    3. Create deliberation — generate a new topic from profile
-    """
-    # 1. Interview request
-    if not hosted_agent.user_profile:
-        return _do_interview_request(db, hosted_agent)
-
-    stale_chat = (
-        not hosted_agent.last_chatted_at
-        or (datetime.utcnow() - hosted_agent.last_chatted_at).days >= STALE_PROFILE_DAYS
-    )
-    if stale_chat:
-        return _do_interview_request(db, hosted_agent)
-
-    # 2. Request feedback (if participated in 3+ deliberations)
-    agent = hosted_agent.agent
-    participation_count = db.query(Opinion.deliberation_id).filter(
-        Opinion.agent_id == agent.id
-    ).distinct().count()
-    if participation_count >= 3:
-        return _do_request_feedback(db, hosted_agent)
-
-    # 3. Create a new deliberation
-    return _do_create_deliberation(db, hosted_agent)
 
 
 def _do_create_deliberation(db: Session, hosted_agent: HostedAgent) -> Optional[dict]:
