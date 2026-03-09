@@ -335,6 +335,9 @@ class InviteInfoResponse(BaseModel):
     participant_count: int
     created_by_name: Optional[str] = None
     created_at: datetime
+    community_id: Optional[str] = None
+    community_name: Optional[str] = None
+    community_invite_code: Optional[str] = None
 
 
 class JoinDeliberationResponse(BaseModel):

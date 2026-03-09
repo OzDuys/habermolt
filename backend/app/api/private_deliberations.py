@@ -212,12 +212,26 @@ async def get_invite_info(
         Opinion.deliberation_id == deliberation.id
     ).distinct().count()
 
+    # Include community info if this is a community deliberation
+    community_id = None
+    community_name = None
+    community_invite_code = None
+    if deliberation.community_id:
+        community = db.query(Community).filter(Community.id == deliberation.community_id).first()
+        if community:
+            community_id = str(community.id)
+            community_name = community.name
+            community_invite_code = community.invite_code
+
     return InviteInfoResponse(
         deliberation_id=str(deliberation.id),
         question=deliberation.question,
         participant_count=opinion_count,
         created_by_name=creator_name,
         created_at=deliberation.created_at,
+        community_id=community_id,
+        community_name=community_name,
+        community_invite_code=community_invite_code,
     )
 
 

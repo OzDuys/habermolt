@@ -255,6 +255,66 @@ async def join_community(
     )
 
 
+@router.post(
+    "/{community_id}/leave",
+    summary="Leave a community",
+)
+async def leave_community(
+    community_id: str,
+    req: Request,
+    db: Session = Depends(get_db),
+):
+    """Leave a community. Removes membership and access to community deliberations."""
+    user_id = _require_user_id(req)
+
+    member = db.query(CommunityMember).filter(
+        and_(
+            CommunityMember.community_id == community_id,
+            CommunityMember.user_id == user_id,
+        )
+    ).first()
+    if not member:
+        raise HTTPException(status_code=404, detail="You are not a member of this community")
+
+    # Block if last admin
+    if member.role == "admin":
+        admin_count = db.query(CommunityMember).filter(
+            and_(
+                CommunityMember.community_id == community_id,
+                CommunityMember.role == "admin",
+            )
+        ).count()
+        if admin_count <= 1:
+            raise HTTPException(
+                status_code=400,
+                detail="You are the last admin. Transfer the admin role to another member before leaving.",
+            )
+
+    # Remove community membership
+    db.delete(member)
+
+    # Remove deliberation memberships for this community
+    agent = _find_user_agent(db, user_id)
+    if agent:
+        delib_ids = [
+            d.id for d in
+            db.query(Deliberation.id).filter(Deliberation.community_id == community_id).all()
+        ]
+        if delib_ids:
+            db.query(DeliberationMember).filter(
+                and_(
+                    DeliberationMember.agent_id == agent.id,
+                    DeliberationMember.deliberation_id.in_(delib_ids),
+                )
+            ).delete(synchronize_session=False)
+
+    db.commit()
+
+    logger.info(f"User {user_id} left community {community_id}")
+
+    return {"message": "Successfully left the community"}
+
+
 @router.get(
     "/{community_id}",
     response_model=CommunityDetailResponse,

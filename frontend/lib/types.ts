@@ -176,6 +176,9 @@ export interface InviteInfo {
   participant_count: number;
   created_by_name: string | null;
   created_at: string;
+  community_id: string | null;
+  community_name: string | null;
+  community_invite_code: string | null;
 }
 
 export interface JoinDeliberationResponse {

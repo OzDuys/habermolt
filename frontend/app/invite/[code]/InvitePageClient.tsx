@@ -54,11 +54,24 @@ function InvitePageContent() {
     setPageState("joining");
 
     try {
+      // If this is a community deliberation, join the community first (idempotent)
+      if (inviteInfo.community_invite_code) {
+        try {
+          await api.joinCommunity(inviteInfo.community_invite_code);
+        } catch (communityErr: any) {
+          if (communityErr?.message?.includes("need an agent")) {
+            await api.createDefaultAgent();
+            await api.joinCommunity(inviteInfo.community_invite_code);
+          } else if (!communityErr?.message?.includes("already")) {
+            throw communityErr;
+          }
+        }
+      }
+
       let result;
       try {
         result = await api.joinDeliberation(code);
       } catch (joinErr: any) {
-        // If join fails because user has no agent, auto-create one and retry
         if (joinErr?.message?.includes("need an agent")) {
           await api.createDefaultAgent();
           result = await api.joinDeliberation(code);
@@ -85,17 +98,6 @@ function InvitePageContent() {
     });
   };
 
-  // Auto-accept when signed in and invite loaded
-  useEffect(() => {
-    if (
-      pageState === "invite" &&
-      session?.user &&
-      !sessionLoading &&
-      inviteInfo
-    ) {
-      acceptAndRedirect();
-    }
-  }, [pageState, session, sessionLoading, inviteInfo, acceptAndRedirect]);
 
   // Loading invite info
   if (!inviteInfo && !loadError) {
@@ -165,9 +167,23 @@ function InvitePageContent() {
   return (
     <div className="mx-auto max-w-md py-12">
       <div className="rounded-lg border p-8" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
-        <p className="mb-1 text-center text-xs font-medium uppercase tracking-wider" style={{ color: "var(--muted)" }}>
-          You&apos;re invited to deliberate
-        </p>
+        {inviteInfo.community_name ? (
+          <>
+            <p className="mb-1 text-center text-xs font-medium uppercase tracking-wider" style={{ color: "var(--muted)" }}>
+              You&apos;re invited to join
+            </p>
+            <p className="mb-1 text-center font-serif text-lg" style={{ color: "var(--foreground)" }}>
+              {inviteInfo.community_name}
+            </p>
+            <p className="mb-4 text-center text-xs" style={{ color: "var(--muted)" }}>
+              to deliberate on
+            </p>
+          </>
+        ) : (
+          <p className="mb-1 text-center text-xs font-medium uppercase tracking-wider" style={{ color: "var(--muted)" }}>
+            You&apos;re invited to deliberate
+          </p>
+        )}
         <h1 className="mb-4 text-center font-serif text-xl" style={{ color: "var(--foreground)" }}>
           &ldquo;{inviteInfo.question}&rdquo;
         </h1>
@@ -188,14 +204,19 @@ function InvitePageContent() {
             Checking your account...
           </p>
         ) : session?.user ? (
-          // Signed in — waiting for auto-accept
           <div className="text-center">
-            <p className="mb-1 text-xs" style={{ color: "var(--muted)" }}>
+            <p className="mb-3 text-xs" style={{ color: "var(--muted)" }}>
               Signed in as {session.user.email}
             </p>
-            <p className="text-sm" style={{ color: "var(--muted)" }}>
-              Setting up...
-            </p>
+            <button
+              onClick={acceptAndRedirect}
+              className="w-full rounded-lg px-4 py-3 text-sm font-medium text-white transition-colors hover:opacity-90"
+              style={{ background: "var(--accent)" }}
+            >
+              {inviteInfo.community_name
+                ? `Join ${inviteInfo.community_name}`
+                : "Join Deliberation"}
+            </button>
           </div>
         ) : (
           // Not logged in

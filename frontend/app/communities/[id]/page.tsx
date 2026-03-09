@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useSession } from "@/lib/auth-client";
 import { api } from "@/lib/api";
@@ -23,6 +23,7 @@ function timeAgo(dateStr: string): string {
 
 export default function CommunityDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const communityId = params.id as string;
   const { data: session, isPending } = useSession();
 
@@ -32,6 +33,8 @@ export default function CommunityDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+  const [leaving, setLeaving] = useState(false);
 
   useEffect(() => {
     if (!session?.user || !communityId) return;
@@ -57,6 +60,18 @@ export default function CommunityDetailPage() {
     navigator.clipboard.writeText(url);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleLeave = async () => {
+    setLeaving(true);
+    try {
+      await api.leaveCommunity(communityId);
+      router.replace("/communities");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to leave community");
+      setShowLeaveConfirm(false);
+      setLeaving(false);
+    }
   };
 
   if (isPending || loading) {
@@ -114,13 +129,22 @@ export default function CommunityDetailPage() {
             {community.member_count} member{community.member_count !== 1 ? "s" : ""}
           </p>
         </div>
-        <button
-          onClick={handleCopyInvite}
-          className="shrink-0 rounded-full border px-3 py-2 text-xs font-medium transition-colors hover:border-stone-400"
-          style={{ borderColor: "var(--border)", color: copied ? "var(--accent)" : "var(--foreground)" }}
-        >
-          {copied ? "Copied!" : "Copy Invite Link"}
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            onClick={handleCopyInvite}
+            className="rounded-full border px-3 py-2 text-xs font-medium transition-colors hover:border-stone-400"
+            style={{ borderColor: "var(--border)", color: copied ? "var(--accent)" : "var(--foreground)" }}
+          >
+            {copied ? "Copied!" : "Copy Invite Link"}
+          </button>
+          <button
+            onClick={() => setShowLeaveConfirm(true)}
+            className="rounded-full border px-3 py-2 text-xs font-medium transition-colors hover:border-red-400 hover:text-red-500"
+            style={{ borderColor: "var(--border)", color: "var(--muted)" }}
+          >
+            Leave
+          </button>
+        </div>
       </div>
 
       {/* Members */}
@@ -196,6 +220,36 @@ export default function CommunityDetailPage() {
         onClose={() => setShowCreateModal(false)}
         communityId={communityId}
       />
+
+      {/* Leave confirmation dialog */}
+      {showLeaveConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="mx-4 w-full max-w-sm rounded-xl border p-6" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+            <h3 className="mb-2 font-serif text-lg" style={{ color: "var(--foreground)" }}>Leave community?</h3>
+            <p className="mb-5 text-sm" style={{ color: "var(--muted)" }}>
+              You&apos;ll lose access to all community deliberations. You can rejoin later with an invite link.
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowLeaveConfirm(false)}
+                className="flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors hover:border-stone-400"
+                style={{ borderColor: "var(--border)", color: "var(--foreground)" }}
+                disabled={leaving}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleLeave}
+                className="flex-1 rounded-lg px-3 py-2 text-sm font-medium text-white transition-colors hover:opacity-90"
+                style={{ background: "#ef4444" }}
+                disabled={leaving}
+              >
+                {leaving ? "Leaving..." : "Leave Community"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

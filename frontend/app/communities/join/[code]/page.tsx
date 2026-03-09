@@ -62,12 +62,6 @@ export default function CommunityJoinPage() {
     });
   };
 
-  // Auto-accept when signed in
-  useEffect(() => {
-    if (pageState === "invite" && session?.user && !sessionLoading && inviteInfo) {
-      acceptAndRedirect();
-    }
-  }, [pageState, session, sessionLoading, inviteInfo, acceptAndRedirect]);
 
   // Loading
   if (!inviteInfo && !loadError) {
@@ -139,8 +133,14 @@ export default function CommunityJoinPage() {
           <p className="text-center text-sm" style={{ color: "var(--muted)" }}>Checking your account...</p>
         ) : session?.user ? (
           <div className="text-center">
-            <p className="mb-1 text-xs" style={{ color: "var(--muted)" }}>Signed in as {session.user.email}</p>
-            <p className="text-sm" style={{ color: "var(--muted)" }}>Setting up...</p>
+            <p className="mb-3 text-xs" style={{ color: "var(--muted)" }}>Signed in as {session.user.email}</p>
+            <button
+              onClick={acceptAndRedirect}
+              className="w-full rounded-lg px-4 py-3 text-sm font-medium text-white transition-colors hover:opacity-90"
+              style={{ background: "var(--accent)" }}
+            >
+              Join {inviteInfo.name}
+            </button>
           </div>
         ) : (
           <div>

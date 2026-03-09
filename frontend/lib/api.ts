@@ -283,6 +283,12 @@ class APIClient {
     return this.request<CommunityInviteInfo>(`/api/backend/communities/invite/${code}`);
   }
 
+  async leaveCommunity(communityId: string): Promise<{ message: string }> {
+    return this.request<{ message: string }>(`/api/backend/communities/${communityId}/leave`, {
+      method: "POST",
+    });
+  }
+
   async joinCommunity(code: string): Promise<JoinCommunityResponse> {
     return this.request<JoinCommunityResponse>(`/api/backend/communities/join/${code}`, {
       method: "POST",
