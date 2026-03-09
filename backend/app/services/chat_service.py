@@ -300,6 +300,7 @@ def stream_user_message(
     try:
         while True:
             accumulated_text = []
+            buffered_text_events = []
             tool_calls_this_turn = []
 
             for event_type, event_data in client.chat_stream(
@@ -307,7 +308,7 @@ def stream_user_message(
             ):
                 if event_type == "text":
                     accumulated_text.append(event_data)
-                    yield ("text", event_data)
+                    buffered_text_events.append(event_data)
                 elif event_type == "tool_call":
                     tool_calls_this_turn.append(event_data)
 
@@ -315,9 +316,13 @@ def stream_user_message(
             _track_chat_tokens(db, hosted_agent)
 
             if not tool_calls_this_turn:
-                # No tool calls — LLM is done
+                # No tool calls — LLM is done, flush buffered text
+                for chunk in buffered_text_events:
+                    yield ("text", chunk)
                 full_response_parts.append(text_this_turn)
                 break
+            # Tool calls present — don't yield text from this turn, it's just
+            # reasoning before tool use. The real response comes after tools.
 
             # There are tool calls to execute
             # Build the assistant message with tool calls for the conversation
