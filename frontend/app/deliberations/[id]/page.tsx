@@ -9,6 +9,7 @@ import { api } from "@/lib/api";
 import { useSession, signIn } from "@/lib/auth-client";
 import type { DeliberationDetail, ClusterPoint, OpinionClusterPoint, OpinionClusterInfo } from "@/lib/types";
 import StatementCluster from "@/components/StatementCluster";
+import RankingRidgeline from "@/components/RankingRidgeline";
 import OpinionLandscape from "@/components/OpinionLandscape";
 import ClusterBar from "@/components/ClusterBar";
 import ShareButton from "@/components/ShareSection";
@@ -768,6 +769,17 @@ export default function LiveDeliberationPage() {
   const [selectedAgent, setSelectedAgent] = useState<AgentInfo | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const sectionRefs = useRef<Record<TabId, HTMLDivElement | null>>({ consensus: null, statements: null, agents: null });
+  const rightColRef = useRef<HTMLDivElement>(null);
+  const [rightColHeight, setRightColHeight] = useState<number>(0);
+
+  // Sync left column height to right column
+  useEffect(() => {
+    const el = rightColRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => setRightColHeight(entry.contentRect.height));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [clusterPoints, data]);
 
   // Join deliberation state
   const { data: session } = useSession();
@@ -1270,7 +1282,7 @@ export default function LiveDeliberationPage() {
                 {/* Left: Statement list */}
                 <div style={{
                   display: "flex", flexDirection: "column", gap: 12,
-                  maxHeight: "calc(100vh - 220px)", overflowY: "auto",
+                  maxHeight: rightColHeight > 0 ? rightColHeight : "calc(100vh - 220px)", overflowY: "auto",
                 }}>
                   {data.statements
                     .sort((a, b) => (a.social_ranking || 99) - (b.social_ranking || 99))
@@ -1327,22 +1339,43 @@ export default function LiveDeliberationPage() {
 
                 {/* Right: Statement Landscape */}
                 {clusterPoints.length >= 2 && (
-                  <div style={{ position: "sticky", top: 0 }}>
-                    <div style={{ textAlign: "center", marginBottom: 16 }}>
-                      <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 3, color: "#888", textTransform: "uppercase" }}>
-                        Statement Landscape
-                      </span>
-                      <p style={{ fontSize: 11, color: "#ccc", marginTop: 4 }}>
-                        Proximity = semantic similarity. Size &amp; colour = social ranking.
-                      </p>
-                    </div>
+                  <div ref={rightColRef} style={{ position: "sticky", top: 0 }}>
                     <div style={{
                       borderRadius: 16, overflow: "hidden",
                       background: "rgba(235,228,218,0.95)", border: "1.5px solid rgba(0,0,0,0.10)",
                       padding: "16px",
                     }}>
+                      <div style={{ textAlign: "center", marginBottom: 12 }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 3, color: "#888", textTransform: "uppercase" }}>
+                          Statement Landscape
+                        </span>
+                        <p style={{ fontSize: 11, color: "#bbb", marginTop: 4 }}>
+                          Proximity = semantic similarity. Size &amp; colour = social ranking.
+                        </p>
+                      </div>
                       <StatementCluster points={clusterPoints} />
                     </div>
+
+                    {/* Ranking Distribution (Ridgeline) */}
+                    {data && data.rankings.length >= 2 && (
+                      <div style={{ marginTop: 24 }}>
+                        <div style={{
+                          borderRadius: 16, overflow: "hidden",
+                          background: "rgba(235,228,218,0.95)", border: "1.5px solid rgba(0,0,0,0.10)",
+                          padding: "16px",
+                        }}>
+                          <div style={{ textAlign: "center", marginBottom: 12 }}>
+                            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 3, color: "#888", textTransform: "uppercase" }}>
+                              Ranking Distribution
+                            </span>
+                            <p style={{ fontSize: 11, color: "#bbb", marginTop: 4 }}>
+                              How agents ranked each statement. Tighter peaks = more agreement.
+                            </p>
+                          </div>
+                          <RankingRidgeline statements={data.statements} rankings={data.rankings} />
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -1465,19 +1498,19 @@ export default function LiveDeliberationPage() {
               {/* Right: Opinion Landscape (sticky) */}
               {opinionClusterPoints.length >= 2 && opinionClusters.length > 0 && (
                 <div style={{ position: "sticky", top: 0 }}>
-                  <div style={{ textAlign: "center", marginBottom: 12 }}>
-                    <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, color: "#888", textTransform: "uppercase" }}>
-                      Opinion Landscape
-                    </span>
-                    <p style={{ fontSize: 11, color: "#bbb", marginTop: 4 }}>
-                      Proximity = semantic similarity. Colour = opinion group.
-                    </p>
-                  </div>
                   <div style={{
                     borderRadius: 16, overflow: "hidden",
                     background: "rgba(235,228,218,0.95)", border: "1.5px solid rgba(0,0,0,0.10)",
                     padding: "12px",
                   }}>
+                    <div style={{ textAlign: "center", marginBottom: 8 }}>
+                      <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, color: "#888", textTransform: "uppercase" }}>
+                        Opinion Landscape
+                      </span>
+                      <p style={{ fontSize: 11, color: "#bbb", marginTop: 4 }}>
+                        Proximity = semantic similarity. Colour = opinion group.
+                      </p>
+                    </div>
                     <OpinionLandscape
                       points={opinionClusterPoints}
                       clusters={opinionClusters}
