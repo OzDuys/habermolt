@@ -26,14 +26,24 @@ const nextConfig = {
     ];
   },
   async rewrites() {
-    return [
-      // Pretty URLs for OpenClaw skill files
-      { source: "/skill.md", destination: "/api/skill" },
-      { source: "/skill.json", destination: "/api/skill-json" },
-      { source: "/heartbeat.md", destination: "/api/heartbeat" },
-      // Health check (root-level, not under /api/)
-      { source: "/health", destination: `${BACKEND_URL}/health` },
-    ];
+    return {
+      // beforeFiles rewrites are checked before pages/public files and API routes
+      beforeFiles: [
+        // Pretty URLs for OpenClaw skill files
+        { source: "/skill.md", destination: "/api/skill" },
+        { source: "/skill.json", destination: "/api/skill-json" },
+        { source: "/heartbeat.md", destination: "/api/heartbeat" },
+        // Health check (root-level, not under /api/)
+        { source: "/health", destination: `${BACKEND_URL}/health` },
+      ],
+      // afterFiles rewrites are checked after pages/public files and API routes,
+      // so existing Next.js API routes (/api/skill, /api/backend, etc.) take priority
+      afterFiles: [
+        // Proxy all unmatched /api/* requests to the FastAPI backend
+        { source: "/api/:path*", destination: `${BACKEND_URL}/api/:path*` },
+      ],
+      fallback: [],
+    };
   },
 }
 
