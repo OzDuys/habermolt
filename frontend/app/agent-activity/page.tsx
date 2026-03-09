@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useSession } from "@/lib/auth-client";
 import AgentActivitySection from "@/components/profile/AgentActivitySection";
@@ -68,6 +68,8 @@ function LoadingSkeleton() {
 function AgentPageContent() {
   const { data: session, isPending } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const rateDeliberationId = searchParams.get("rate") || undefined;
   const [hasHostedAgent, setHasHostedAgent] = useState<boolean | null>(null);
   const [hasOpenClawAgent, setHasOpenClawAgent] = useState<boolean | null>(null);
   const [isOnboarded, setIsOnboarded] = useState<boolean>(true);
@@ -168,7 +170,7 @@ function AgentPageContent() {
       )}
 
       {/* Activity — shown for both hosted and OpenClaw agents */}
-      <AgentActivitySection />
+      <AgentActivitySection rateDeliberationId={rateDeliberationId} />
 
       {/* Floating chat bubble */}
       {hasHostedAgent && <AgentChatBubble />}

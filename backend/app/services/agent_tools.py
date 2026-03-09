@@ -507,6 +507,24 @@ def _exec_acknowledge_feedback(db: Session, hosted_agent: HostedAgent, rating_id
             acknowledged += 1
 
     db.commit()
+
+    # If any acknowledged ratings were negative, prompt user to re-rate
+    from app.models.deliberation import Deliberation
+    from app.services import notification_service
+
+    for rid in rating_ids:
+        rating = db.query(AgentRating).filter(AgentRating.id == UUID(rid)).first()
+        if rating and rating.rating <= 3:
+            delib = db.query(Deliberation).filter(Deliberation.id == rating.deliberation_id).first()
+            if delib:
+                notification_service.create_notification(
+                    db, hosted_agent.user_id,
+                    type="rate_agent",
+                    title="Your agent updated its stance",
+                    body=f'Based on your feedback, your agent revised its position on "{delib.question[:80]}" — re-rate?',
+                    metadata={"deliberation_id": str(delib.id)},
+                )
+
     return {
         "action": "acknowledge_feedback",
         "acknowledged": acknowledged,

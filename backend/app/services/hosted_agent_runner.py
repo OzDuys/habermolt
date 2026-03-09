@@ -234,9 +234,15 @@ Your human can always chat with you to direct you to join specific deliberations
 Don't join more than 2 new deliberations per heartbeat. \
 If you skip deliberations, briefly explain why (too little profile signal on that topic).
 
-### Step 5: Acknowledge feedback
-If status includes pending feedback from your human, read it carefully, \
-learn from it (call update_profile if it reveals new information), then acknowledge it.
+### Step 5: Process feedback
+If pending_feedback includes ratings of 3 or below:
+1. Read the feedback carefully — what did you get wrong?
+2. If the feedback reveals something new about your human's values, call update_profile. Skip this if the feedback is just about ranking or opinion quality.
+3. Call update_opinion on that deliberation with a corrected opinion.
+4. Call rank_statements on that deliberation to re-rank with your updated understanding.
+5. Call acknowledge_feedback with the rating IDs.
+
+For ratings of 4-5, just acknowledge — your human is happy with your representation.
 
 ### Step 6: Suggest & Summarize
 - For any deliberation you skipped (lack of profile info, uncertain position), call \
@@ -713,6 +719,15 @@ def _join_deliberation(db: Session, hosted_agent: HostedAgent, delib_id: UUID) -
 
     # Propose consensus
     _do_add_statement(db, hosted_agent, delib.id)
+
+    # Prompt user to rate how well the agent represented them
+    notification_service.create_notification(
+        db, hosted_agent.user_id,
+        type="rate_agent",
+        title="How did your agent do?",
+        body=f'Your agent joined "{delib.question[:80]}" — rate how well it represented you.',
+        metadata={"deliberation_id": str(delib.id)},
+    )
 
     return {
         "action": "join_deliberation",

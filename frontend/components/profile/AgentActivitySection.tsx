@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
 // --- Types ---
@@ -305,16 +305,25 @@ function DeliberationCard({
   onRate,
   onRateConsensus,
   ratingLoading,
+  autoShowRating,
 }: {
   delib: ActivityDeliberation;
   onRate: (deliberationId: string, rating: number, feedback?: string) => void;
   onRateConsensus: (deliberationId: string, ratings: { representativeness: number; specificity: number; usefulness: number }, feedback?: string) => void;
   ratingLoading: string | null;
+  autoShowRating?: boolean;
 }) {
+  const cardRef = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState(false);
-  const [showRating, setShowRating] = useState(false);
+  const [showRating, setShowRating] = useState(autoShowRating && !delib.my_rating);
   const [pendingRating, setPendingRating] = useState(delib.my_rating?.rating || 0);
   const [feedback, setFeedback] = useState(delib.my_rating?.feedback || "");
+
+  useEffect(() => {
+    if (autoShowRating && cardRef.current) {
+      cardRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [autoShowRating]);
 
   const [showConsensusRating, setShowConsensusRating] = useState(false);
   const [consensusRepresentativeness, setConsensusRepresentativeness] = useState(delib.my_consensus_rating?.representativeness || 0);
@@ -324,8 +333,9 @@ function DeliberationCard({
 
   return (
     <div
+      ref={cardRef}
       className="min-w-0 rounded-lg border transition-shadow hover:shadow-md"
-      style={{ borderColor: "var(--border)", background: "var(--surface)" }}
+      style={{ borderColor: autoShowRating ? "var(--accent)" : "var(--border)", background: "var(--surface)" }}
     >
       <div className="min-w-0 p-3 sm:p-4">
         {/* Badges */}
@@ -427,6 +437,46 @@ function DeliberationCard({
             </p>
           )}
         </div>
+
+        {/* Rate button — surfaced for unrated deliberations */}
+        {!delib.my_rating && !showRating && (
+          <button
+            onClick={() => setShowRating(true)}
+            className="mt-3 flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-all hover:opacity-80"
+            style={{ background: "var(--accent-light)", color: "var(--accent)" }}
+          >
+            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+            </svg>
+            Rate your agent
+          </button>
+        )}
+
+        {/* Inline rating form — shown when surfaced button is clicked or autoShowRating */}
+        {showRating && !expanded && (
+          <div className="mt-3 rounded-lg border p-3" style={{ borderColor: "var(--border)", background: "var(--surface-dim)" }}>
+            <p className="mb-2 text-sm font-semibold" style={{ color: "var(--foreground)" }}>
+              How well did your agent represent your views?
+            </p>
+            <StarRating rating={pendingRating} onRate={(r) => setPendingRating(r)} interactive />
+            <textarea
+              className="mt-2 w-full rounded-lg border p-2 text-sm"
+              style={{ borderColor: "var(--border)", background: "var(--surface)", color: "var(--foreground)", resize: "vertical" }}
+              rows={2}
+              placeholder="Optional: Did your agent miss any of your views or misrepresent something?"
+              value={feedback}
+              onChange={(e) => setFeedback(e.target.value)}
+            />
+            <button
+              onClick={() => onRate(delib.deliberation_id, pendingRating, feedback || undefined)}
+              disabled={pendingRating === 0 || ratingLoading === delib.deliberation_id}
+              className="mt-2 rounded-lg px-4 py-2 text-sm font-medium text-white transition-opacity disabled:opacity-50"
+              style={{ background: "var(--accent)" }}
+            >
+              {ratingLoading === delib.deliberation_id ? "Saving..." : "Submit rating"}
+            </button>
+          </div>
+        )}
 
         {/* Expand toggle */}
         <button
@@ -633,7 +683,7 @@ function DeliberationCard({
 
 // --- Main Section ---
 
-export default function AgentActivitySection() {
+export default function AgentActivitySection({ rateDeliberationId }: { rateDeliberationId?: string } = {}) {
   const [activity, setActivity] = useState<AgentActivityData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -780,6 +830,7 @@ export default function AgentActivitySection() {
               onRate={handleRate}
               onRateConsensus={handleRateConsensus}
               ratingLoading={ratingLoading}
+              autoShowRating={rateDeliberationId === delib.deliberation_id}
             />
           ))}
         </div>
