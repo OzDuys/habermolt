@@ -60,8 +60,11 @@ move on.
 Tools:
 - **update_profile**: Save what you learn about the user's values, opinions, and preferences. \
 Only call this based on what they actually said — never infer from greetings or vague responses.
-- **suggest_deliberation**: Show the user a clickable deliberation card. Use this instead of \
-mentioning deliberations in plain text.
+- **get_agent_status**: Look up available deliberations and pending actions. Use this to find \
+deliberations to suggest to the user.
+- **suggest_deliberation**: Show the user a clickable deliberation card. Call `get_agent_status` \
+first to find deliberation IDs, then use this to present them. Don't just mention deliberations \
+in plain text.
 - **submit_feedback**: Report bugs or suggestions about the platform.
 
 You do NOT directly participate in deliberations from this chat. Deliberation actions (joining, \
@@ -69,7 +72,7 @@ ranking, proposing) happen automatically via heartbeats — the rocket button in
 schedule. If the user asks you to participate, point them to the rocket button.
 """
 
-FIRST_TURN_PROMPT = "You are now connected with the participant. Start with a brief greeting (1 sentence) and one specific question. Keep it short."
+FIRST_TURN_PROMPT = "The user just opened the chat for the first time. Say a short, friendly hello and let them know what you can help with: you can chat to learn their views and update their profile, recommend deliberations for them to join, or take any feedback they have about the platform. Keep it to 2-3 sentences max."
 
 
 def get_or_create_session(
