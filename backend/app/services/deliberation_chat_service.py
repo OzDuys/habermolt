@@ -430,10 +430,18 @@ def stream_message(
         tools = INTERVIEW_TOOLS
 
     llm_messages = [{"role": "system", "content": system_prompt}]
-    # Filter out action messages for LLM context (it doesn't understand them)
+    # Rebuild LLM message history.
+    # "action_summary" messages are compact recaps of tool calls from prior turns,
+    # injected as assistant text so the LLM knows what already happened without
+    # the full verbose tool call/result payloads (saves tokens).
     for m in messages:
-        if m.get("role") in ("user", "assistant"):
-            llm_messages.append({"role": m["role"], "content": m.get("content", "")})
+        if m.get("role") == "user":
+            llm_messages.append({"role": "user", "content": m.get("content", "")})
+        elif m.get("role") == "assistant":
+            llm_messages.append({"role": "assistant", "content": m.get("content") or ""})
+        elif m.get("role") == "action_summary":
+            llm_messages.append({"role": "assistant", "content": m["content"]})
+        # Skip "action" role messages — those are for the frontend UI only
 
     client = _get_llm_client(db, agent)
     client.set_trace_context(
@@ -500,6 +508,8 @@ def stream_message(
                     "detail": result.get("detail", result.get("opinion_text", result.get("profile_text", ""))),
                     "status": "error" if "error" in result else "done",
                 }
+                if result.get("statement_id"):
+                    action_event["statement_id"] = result["statement_id"]
 
                 yield ("action_done", {
                     **action_event,
@@ -527,6 +537,26 @@ def stream_message(
         if not response_text:
             response_text = "I'm sorry, I had trouble processing that. Could you try again?"
 
+        # Build a compact action summary for LLM context in future turns.
+        # This replaces persisting full tool call payloads — saves tokens while
+        # giving the LLM the critical info (what succeeded/failed, IDs created).
+        if completed_actions:
+            summary_lines = []
+            for action in completed_actions:
+                line = f"- {action['action']}: {action['status']}"
+                if action.get("description"):
+                    line += f" — {action['description']}"
+                if action.get("statement_id"):
+                    line += f" (ID: {action['statement_id']})"
+                if action["status"] == "error" and action.get("detail"):
+                    line += f" — {action['detail']}"
+                summary_lines.append(line)
+            messages.append({
+                "role": "action_summary",
+                "content": "[Actions taken]\n" + "\n".join(summary_lines),
+            })
+
+        # Persist action events for the frontend UI
         for action in completed_actions:
             messages.append({"role": "action", **action})
 
@@ -684,7 +714,7 @@ def _exec_propose(
     import asyncio
     service = ContinuousDeliberationService(db)
     try:
-        asyncio.run(service.add_statement(deliberation, agent, statement_text, title))
+        statement = asyncio.run(service.add_statement(deliberation, agent, statement_text, title))
     except ValueError as e:
         return {"error": str(e)}
 
@@ -692,6 +722,7 @@ def _exec_propose(
         "action": "propose_statement",
         "description": f"New consensus statement proposed: \"{title}\"",
         "detail": statement_text,
+        "statement_id": str(statement.id),
     }
 
 

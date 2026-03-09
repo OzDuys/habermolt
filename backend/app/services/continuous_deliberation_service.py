@@ -14,7 +14,7 @@ from typing import List, Optional
 from uuid import UUID
 
 from sqlalchemy.orm import Session
-from sqlalchemy import and_
+from sqlalchemy import and_, func
 
 from app.models import (
     Deliberation,
@@ -391,6 +391,20 @@ class ContinuousDeliberationService:
             raise ValueError(
                 f"Statement pool is full ({settings.CONTINUOUS_MAX_STATEMENTS} max)"
             )
+
+        # Check for duplicate title (exact match, case-insensitive)
+        if statement_title:
+            duplicate = self.db.query(Statement).filter(
+                and_(
+                    Statement.deliberation_id == deliberation.id,
+                    func.lower(Statement.title) == statement_title.lower(),
+                )
+            ).first()
+            if duplicate:
+                raise ValueError(
+                    f"A statement with this title already exists (ID: {duplicate.id}). "
+                    f"Use the existing statement instead of proposing a duplicate."
+                )
 
         # Create the statement
         statement = Statement(
