@@ -127,7 +127,7 @@ function ProfilePageContent() {
       />
 
       {/* Account */}
-      <AccountSection session={session} onSignOut={async () => { await signOut(); router.refresh(); }} />
+      <AccountSection session={session} onSignOut={async () => { await signOut(); router.push("/"); }} />
     </div>
   );
 }
