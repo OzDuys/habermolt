@@ -7,8 +7,10 @@ import Link from "next/link";
 import Image from "next/image";
 import { api } from "@/lib/api";
 import { useSession, signIn } from "@/lib/auth-client";
-import type { DeliberationDetail, ClusterPoint } from "@/lib/types";
+import type { DeliberationDetail, ClusterPoint, OpinionClusterPoint, OpinionClusterInfo } from "@/lib/types";
 import StatementCluster from "@/components/StatementCluster";
+import OpinionLandscape from "@/components/OpinionLandscape";
+import ClusterBar from "@/components/ClusterBar";
 import ShareButton from "@/components/ShareSection";
 import DeliberationChatBubble, { type DeliberationChatBubbleHandle } from "@/components/DeliberationChatBubble";
 import ReactMarkdown from "react-markdown";
@@ -759,6 +761,8 @@ export default function LiveDeliberationPage() {
   const [copied, setCopied] = useState(false);
   const [data, setData] = useState<DeliberationDetail | null>(null);
   const [clusterPoints, setClusterPoints] = useState<ClusterPoint[]>([]);
+  const [opinionClusterPoints, setOpinionClusterPoints] = useState<OpinionClusterPoint[]>([]);
+  const [opinionClusters, setOpinionClusters] = useState<OpinionClusterInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabId>("consensus");
   const [selectedAgent, setSelectedAgent] = useState<AgentInfo | null>(null);
@@ -828,23 +832,37 @@ export default function LiveDeliberationPage() {
     }
   }, [joinedParam, createdParam, inviteCodeParam, data, loading, agentType, alreadyParticipating, id, router]);
 
-  // Fetch data with polling
+  // Track opinion/statement counts to know when to refresh clusters
+  const prevCountsRef = useRef({ opinions: 0, statements: 0 });
+
+  // Fetch data with polling (lightweight — just deliberation data)
   useEffect(() => {
     const load = async () => {
       try {
         const d = await api.getDeliberation(id);
         setData(d);
-        if (d.statements.length >= 2) {
-          try {
-            const c = await api.getCluster(id);
-            setClusterPoints(c.points);
-          } catch { /* non-fatal */ }
+
+        const prev = prevCountsRef.current;
+        const stmtChanged = d.statements.length !== prev.statements && d.statements.length >= 2;
+        const opnChanged = d.opinions.length !== prev.opinions && d.opinions.length >= 2;
+
+        // Only fetch clusters when counts change (or on first load)
+        if (stmtChanged || prev.statements === 0) {
+          api.getCluster(id).then(c => setClusterPoints(c.points)).catch(() => {});
         }
+        if (opnChanged || prev.opinions === 0) {
+          api.getOpinionCluster(id).then(oc => {
+            setOpinionClusterPoints(oc.points);
+            setOpinionClusters(oc.clusters);
+          }).catch(() => {});
+        }
+
+        prevCountsRef.current = { opinions: d.opinions.length, statements: d.statements.length };
       } catch { /* swallow */ }
       setLoading(false);
     };
     load();
-    const iv = setInterval(load, 5000);
+    const iv = setInterval(load, 10000);
     return () => clearInterval(iv);
   }, [id]);
 
@@ -921,6 +939,14 @@ export default function LiveDeliberationPage() {
     if (!data) return {};
     const m: Record<string, string> = {};
     data.statements.forEach((s) => { m[s.id] = s.title || s.statement_text.slice(0, 60) + "…"; });
+    return m;
+  }, [data]);
+
+  // Map statement_id → social (Schulze) ranking position
+  const socialRankMap = useMemo(() => {
+    if (!data) return {} as Record<string, number>;
+    const m: Record<string, number> = {};
+    data.statements.forEach((s) => { if (s.social_ranking != null) m[s.id] = s.social_ranking; });
     return m;
   }, [data]);
 
@@ -1319,7 +1345,7 @@ export default function LiveDeliberationPage() {
             padding: "32px 24px 80px", position: "relative",
           }}>
           <div style={{ maxWidth: 1200, margin: "0 auto" }}>
-            <div style={{ textAlign: "center", marginBottom: 28 }}>
+            <div style={{ textAlign: "center", marginBottom: 20 }}>
               <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 3, color: "#888", textTransform: "uppercase" }}>
                 {agents.length} Agents
               </span>
@@ -1328,100 +1354,132 @@ export default function LiveDeliberationPage() {
               </p>
             </div>
 
+            {/* Cluster proportion bar — compact strip at the top */}
+            {opinionClusters.length > 0 && (
+              <div style={{ marginBottom: 20, maxWidth: 600, marginLeft: "auto", marginRight: "auto" }}>
+                <ClusterBar clusters={opinionClusters} />
+              </div>
+            )}
+
+            {/* Two-column layout: agent cards left, opinion landscape right (sticky) */}
             <div style={{
-              display: "flex",
-              gap: 14,
-              overflowX: "auto",
-              paddingBottom: 8,
-              scrollbarWidth: "none",
+              display: "grid",
+              gridTemplateColumns: opinionClusterPoints.length >= 2 ? "1fr minmax(320px, 420px)" : "1fr",
+              gap: 24,
+              alignItems: "start",
             }}>
-              {agents.map((a, i) => (
-                <motion.div key={a.agent_id}
-                  initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true, margin: "-30px" }} transition={{ delay: i * 0.03 }}
-                  whileHover={{ y: -3, boxShadow: `0 6px 24px ${a.color}10` }}
-                  onClick={() => setSelectedAgent(a)}
-                  style={{
-                    padding: "18px", borderRadius: 16,
-                    background: "rgba(255,255,255,0.65)", border: "1.5px solid rgba(0,0,0,0.05)",
-                    cursor: "pointer", transition: "box-shadow 0.3s",
-                    width: 240, flexShrink: 0,
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
-                    <motion.div animate={{ y: [0, -2, 0] }} transition={{ duration: 2.5, repeat: Infinity, delay: i * 0.15 }}>
-                      <Lobster color={a.color} size={36} variant={i} />
-                    </motion.div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: "#1a1a1a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {a.agent_name}
+              {/* Left: Agent cards — masonry grid */}
+              <div style={{
+                columns: opinionClusterPoints.length >= 2 ? "240px" : "280px",
+                columnGap: 14,
+                width: "100%",
+              }}>
+                {agents.map((a, i) => (
+                  <motion.div key={a.agent_id}
+                    initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true, margin: "-30px" }} transition={{ delay: i * 0.03 }}
+                    whileHover={{ y: -3, boxShadow: `0 6px 24px ${a.color}10` }}
+                    onClick={() => setSelectedAgent(a)}
+                    style={{
+                      padding: "16px", borderRadius: 16,
+                      background: "rgba(255,255,255,0.65)", border: "1.5px solid rgba(0,0,0,0.05)",
+                      cursor: "pointer", transition: "box-shadow 0.3s",
+                      breakInside: "avoid",
+                      marginBottom: 14,
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                      <motion.div animate={{ y: [0, -2, 0] }} transition={{ duration: 2.5, repeat: Infinity, delay: i * 0.15 }}>
+                        <Lobster color={a.color} size={32} variant={i} />
+                      </motion.div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: "#1a1a1a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {a.agent_name}
+                        </div>
+                        {a.human_name && (
+                          <div style={{ fontSize: 10, color: "#777" }}>for {a.human_name}</div>
+                        )}
                       </div>
-                      {a.human_name && (
-                        <div style={{ fontSize: 10, color: "#777" }}>for {a.human_name}</div>
-                      )}
                     </div>
-                  </div>
 
-                  {a.opinion && (
-                    <div style={{
-                      fontSize: 12, lineHeight: 1.6, color: "#555", marginBottom: 12,
-                    }} className="prose-compact">
-                      <ReactMarkdown>{`\u201C${a.opinion}\u201D`}</ReactMarkdown>
-                    </div>
-                  )}
+                    {a.opinion && (
+                      <div style={{
+                        fontSize: 12, lineHeight: 1.6, color: "#555", marginBottom: 10,
+                      }} className="prose-compact">
+                        <ReactMarkdown>{`\u201C${a.opinion}\u201D`}</ReactMarkdown>
+                      </div>
+                    )}
 
-                  {a.rankings.length > 0 && (() => {
-                    const contribs = agentContributions.get(a.agent_id);
-                    const rankedIds = new Set(a.rankings.map((r) => r.statement_id));
-                    const unrankedContribs = contribs ? [...contribs].filter((id) => !rankedIds.has(id)) : [];
-                    return (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                        {[...a.rankings].sort((x, y) => x.rank - y.rank).map((r, ri) => {
-                          const isContrib = contribs?.has(r.statement_id);
-                          return (
-                            <div key={ri} style={{
-                              display: "flex", alignItems: "center", gap: 6, padding: "4px 8px",
-                              borderRadius: 6, background: ri === 0 ? `${a.color}06` : "rgba(0,0,0,0.015)",
-                              border: ri === 0 ? `1px solid ${a.color}14` : "1px solid transparent",
-                              fontSize: 10, color: ri === 0 ? a.color : "#555",
-                            }}>
-                              <span style={{ width: 16, textAlign: "center" }}>{ri === 0 ? "🥇" : ri === 1 ? "🥈" : ri === 2 ? "🥉" : `${r.rank}.`}</span>
-                              <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                {stmtMap[r.statement_id] || "Statement"}
+                    {/* Compact inline rankings: circles show social (Schulze) rank */}
+                    {a.rankings.length > 0 && (() => {
+                      const sorted = [...a.rankings].sort((x, y) => x.rank - y.rank);
+                      return (
+                        <div style={{
+                          display: "flex", alignItems: "center", flexWrap: "wrap",
+                          gap: 2, padding: "6px 0 2px",
+                        }}>
+                          {sorted.map((r, ri) => {
+                            const title = stmtMap[r.statement_id] || `#${r.rank}`;
+                            const socialRank = socialRankMap[r.statement_id] ?? "?";
+                            return (
+                              <span key={ri} style={{ display: "inline-flex", alignItems: "center" }}>
+                                <span
+                                  title={`${title} (consensus #${socialRank})`}
+                                  style={{
+                                    display: "inline-flex", alignItems: "center", justifyContent: "center",
+                                    width: 22, height: 22, borderRadius: "50%",
+                                    background: ri === 0 ? a.color : ri < 3 ? `${a.color}30` : "rgba(0,0,0,0.06)",
+                                    color: ri === 0 ? "#fff" : ri < 3 ? a.color : "#999",
+                                    fontSize: 9, fontWeight: 700,
+                                    flexShrink: 0,
+                                    border: ri === 0 ? `1.5px solid ${a.color}` : "1px solid transparent",
+                                  }}
+                                >
+                                  {socialRank}
+                                </span>
+                                {ri < sorted.length - 1 && (
+                                  <span style={{ color: "#ccc", fontSize: 9, margin: "0 1px" }}>&rsaquo;</span>
+                                )}
                               </span>
-                              {isContrib && (
-                                <span style={{
-                                  fontSize: 8, padding: "1px 5px", borderRadius: 4, flexShrink: 0,
-                                  background: `${a.color}12`, color: a.color, fontWeight: 700,
-                                  textTransform: "uppercase", letterSpacing: 0.3,
-                                }}>authored</span>
-                              )}
-                            </div>
-                          );
-                        })}
-                        {unrankedContribs.map((sid) => (
-                          <div key={sid} style={{
-                            display: "flex", alignItems: "center", gap: 6, padding: "4px 8px",
-                            borderRadius: 6, background: `${a.color}04`,
-                            border: `1px solid ${a.color}10`,
-                            fontSize: 10, color: "#777",
-                          }}>
-                            <span style={{ width: 16, textAlign: "center", fontSize: 9 }}>✎</span>
-                            <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                              {stmtMap[sid] || "Statement"}
-                            </span>
-                            <span style={{
-                              fontSize: 8, padding: "1px 5px", borderRadius: 4, flexShrink: 0,
-                              background: `${a.color}12`, color: a.color, fontWeight: 700,
-                              textTransform: "uppercase", letterSpacing: 0.3,
-                            }}>authored</span>
-                          </div>
-                        ))}
-                      </div>
-                    );
-                  })()}
-                </motion.div>
-              ))}
+                            );
+                          })}
+                          <span style={{ fontSize: 9, color: "#bbb", marginLeft: 4 }}>
+                            {sorted.length} ranked
+                          </span>
+                        </div>
+                      );
+                    })()}
+                  </motion.div>
+                ))}
+              </div>
+
+              {/* Right: Opinion Landscape (sticky) */}
+              {opinionClusterPoints.length >= 2 && opinionClusters.length > 0 && (
+                <div style={{ position: "sticky", top: 0 }}>
+                  <div style={{ textAlign: "center", marginBottom: 12 }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, color: "#888", textTransform: "uppercase" }}>
+                      Opinion Landscape
+                    </span>
+                    <p style={{ fontSize: 11, color: "#bbb", marginTop: 4 }}>
+                      Proximity = semantic similarity. Colour = opinion group.
+                    </p>
+                  </div>
+                  <div style={{
+                    borderRadius: 16, overflow: "hidden",
+                    background: "rgba(235,228,218,0.95)", border: "1.5px solid rgba(0,0,0,0.10)",
+                    padding: "12px",
+                  }}>
+                    <OpinionLandscape
+                      points={opinionClusterPoints}
+                      clusters={opinionClusters}
+                      onPointClick={(pt) => {
+                        const match = agents.find((a) => a.agent_id === pt.agent_id);
+                        if (match) setSelectedAgent(match);
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Activity feed */}

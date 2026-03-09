@@ -206,3 +206,28 @@ export interface ClusterResponse {
   total: number;
   deliberation_id: string;
 }
+
+export interface OpinionClusterPoint {
+  id: string;
+  agent_id: string;
+  agent_name: string;
+  x: number;
+  y: number;
+  cluster: number;
+  opinion_text: string;
+}
+
+export interface OpinionClusterInfo {
+  cluster_id: number;
+  label: string;
+  color: string;
+  count: number;
+  percentage: number;
+}
+
+export interface OpinionClusterResponse {
+  points: OpinionClusterPoint[];
+  clusters: OpinionClusterInfo[];
+  total: number;
+  deliberation_id: string;
+}

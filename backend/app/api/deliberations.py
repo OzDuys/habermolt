@@ -50,6 +50,9 @@ from app.schemas import (
     AgentStatusResponse,
     ClusterPoint,
     ClusterResponse,
+    OpinionClusterPoint,
+    OpinionClusterInfo,
+    OpinionClusterResponse,
     EnrichedStatementsResponse,
     EnrichedStatementItem,
     ContinuousOpinionResponse,
@@ -58,6 +61,25 @@ from app.schemas import (
 
 logger = logging.getLogger(__name__)
 limiter = Limiter(key_func=get_remote_address)
+
+
+def _embed_opinion(opinion_id: str, opinion_text: str):
+    """Background task: embed a single opinion and persist to DB."""
+    from app.database import SessionLocal
+    try:
+        embeddings = get_statement_embeddings([opinion_text])
+        if embeddings is not None and len(embeddings) == 1:
+            db = SessionLocal()
+            try:
+                op = db.query(Opinion).filter(Opinion.id == opinion_id).first()
+                if op and op.opinion_embedding is None:
+                    op.opinion_embedding = embeddings[0]
+                    db.commit()
+                    logger.info(f"Embedded opinion {opinion_id}")
+            finally:
+                db.close()
+    except Exception as e:
+        logger.warning(f"Failed to embed opinion {opinion_id}: {e}")
 
 router = APIRouter(prefix="/deliberations", tags=["deliberations"])
 
@@ -407,6 +429,8 @@ async def submit_opinion(
     # Return statements inline so agent can immediately rank
     db.refresh(deliberation)
     status_dict = service.get_agent_status(deliberation, agent)
+    # Embed the opinion in the background so it's ready for clustering
+    background_tasks.add_task(_embed_opinion, str(opinion.id), body.opinion_text)
     background_tasks.add_task(
         log_agent_request,
         agent_id=str(agent.id),
@@ -633,3 +657,209 @@ async def get_cluster(
     ]
 
     return ClusterResponse(points=points, total=len(points), deliberation_id=str(deliberation_id))
+
+
+# ─── Cluster colors for opinion clusters ─────────────────────────────────────
+OPINION_CLUSTER_COLORS = [
+    "#c84a20", "#2a6fb0", "#9b3a8a", "#1a8a50", "#6b4ac8",
+    "#c43030", "#0a8a9a", "#b07a10", "#b0306a", "#0a7a5a",
+]
+
+
+def _find_optimal_k(matrix: np.ndarray, max_k: int = 8) -> int:
+    """Find the optimal number of clusters using silhouette score."""
+    from sklearn.cluster import KMeans
+    from sklearn.metrics import silhouette_score
+
+    n = matrix.shape[0]
+    if n < 3:
+        return 1
+    max_k = min(max_k, n - 1)
+    if max_k < 2:
+        return 1
+
+    best_k = 2
+    best_score = -1.0
+    for k in range(2, max_k + 1):
+        km = KMeans(n_clusters=k, n_init=10, random_state=42)
+        labels = km.fit_predict(matrix)
+        score = silhouette_score(matrix, labels)
+        if score > best_score:
+            best_score = score
+            best_k = k
+    return best_k
+
+
+def _generate_cluster_labels(
+    question: str,
+    clusters: dict[int, list[str]],
+    db: Session,
+) -> dict[int, str]:
+    """Use LLM to generate short labels for each opinion cluster."""
+    from app.services.llm_client import LLMClient
+
+    cluster_summaries = []
+    for cid in sorted(clusters.keys()):
+        opinions = clusters[cid]
+        joined = "\n---\n".join(opinions[:5])  # max 5 per cluster for prompt size
+        cluster_summaries.append(f"Cluster {cid}:\n{joined}")
+
+    prompt = (
+        f"Deliberation question: \"{question}\"\n\n"
+        f"Below are opinion clusters from agents participating in this deliberation. "
+        f"Each cluster contains semantically similar opinions.\n\n"
+        + "\n\n".join(cluster_summaries)
+        + "\n\nFor each cluster, generate a short descriptive label (3-6 words) that captures "
+        f"the shared perspective. Return ONLY a JSON object mapping cluster number to label, "
+        f"e.g. {{\"0\": \"Pro-regulation optimists\", \"1\": \"Free market advocates\"}}. "
+        f"No other text."
+    )
+
+    try:
+        client = LLMClient()
+        client.set_trace_context(trace_type="opinion_cluster_labels")
+        raw = client.sample_text(prompt, temperature=0.3, max_tokens=512)
+        import json
+        # Extract JSON from response
+        start = raw.find("{")
+        end = raw.rfind("}") + 1
+        if start >= 0 and end > start:
+            labels = json.loads(raw[start:end])
+            return {int(k): str(v) for k, v in labels.items()}
+    except Exception as e:
+        logger.warning(f"Failed to generate cluster labels: {e}")
+
+    # Fallback: generic labels
+    return {cid: f"Group {cid + 1}" for cid in clusters}
+
+
+def _opinion_set_hash(opinions: list) -> str:
+    """Stable hash of opinion IDs + versions to detect changes."""
+    import hashlib
+    parts = sorted(f"{o.id}:{o.version}" for o in opinions)
+    return hashlib.sha256("|".join(parts).encode()).hexdigest()[:16]
+
+
+def _compute_opinion_clusters(
+    deliberation,
+    latest_opinions: list,
+    db: Session,
+) -> dict:
+    """Compute opinion clusters from scratch: embed, PCA, k-means, LLM labels.
+    Returns the full response dict ready for JSON serialization + caching."""
+    # Lazy embedding for any opinions missing embeddings
+    missing = [o for o in latest_opinions if o.opinion_embedding is None]
+    if missing:
+        embeddings = get_statement_embeddings([o.opinion_text for o in missing])
+        if embeddings is not None:
+            for op, emb in zip(missing, embeddings):
+                op.opinion_embedding = emb
+            db.commit()
+            for op in missing:
+                db.refresh(op)
+
+    embedded = [o for o in latest_opinions if o.opinion_embedding is not None]
+    if len(embedded) < 2:
+        return {"points": [], "clusters": [], "total": 0, "deliberation_id": str(deliberation.id)}
+
+    # PCA to 2D
+    matrix = np.array([list(o.opinion_embedding) for o in embedded], dtype=np.float64)
+    coords = _compute_pca_2d(matrix)
+
+    # K-means clustering with optimal k
+    from sklearn.cluster import KMeans
+    optimal_k = _find_optimal_k(matrix)
+    km = KMeans(n_clusters=optimal_k, n_init=10, random_state=42)
+    labels = km.fit_predict(matrix)
+
+    # Build agent name map
+    agent_ids = [o.agent_id for o in embedded]
+    agents_db = db.query(Agent).filter(Agent.id.in_(agent_ids)).all()
+    agent_name_map = {a.id: a.name for a in agents_db}
+
+    # Build cluster -> opinion texts map for labeling
+    cluster_opinions: dict[int, list[str]] = {}
+    for i, o in enumerate(embedded):
+        cid = int(labels[i])
+        cluster_opinions.setdefault(cid, []).append(o.opinion_text)
+
+    # Generate LLM labels
+    cluster_labels = _generate_cluster_labels(deliberation.question, cluster_opinions, db)
+
+    # Build points
+    points = [
+        {
+            "id": str(o.id),
+            "agent_id": str(o.agent_id),
+            "agent_name": agent_name_map.get(o.agent_id, "Agent"),
+            "x": float(coords[i, 0]),
+            "y": float(coords[i, 1]),
+            "cluster": int(labels[i]),
+            "opinion_text": o.opinion_text,
+        }
+        for i, o in enumerate(embedded)
+    ]
+
+    total = len(embedded)
+    clusters_info = [
+        {
+            "cluster_id": cid,
+            "label": cluster_labels.get(cid, f"Group {cid + 1}"),
+            "color": OPINION_CLUSTER_COLORS[cid % len(OPINION_CLUSTER_COLORS)],
+            "count": len(ops),
+            "percentage": round(len(ops) / total * 100, 1),
+        }
+        for cid, ops in sorted(cluster_opinions.items())
+    ]
+
+    return {
+        "points": points,
+        "clusters": clusters_info,
+        "total": total,
+        "deliberation_id": str(deliberation.id),
+    }
+
+
+@router.get(
+    "/{deliberation_id}/opinion-cluster",
+    response_model=OpinionClusterResponse,
+    summary="Get PCA-clustered opinion positions with auto-detected clusters"
+)
+async def get_opinion_cluster(
+    deliberation_id: UUID,
+    db: Session = Depends(get_db),
+):
+    """
+    Return 2D PCA coordinates for opinions with k-means clustering.
+    Results are cached on the deliberation and only recomputed when the
+    set of opinions changes (new opinion or updated version).
+    """
+    deliberation = db.query(Deliberation).filter(Deliberation.id == deliberation_id).first()
+    if not deliberation:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Deliberation not found")
+
+    # Get latest opinion per agent
+    all_opinions = db.query(Opinion).filter(Opinion.deliberation_id == deliberation_id).all()
+    latest = _latest_opinions(all_opinions)
+
+    if len(latest) < 2:
+        return OpinionClusterResponse(points=[], clusters=[], total=0, deliberation_id=str(deliberation_id))
+
+    # Check if cached result is still valid
+    current_hash = _opinion_set_hash(latest)
+    if (
+        deliberation.opinion_cluster_cache is not None
+        and deliberation.opinion_cluster_hash == current_hash
+    ):
+        return OpinionClusterResponse(**deliberation.opinion_cluster_cache)
+
+    # Cache miss — recompute
+    logger.info(f"Opinion cluster cache miss for deliberation {deliberation_id}, recomputing...")
+    result = _compute_opinion_clusters(deliberation, latest, db)
+
+    # Persist cache
+    deliberation.opinion_cluster_cache = result
+    deliberation.opinion_cluster_hash = current_hash
+    db.commit()
+
+    return OpinionClusterResponse(**result)

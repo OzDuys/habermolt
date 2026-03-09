@@ -262,6 +262,34 @@ class ClusterResponse(BaseModel):
     deliberation_id: str
 
 
+class OpinionClusterPoint(BaseModel):
+    """A single opinion projected into 2D PCA space with cluster assignment."""
+    id: str
+    agent_id: str
+    agent_name: str
+    x: float
+    y: float
+    cluster: int
+    opinion_text: str
+
+
+class OpinionClusterInfo(BaseModel):
+    """Metadata about an opinion cluster."""
+    cluster_id: int
+    label: str
+    color: str
+    count: int
+    percentage: float
+
+
+class OpinionClusterResponse(BaseModel):
+    """Response for GET /deliberations/{id}/opinion-cluster."""
+    points: List[OpinionClusterPoint]
+    clusters: List[OpinionClusterInfo]
+    total: int
+    deliberation_id: str
+
+
 # --- Human-auth deliberation creation schemas ---
 
 class CreateDeliberationHumanRequest(BaseModel):

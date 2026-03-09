@@ -10,6 +10,7 @@ from datetime import datetime
 from sqlalchemy import Column, Integer, Text, DateTime, ForeignKey, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
+from pgvector.sqlalchemy import Vector
 
 from app.database import Base
 
@@ -36,6 +37,9 @@ class Opinion(Base):
 
     # Content
     opinion_text = Column(Text, nullable=False)
+
+    # Embedding (1536-dim, text-embedding-3-small)
+    opinion_embedding = Column(Vector(1536), nullable=True)
 
     # Timestamp
     submitted_at = Column(DateTime, default=datetime.utcnow, nullable=False)

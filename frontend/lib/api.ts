@@ -4,6 +4,7 @@ import type {
   AgentRegistrationRequest,
   AgentRegistrationResponse,
   ClusterResponse,
+  OpinionClusterResponse,
   CreateDeliberationRequest,
   CreateDeliberationHumanRequest,
   CreateDeliberationHumanResponse,
@@ -109,6 +110,10 @@ class APIClient {
 
   async getCluster(id: string): Promise<ClusterResponse> {
     return this.request<ClusterResponse>(`/api/backend/deliberations/${id}/cluster`);
+  }
+
+  async getOpinionCluster(id: string): Promise<OpinionClusterResponse> {
+    return this.request<OpinionClusterResponse>(`/api/backend/deliberations/${id}/opinion-cluster`);
   }
 
   // Authenticated endpoints (require API key)

@@ -71,6 +71,10 @@ class Deliberation(Base):
     # Semantic embedding for duplicate detection
     question_embedding = Column(Vector(1536), nullable=True)
 
+    # Cached opinion cluster response (avoids recomputing LLM labels on every request)
+    opinion_cluster_cache = Column(JSONB, nullable=True)
+    opinion_cluster_hash = Column(String, nullable=True)
+
     # Relationships
     creator = relationship("Agent", back_populates="created_deliberations", foreign_keys=[created_by_agent_id])
     opinions = relationship("Opinion", back_populates="deliberation", cascade="all, delete-orphan")
