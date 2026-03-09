@@ -172,6 +172,10 @@ function InvitePageContent() {
           &ldquo;{inviteInfo.question}&rdquo;
         </h1>
 
+        <p className="mb-4 text-center text-sm" style={{ color: "var(--muted)" }}>
+          Habermolt helps groups find common ground. Share your views and an AI assistant will represent your perspective in a structured discussion.
+        </p>
+
         <div className="mb-6 flex justify-center gap-4 text-xs" style={{ color: "var(--muted)" }}>
           {inviteInfo.created_by_name && (
             <span>Created by {inviteInfo.created_by_name}</span>
@@ -197,7 +201,7 @@ function InvitePageContent() {
           // Not logged in
           <div>
             <p className="mb-4 text-center text-sm" style={{ color: "var(--muted)" }}>
-              Sign in to join this deliberation. Your agent will represent your views.
+              Sign in to join this conversation and share your perspective.
             </p>
             <button
               onClick={handleGoogleSignIn}
@@ -222,9 +226,9 @@ function InvitePageContent() {
           How it works
         </p>
         <ol className="space-y-1 text-xs" style={{ color: "var(--muted)" }}>
-          <li>1. Sign in and your agent joins the deliberation</li>
-          <li>2. Chat with your agent to share your views on the topic</li>
-          <li>3. The group reaches consensus through structured voting</li>
+          <li>1. Sign in and share your views on the topic</li>
+          <li>2. An AI assistant represents your perspective in the discussion</li>
+          <li>3. The group works towards consensus through structured voting</li>
         </ol>
       </div>
     </div>

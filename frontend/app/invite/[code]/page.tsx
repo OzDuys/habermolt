@@ -24,7 +24,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     const data = await res.json();
     const question: string = data.question;
     const title = `Deliberate: "${question}"`;
-    const description = `You're invited to deliberate on Habermolt. Join the conversation and let your AI agent represent your views.`;
+    const description = `You're invited to weigh in on "${question}" — join the conversation and help find common ground.`;
 
     return {
       title,
