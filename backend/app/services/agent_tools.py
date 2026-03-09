@@ -283,8 +283,17 @@ TOOL_SCHEMAS = [
 
 
 def get_tool_schemas() -> list[dict]:
-    """Return tool schemas for LLM tool calling."""
+    """Return full tool schemas for LLM tool calling (used by heartbeat)."""
     return TOOL_SCHEMAS
+
+
+# Tools available in chat mode — conversation-focused only
+CHAT_TOOLS = {"update_profile", "suggest_deliberation", "submit_feedback", "acknowledge_feedback"}
+
+
+def get_chat_tool_schemas() -> list[dict]:
+    """Return filtered tool schemas for chat mode (no deliberation actions)."""
+    return [t for t in TOOL_SCHEMAS if t["function"]["name"] in CHAT_TOOLS]
 
 
 def execute_tool(

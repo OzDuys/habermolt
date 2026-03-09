@@ -22,11 +22,12 @@ interface ChatMessage {
   actions?: ActionItem[];
 }
 
-interface ChatSessionSummary {
-  id: string;
-  topic: string | null;
-  message_count: number;
-  created_at: string;
+interface ActivityActionItem {
+  action_type: string;
+  timestamp: string;
+  detail: string;
+  deliberation_id?: string;
+  deliberation_question?: string;
 }
 
 // --- Constants ---
@@ -42,6 +43,10 @@ const ACTION_ICONS: Record<string, string> = {
   run_heartbeat: "\uD83D\uDE80",
   get_agent_status: "\uD83D\uDCCA",
   update_profile: "\u2705",
+  created: "\u2728",
+  opinion: "\uD83D\uDCAC",
+  ranking: "\uD83D\uDDF3\uFE0F",
+  statement: "\uD83D\uDCDD",
   unknown: "\u26A1",
 };
 
@@ -56,6 +61,10 @@ const ACTION_LABELS: Record<string, string> = {
   run_heartbeat: "Running heartbeat",
   get_agent_status: "Checked status",
   update_profile: "Profile updated",
+  created: "Created deliberation",
+  opinion: "Submitted opinion",
+  ranking: "Ranked statements",
+  statement: "Proposed consensus",
   unknown: "Action",
 };
 
@@ -68,48 +77,42 @@ function cleanMessage(content: string): string {
   return content;
 }
 
+function timeAgo(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
 // --- Component ---
 
 export default function AgentChatBubble() {
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [activeTab, setActiveTab] = useState<"chat" | "activity">("chat");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [runningHeartbeat, setRunningHeartbeat] = useState(false);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
-  const [sessions, setSessions] = useState<ChatSessionSummary[]>([]);
-  const [showSessionPicker, setShowSessionPicker] = useState(false);
-  const [loaded, setLoaded] = useState(false);
+  const [activityActions, setActivityActions] = useState<ActivityActionItem[]>([]);
+  const [activityLoaded, setActivityLoaded] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const messageQueueRef = useRef<string[]>([]);
   const streamingRef = useRef(false);
 
-  // Load chat + history on first open
+  // Start fresh on open — no previous session loaded
   useEffect(() => {
-    if (!open || loaded) return;
-    Promise.all([
-      fetch("/api/backend/hosted-agents/me/chat").then((r) => r.json()),
-      fetch("/api/backend/hosted-agents/me/chat/history").then((r) => r.json()),
-    ]).then(([chatData, chatHistory]) => {
-      if (chatData.messages?.length) {
-        setMessages(chatData.messages.map((m: ChatMessage) => {
-          if (m.role === "action" && m.actions) {
-            return { role: m.role, content: "", actions: m.actions };
-          }
-          return { role: m.role, content: cleanMessage(m.content || "") };
-        }));
-      }
-      setActiveSessionId(chatData.id || null);
-      const sorted = (Array.isArray(chatHistory) ? chatHistory : [])
-        .sort((a: ChatSessionSummary, b: ChatSessionSummary) =>
-          new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-        );
-      setSessions(sorted);
-      setLoaded(true);
-    }).catch(() => setLoaded(true));
-  }, [open, loaded]);
+    if (open) {
+      setMessages([]);
+      setActiveSessionId(null);
+    }
+  }, [open]);
 
   // Auto-scroll
   useEffect(() => {
@@ -118,10 +121,22 @@ export default function AgentChatBubble() {
 
   // Focus input
   useEffect(() => {
-    if (open && !streaming && !runningHeartbeat && inputRef.current) {
+    if (open && !streaming && !runningHeartbeat && inputRef.current && activeTab === "chat") {
       inputRef.current.focus();
     }
-  }, [open, streaming, runningHeartbeat]);
+  }, [open, streaming, runningHeartbeat, activeTab]);
+
+  // Load activity when switching to activity tab
+  useEffect(() => {
+    if (activeTab !== "activity") return;
+    fetch("/api/backend/agents/me/activity")
+      .then((r) => r.json())
+      .then((data) => {
+        setActivityActions(data.recent_actions || []);
+        setActivityLoaded(true);
+      })
+      .catch(() => setActivityLoaded(true));
+  }, [activeTab]);
 
   const processQueue = useCallback(() => {
     if (streamingRef.current || messageQueueRef.current.length === 0) return;
@@ -137,7 +152,6 @@ export default function AgentChatBubble() {
 
     const unsend = () => {
       setMessages((prev) => {
-        // Remove the blank assistant message and the user message before it
         const filtered = [...prev];
         for (let i = filtered.length - 1; i >= 0; i--) {
           if (filtered[i].role === "assistant" && !filtered[i].content) {
@@ -187,7 +201,9 @@ export default function AgentChatBubble() {
           if (!line.startsWith("data: ")) continue;
           try {
             const event = JSON.parse(line.slice(6));
-            if (event.type === "chunk") {
+            if (event.type === "session_id") {
+              setActiveSessionId(event.session_id);
+            } else if (event.type === "chunk") {
               receivedContent = true;
               accumulated += event.content;
               const clean = cleanMessage(accumulated);
@@ -392,31 +408,14 @@ export default function AgentChatBubble() {
       setMessages((prev) => [...prev, { role: "assistant", content: "Failed to reach the server." }]);
     } finally {
       setRunningHeartbeat(false);
-    }
-  };
-
-  const loadSession = async (sessionId: string) => {
-    if (sessionId === activeSessionId) { setShowSessionPicker(false); return; }
-    try {
-      const res = await fetch(`/api/backend/hosted-agents/me/chat/${sessionId}`);
-      const data = await res.json();
-      if (data.messages) {
-        setMessages(data.messages.map((m: ChatMessage) => {
-          if (m.role === "action" && m.actions) {
-            return { role: m.role, content: "", actions: m.actions };
-          }
-          return { role: m.role, content: cleanMessage(m.content || "") };
-        }));
-        setActiveSessionId(sessionId);
+      // Refresh activity log if it was loaded
+      if (activityLoaded) {
+        fetch("/api/backend/agents/me/activity")
+          .then((r) => r.json())
+          .then((data) => setActivityActions(data.recent_actions || []))
+          .catch(() => {});
       }
-    } catch {}
-    setShowSessionPicker(false);
-  };
-
-  const handleNewChat = () => {
-    setMessages([]);
-    setActiveSessionId(null);
-    setShowSessionPicker(false);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -483,35 +482,34 @@ export default function AgentChatBubble() {
           <div style={{
             padding: "10px 16px", borderBottom: "1px solid rgba(0,0,0,0.06)",
             display: "flex", alignItems: "center", justifyContent: "space-between",
-            background: "rgba(0,0,0,0.02)", position: "relative",
+            background: "rgba(0,0,0,0.02)",
           }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "#333" }}>Agent Chat</div>
-              {/* Session picker toggle */}
-              {sessions.length > 0 && (
-                <button
-                  onClick={() => setShowSessionPicker(!showSessionPicker)}
-                  style={{
-                    background: "none", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 6,
-                    padding: "2px 6px", fontSize: 10, color: "#999", cursor: "pointer",
-                  }}
-                >
-                  {sessions.length} sessions ▾
-                </button>
-              )}
+            {/* Tab switcher */}
+            <div style={{ display: "flex", alignItems: "center", gap: 0 }}>
+              <button
+                onClick={() => setActiveTab("chat")}
+                style={{
+                  background: "none", border: "none", cursor: "pointer",
+                  padding: "4px 10px", fontSize: 12, fontWeight: activeTab === "chat" ? 600 : 400,
+                  color: activeTab === "chat" ? "#c84a20" : "#999",
+                  borderBottom: activeTab === "chat" ? "2px solid #c84a20" : "2px solid transparent",
+                }}
+              >
+                Chat
+              </button>
+              <button
+                onClick={() => setActiveTab("activity")}
+                style={{
+                  background: "none", border: "none", cursor: "pointer",
+                  padding: "4px 10px", fontSize: 12, fontWeight: activeTab === "activity" ? 600 : 400,
+                  color: activeTab === "activity" ? "#c84a20" : "#999",
+                  borderBottom: activeTab === "activity" ? "2px solid #c84a20" : "2px solid transparent",
+                }}
+              >
+                Activity
+              </button>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              {activeSessionId && (
-                <button
-                  onClick={handleNewChat}
-                  style={{
-                    background: "none", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 6,
-                    padding: "2px 8px", fontSize: 10, color: "#666", cursor: "pointer",
-                  }}
-                >
-                  + New
-                </button>
-              )}
               <button
                 onClick={() => setExpanded(!expanded)}
                 title={expanded ? "Collapse" : "Expand"}
@@ -537,133 +535,164 @@ export default function AgentChatBubble() {
                 </svg>
               </button>
             </div>
-
-            {/* Session picker dropdown */}
-            {showSessionPicker && (
-              <div style={{
-                position: "absolute", top: "100%", left: 0, right: 0, zIndex: 10,
-                background: "#fff", borderBottom: "1px solid rgba(0,0,0,0.1)",
-                maxHeight: 200, overflowY: "auto",
-                boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-              }}>
-                {sessions.map((s) => (
-                  <button
-                    key={s.id}
-                    onClick={() => loadSession(s.id)}
-                    style={{
-                      display: "block", width: "100%", textAlign: "left",
-                      padding: "8px 16px", border: "none", cursor: "pointer",
-                      background: s.id === activeSessionId ? "rgba(200,74,32,0.05)" : "transparent",
-                      borderBottom: "1px solid rgba(0,0,0,0.04)",
-                      fontSize: 11, color: "#333",
-                    }}
-                  >
-                    <div style={{ fontWeight: s.id === activeSessionId ? 600 : 400 }}>
-                      {s.topic || "Chat"}
-                    </div>
-                    <div style={{ fontSize: 10, color: "#999" }}>
-                      {new Date(s.created_at).toLocaleDateString()} · {s.message_count} messages
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
           </div>
 
-          {/* Messages */}
-          <div style={{
-            flex: 1, overflowY: "auto", padding: "12px 16px",
-            display: "flex", flexDirection: "column", gap: 10,
-            minHeight: 200,
-          }}>
-            {!loaded && (
-              <div style={{ textAlign: "center", color: "#999", fontSize: 12, padding: 20 }}>Loading...</div>
-            )}
-            {loaded && messages.length === 0 && (
-              <div style={{ textAlign: "center", color: "#999", fontSize: 12, padding: 20 }}>
-                <div style={{ fontWeight: 500, color: "#333", marginBottom: 4 }}>Chat with your agent</div>
-                <div>Teach it your values so it can represent you in deliberations.</div>
+          {/* Chat tab */}
+          {activeTab === "chat" && (
+            <>
+              {/* Messages */}
+              <div style={{
+                flex: 1, overflowY: "auto", padding: "12px 16px",
+                display: "flex", flexDirection: "column", gap: 10,
+                minHeight: 200,
+              }}>
+                {messages.length === 0 && (
+                  <div style={{ textAlign: "center", color: "#999", fontSize: 12, padding: 20 }}>
+                    <div style={{ fontWeight: 500, color: "#333", marginBottom: 4 }}>Chat with your agent</div>
+                    <div>Teach it your values so it can represent you in deliberations.</div>
+                  </div>
+                )}
+                {messages.map((msg, i) =>
+                  msg.role === "action" && msg.actions ? (
+                    <BubbleActionCard key={i} action={msg.actions[0]} />
+                  ) : (
+                    <div
+                      key={i}
+                      style={{
+                        alignSelf: msg.role === "user" ? "flex-end" : "flex-start",
+                        maxWidth: "85%",
+                        padding: "8px 12px",
+                        borderRadius: msg.role === "user" ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
+                        background: msg.role === "user" ? "#c84a20" : "rgba(0,0,0,0.04)",
+                        color: msg.role === "user" ? "#fff" : "#333",
+                        fontSize: 13, lineHeight: 1.5,
+                        whiteSpace: msg.role === "user" ? "pre-wrap" : "normal", wordBreak: "break-word",
+                      }}
+                    >
+                      {msg.role === "assistant" && msg.content ? (
+                        <div className="chat-markdown">
+                          <ReactMarkdown>{(msg.content).replace(/\n(?!\n)/g, "\n\n")}</ReactMarkdown>
+                        </div>
+                      ) : (
+                        msg.content || <span style={{ color: "#999" }}>•••</span>
+                      )}
+                    </div>
+                  )
+                )}
+                <div ref={messagesEndRef} />
               </div>
-            )}
-            {messages.map((msg, i) =>
-              msg.role === "action" && msg.actions ? (
-                <BubbleActionCard key={i} action={msg.actions[0]} />
-              ) : (
+
+              {/* Input */}
+              <div style={{
+                padding: "10px 12px", borderTop: "1px solid rgba(0,0,0,0.06)",
+                display: "flex", gap: 8, alignItems: "flex-end",
+              }}>
+                <textarea
+                  ref={inputRef}
+                  value={input}
+                  onChange={(e) => {
+                    setInput(e.target.value);
+                    const el = e.target;
+                    el.style.height = "auto";
+                    el.style.height = Math.min(el.scrollHeight, 120) + "px";
+                  }}
+                  onKeyDown={handleKeyDown}
+                  disabled={runningHeartbeat}
+                  placeholder="Type a message..."
+                  rows={1}
+                  style={{
+                    flex: 1, resize: "none", border: "1px solid rgba(0,0,0,0.1)",
+                    borderRadius: 10, padding: "8px 12px", fontSize: 13,
+                    outline: "none", fontFamily: "inherit", lineHeight: 1.4,
+                    maxHeight: 120, overflowY: "auto",
+                  }}
+                />
+                <button
+                  onClick={() => sendMessage(input)}
+                  disabled={runningHeartbeat || !input.trim()}
+                  style={{
+                    background: "#c84a20", color: "#fff", border: "none",
+                    borderRadius: 10, padding: "8px 14px", cursor: "pointer",
+                    fontSize: 13, fontWeight: 600, opacity: runningHeartbeat || !input.trim() ? 0.5 : 1,
+                  }}
+                >
+                  Send
+                </button>
+                <button
+                  onClick={handleHeartbeat}
+                  disabled={busy}
+                  title="Run heartbeat — check deliberations and participate"
+                  style={{
+                    border: "1px solid rgba(0,0,0,0.1)", borderRadius: 10,
+                    padding: "8px 10px", background: "transparent", cursor: "pointer",
+                    fontSize: 16, opacity: busy ? 0.5 : 1,
+                  }}
+                >
+                  {runningHeartbeat ? <span style={{ display: "inline-block", animation: "pulse 1.5s infinite" }}>🚀</span> : "🚀"}
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* Activity tab */}
+          {activeTab === "activity" && (
+            <div style={{
+              flex: 1, overflowY: "auto", padding: "12px 16px",
+              display: "flex", flexDirection: "column", gap: 0,
+            }}>
+              {!activityLoaded && (
+                <div style={{ textAlign: "center", color: "#999", fontSize: 12, padding: 20 }}>Loading...</div>
+              )}
+              {activityLoaded && activityActions.length === 0 && (
+                <div style={{ textAlign: "center", color: "#999", fontSize: 12, padding: 20 }}>
+                  No activity yet. Run a heartbeat to get started.
+                </div>
+              )}
+              {activityActions.map((action, i) => (
                 <div
                   key={i}
                   style={{
-                    alignSelf: msg.role === "user" ? "flex-end" : "flex-start",
-                    maxWidth: "85%",
-                    padding: "8px 12px",
-                    borderRadius: msg.role === "user" ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
-                    background: msg.role === "user" ? "#c84a20" : "rgba(0,0,0,0.04)",
-                    color: msg.role === "user" ? "#fff" : "#333",
-                    fontSize: 13, lineHeight: 1.5,
-                    whiteSpace: msg.role === "user" ? "pre-wrap" : "normal", wordBreak: "break-word",
+                    padding: "8px 0",
+                    borderBottom: i < activityActions.length - 1 ? "1px solid rgba(0,0,0,0.05)" : "none",
+                    display: "flex", alignItems: "flex-start", gap: 8,
                   }}
                 >
-                  {msg.role === "assistant" && msg.content ? (
-                    <div className="chat-markdown">
-                      <ReactMarkdown>{(msg.content).replace(/\n(?!\n)/g, "\n\n")}</ReactMarkdown>
+                  <span style={{ fontSize: 14, lineHeight: "20px" }}>
+                    {ACTION_ICONS[action.action_type] || ACTION_ICONS.unknown}
+                  </span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ fontSize: 11, fontWeight: 500, color: "#333" }}>
+                        {ACTION_LABELS[action.action_type] || action.action_type}
+                      </span>
+                      <span style={{ fontSize: 10, color: "#bbb" }}>
+                        {timeAgo(action.timestamp)}
+                      </span>
                     </div>
-                  ) : (
-                    msg.content || <span style={{ color: "#999" }}>•••</span>
-                  )}
+                    {action.deliberation_question && (
+                      action.deliberation_id ? (
+                        <Link
+                          href={`/deliberations/${action.deliberation_id}`}
+                          style={{ display: "block", fontSize: 11, color: "#c84a20", textDecoration: "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                        >
+                          {action.deliberation_question}
+                        </Link>
+                      ) : (
+                        <div style={{ fontSize: 11, color: "#666", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {action.deliberation_question}
+                        </div>
+                      )
+                    )}
+                    {action.detail && !action.deliberation_question && (
+                      <div style={{ fontSize: 10, color: "#999", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {action.detail}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              )
-            )}
-            <div ref={messagesEndRef} />
-          </div>
-
-          {/* Input */}
-          <div style={{
-            padding: "10px 12px", borderTop: "1px solid rgba(0,0,0,0.06)",
-            display: "flex", gap: 8, alignItems: "flex-end",
-          }}>
-            <textarea
-              ref={inputRef}
-              value={input}
-              onChange={(e) => {
-                setInput(e.target.value);
-                const el = e.target;
-                el.style.height = "auto";
-                el.style.height = Math.min(el.scrollHeight, 120) + "px";
-              }}
-              onKeyDown={handleKeyDown}
-              disabled={runningHeartbeat}
-              placeholder="Type a message..."
-              rows={1}
-              style={{
-                flex: 1, resize: "none", border: "1px solid rgba(0,0,0,0.1)",
-                borderRadius: 10, padding: "8px 12px", fontSize: 13,
-                outline: "none", fontFamily: "inherit", lineHeight: 1.4,
-                maxHeight: 120, overflowY: "auto",
-              }}
-            />
-            <button
-              onClick={() => sendMessage(input)}
-              disabled={runningHeartbeat || !input.trim()}
-              style={{
-                background: "#c84a20", color: "#fff", border: "none",
-                borderRadius: 10, padding: "8px 14px", cursor: "pointer",
-                fontSize: 13, fontWeight: 600, opacity: runningHeartbeat || !input.trim() ? 0.5 : 1,
-              }}
-            >
-              Send
-            </button>
-            <button
-              onClick={handleHeartbeat}
-              disabled={busy}
-              title="Run heartbeat — check deliberations and participate"
-              style={{
-                border: "1px solid rgba(0,0,0,0.1)", borderRadius: 10,
-                padding: "8px 10px", background: "transparent", cursor: "pointer",
-                fontSize: 16, opacity: busy ? 0.5 : 1,
-              }}
-            >
-              {runningHeartbeat ? <span style={{ display: "inline-block", animation: "pulse 1.5s infinite" }}>🚀</span> : "🚀"}
-            </button>
-          </div>
+              ))}
+            </div>
+          )}
         </motion.div>
         )}
       </AnimatePresence>

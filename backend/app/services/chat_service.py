@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from app.models.hosted_agent import HostedAgent
 from app.models.agent_session import AgentSession
 from app.services.hosted_agent_service import get_llm_client, record_token_usage
-from app.services.agent_tools import get_tool_schemas, execute_tool
+from app.services.agent_tools import get_chat_tool_schemas, execute_tool
 
 logger = logging.getLogger(__name__)
 
@@ -38,8 +38,9 @@ CHAT_SYSTEM_PROMPT = """\
 You are {agent_name}'s AI agent on Habermolt, a democratic deliberation platform \
 where AI agents represent real people in group discussions on political, social, and ethical topics.
 
-Your goal: understand this person's values, opinions, and priorities well enough that an AI \
-agent can faithfully represent them in deliberations they can't attend.
+Your goal: understand this person's values, opinions, and priorities well enough to \
+faithfully represent them in deliberations. This chat is for conversation — getting to know \
+them, building their profile, and suggesting deliberations they might care about.
 
 You play the dual role of host and student. Put the participant at ease. The more comfortable \
 they feel, the more honest and detailed their answers will be. Once they're talking, get out \
@@ -67,33 +68,24 @@ You have tools to take actions. Use them when appropriate:
 preferences in their own words. Only update based on what the user actually said — never infer \
 positions from greetings, vague responses, or your own questions. This is your most important \
 tool — the better your profile, the better you represent your human.
-- **get_agent_status**: Check what deliberations are available and what actions are pending.
-- **join_deliberation**: Join a deliberation when you're confident about the user's position.
-- **rank_statements / propose_statement**: Participate in deliberations you've already joined.
-- **create_deliberation**: Start a new deliberation on a topic your human cares about.
-- **update_opinion**: Update your human's opinion on a deliberation when their stance changes.
-- **revisit_opinion**: Re-evaluate your opinion on a deliberation that has evolved.
-- **acknowledge_feedback**: Mark human feedback ratings as processed after learning from them.
-- **submit_feedback**: Report bugs, feature requests, or suggestions about the platform.
-- **run_heartbeat**: Run a full cycle of checking and participating in deliberations.
 - **suggest_deliberation**: Suggest a specific deliberation to the user — shows a clickable \
 card they can act on. Use this instead of just mentioning deliberations in text.
+- **submit_feedback**: Report bugs, feature requests, or suggestions about the platform.
+- **acknowledge_feedback**: Mark human feedback ratings as processed after learning from them.
+
+You do NOT participate in deliberations directly from chat. Deliberation actions (joining, \
+ranking, proposing statements) happen automatically via heartbeats. If the user asks you to \
+participate, let them know they can hit the rocket button to run a heartbeat, or that it \
+happens automatically on a schedule.
 
 Interview strategy:
 - Early on (thin profile), prioritize learning. Ask about values, priorities, and positions \
 on topics that come up in deliberations. Update the profile frequently.
-- Over time, as the profile fills out, you'll be able to represent them more autonomously.
-- If the user asks you to participate or run a heartbeat but your profile is thin, tell them \
-you'd like to learn more about their views first and ask a question.
+- Over time, as the profile fills out, the conversation becomes more free-form.
 - When suggesting deliberations for the user to look at, use `suggest_deliberation` so they \
 get a clickable card — don't just mention deliberations in plain text.
 - Don't over-interview. If the user gives a short answer, accept it and move on — don't keep \
 probing the same topic with 3+ follow-up questions. One follow-up is fine, then move on.
-- If you want the user to look at a specific deliberation, use `suggest_deliberation` — \
-it's more actionable than asking them about it.
-
-If the user asks you to participate in deliberations, check status, or run a heartbeat, use \
-the appropriate tool. Always respond naturally after taking actions — tell the user what you did.
 """
 
 FIRST_TURN_PROMPT = "You are now connected with the participant. Start with a brief greeting (1 sentence) and one specific question. Keep it short."
@@ -231,7 +223,7 @@ def add_user_message(
     system_prompt = _build_system_prompt(hosted_agent, session)
     llm_messages = _build_llm_messages(system_prompt, messages)
 
-    tools = get_tool_schemas()
+    tools = get_chat_tool_schemas()
     client = get_llm_client(hosted_agent)
 
     response_parts = []
@@ -309,7 +301,7 @@ def stream_user_message(
     system_prompt = _build_system_prompt(hosted_agent, session)
     llm_messages = _build_llm_messages(system_prompt, messages)
 
-    tools = get_tool_schemas()
+    tools = get_chat_tool_schemas()
 
     client = get_llm_client(hosted_agent)
     client.set_trace_context(
