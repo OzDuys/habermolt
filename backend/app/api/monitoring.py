@@ -127,56 +127,89 @@ async def get_trace_detail(
 
 @router.get("/stats", response_model=MonitoringStatsResponse)
 async def get_monitoring_stats(
+    period: Optional[str] = Query(None, regex="^(week|month)$"),
     db: Session = Depends(get_db),
     _auth: bool = Depends(verify_monitoring_secret),
 ):
-    # Platform totals
-    total_agents = db.query(func.count(Agent.id)).scalar() or 0
-    total_deliberations = db.query(func.count(Deliberation.id)).scalar() or 0
-    total_opinions = db.query(func.count(Opinion.id)).scalar() or 0
-    total_statements = db.query(func.count(Statement.id)).scalar() or 0
-    total_rankings = db.query(func.count(Ranking.id)).scalar() or 0
+    # Compute cutoff for time-filtered queries (None = all time)
+    cutoff = None
+    if period == "week":
+        cutoff = datetime.utcnow() - timedelta(days=7)
+    elif period == "month":
+        cutoff = datetime.utcnow() - timedelta(days=30)
 
-    # LLM trace stats
-    total_traces = db.query(func.count(LLMTrace.id)).scalar() or 0
-    total_errors = db.query(func.count(LLMTrace.id)).filter(LLMTrace.status == "error").scalar() or 0
+    # Platform totals (filtered by created_at / submitted_at / generated_at)
+    agents_q = db.query(func.count(Agent.id))
+    deliberations_q = db.query(func.count(Deliberation.id))
+    opinions_q = db.query(func.count(Opinion.id))
+    statements_q = db.query(func.count(Statement.id))
+    rankings_q = db.query(func.count(Ranking.id))
+    if cutoff:
+        agents_q = agents_q.filter(Agent.created_at >= cutoff)
+        deliberations_q = deliberations_q.filter(Deliberation.created_at >= cutoff)
+        opinions_q = opinions_q.filter(Opinion.submitted_at >= cutoff)
+        statements_q = statements_q.filter(Statement.generated_at >= cutoff)
+        rankings_q = rankings_q.filter(Ranking.submitted_at >= cutoff)
+
+    total_agents = agents_q.scalar() or 0
+    total_deliberations = deliberations_q.scalar() or 0
+    total_opinions = opinions_q.scalar() or 0
+    total_statements = statements_q.scalar() or 0
+    total_rankings = rankings_q.scalar() or 0
+
+    # LLM trace stats (filtered by created_at)
+    def trace_q():
+        q = db.query(LLMTrace)
+        if cutoff:
+            q = q.filter(LLMTrace.created_at >= cutoff)
+        return q
+
+    total_traces = trace_q().with_entities(func.count(LLMTrace.id)).scalar() or 0
+    total_errors = trace_q().filter(LLMTrace.status == "error").with_entities(func.count(LLMTrace.id)).scalar() or 0
     error_rate = (total_errors / total_traces) if total_traces > 0 else 0.0
 
-    tokens_agg = db.query(
+    tokens_base = db.query(
         func.coalesce(func.sum(LLMTrace.tokens_in), 0),
         func.coalesce(func.sum(LLMTrace.tokens_out), 0),
-    ).first()
+    )
+    if cutoff:
+        tokens_base = tokens_base.filter(LLMTrace.created_at >= cutoff)
+    tokens_agg = tokens_base.first()
     total_tokens_in = tokens_agg[0]
     total_tokens_out = tokens_agg[1]
 
-    avg_latency = db.query(func.avg(LLMTrace.latency_ms)).filter(
-        LLMTrace.latency_ms.isnot(None)
-    ).scalar() or 0.0
+    latency_base = db.query(func.avg(LLMTrace.latency_ms)).filter(LLMTrace.latency_ms.isnot(None))
+    if cutoff:
+        latency_base = latency_base.filter(LLMTrace.created_at >= cutoff)
+    avg_latency = latency_base.scalar() or 0.0
 
-    traces_by_type = dict(
-        db.query(LLMTrace.trace_type, func.count(LLMTrace.id))
-        .group_by(LLMTrace.trace_type).all()
-    )
-    traces_by_model = dict(
-        db.query(LLMTrace.model, func.count(LLMTrace.id))
-        .group_by(LLMTrace.model).all()
-    )
+    type_base = db.query(LLMTrace.trace_type, func.count(LLMTrace.id))
+    if cutoff:
+        type_base = type_base.filter(LLMTrace.created_at >= cutoff)
+    traces_by_type = dict(type_base.group_by(LLMTrace.trace_type).all())
+
+    model_base = db.query(LLMTrace.model, func.count(LLMTrace.id))
+    if cutoff:
+        model_base = model_base.filter(LLMTrace.created_at >= cutoff)
+    traces_by_model = dict(model_base.group_by(LLMTrace.model).all())
 
     traces_24h = db.query(func.count(LLMTrace.id)).filter(
         LLMTrace.created_at >= datetime.utcnow() - timedelta(hours=24)
     ).scalar() or 0
 
     # Cost aggregations
-    total_cost = db.query(
-        func.coalesce(func.sum(LLMTrace.cost_total), 0.0)
-    ).scalar()
+    cost_base = db.query(func.coalesce(func.sum(LLMTrace.cost_total), 0.0))
+    if cutoff:
+        cost_base = cost_base.filter(LLMTrace.created_at >= cutoff)
+    total_cost = cost_base.scalar()
 
-    cost_by_model_rows = (
+    cbm_base = (
         db.query(LLMTrace.model, func.coalesce(func.sum(LLMTrace.cost_total), 0.0))
         .filter(LLMTrace.cost_total.isnot(None))
-        .group_by(LLMTrace.model).all()
     )
-    cost_by_model = {row[0]: round(float(row[1]), 6) for row in cost_by_model_rows}
+    if cutoff:
+        cbm_base = cbm_base.filter(LLMTrace.created_at >= cutoff)
+    cost_by_model = {row[0]: round(float(row[1]), 6) for row in cbm_base.group_by(LLMTrace.model).all()}
 
     cost_24h = db.query(
         func.coalesce(func.sum(LLMTrace.cost_total), 0.0)
@@ -184,12 +217,13 @@ async def get_monitoring_stats(
         LLMTrace.created_at >= datetime.utcnow() - timedelta(hours=24)
     ).scalar()
 
-    latency_by_model_rows = (
+    lbm_base = (
         db.query(LLMTrace.model, func.avg(LLMTrace.latency_ms))
         .filter(LLMTrace.latency_ms.isnot(None))
-        .group_by(LLMTrace.model).all()
     )
-    latency_by_model = {row[0]: round(float(row[1]), 1) for row in latency_by_model_rows}
+    if cutoff:
+        lbm_base = lbm_base.filter(LLMTrace.created_at >= cutoff)
+    latency_by_model = {row[0]: round(float(row[1]), 1) for row in lbm_base.group_by(LLMTrace.model).all()}
 
     return MonitoringStatsResponse(
         total_agents=total_agents,

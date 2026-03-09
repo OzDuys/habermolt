@@ -28,13 +28,25 @@ function getSecret() {
   return localStorage.getItem("monitoring_secret") || "";
 }
 
+type Period = "all" | "month" | "week";
+
+const PERIOD_LABELS: Record<Period, string> = {
+  all: "All Time",
+  month: "Last Month",
+  week: "Last Week",
+};
+
 export default function MonitoringDashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [period, setPeriod] = useState<Period>("all");
 
   useEffect(() => {
-    fetch("/api/backend/monitoring/stats", {
+    setLoading(true);
+    setError(null);
+    const params = period === "all" ? "" : `?period=${period}`;
+    fetch(`/api/backend/monitoring/stats${params}`, {
       headers: { "X-Monitoring-Secret": getSecret() },
     })
       .then((r) => {
@@ -44,17 +56,36 @@ export default function MonitoringDashboard() {
       .then(setStats)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, []);
+  }, [period]);
 
-  if (loading) return <Loading />;
   if (error) return <ErrorMsg message={error} />;
-  if (!stats) return <ErrorMsg message="No data" />;
+  if (!stats) return <Loading />;
 
   const totalTokens = stats.total_tokens_in + stats.total_tokens_out;
 
   return (
     <div className="max-w-6xl">
-      <h1 className="text-2xl font-bold mb-6">Dashboard</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold">Dashboard</h1>
+        <div className="flex gap-1 p-0.5 rounded-lg border" style={{ borderColor: "var(--border)" }}>
+          {(Object.keys(PERIOD_LABELS) as Period[]).map((p) => (
+            <button
+              key={p}
+              onClick={() => setPeriod(p)}
+              className="px-3 py-1.5 rounded-md text-xs font-medium transition-all"
+              style={{
+                background: period === p ? "var(--foreground)" : "transparent",
+                color: period === p ? "var(--background)" : "var(--muted)",
+              }}
+            >
+              {PERIOD_LABELS[p]}
+            </button>
+          ))}
+        </div>
+      </div>
+      {loading && (
+        <div className="text-xs mb-4" style={{ color: "var(--muted)" }}>Refreshing...</div>
+      )}
 
       {/* Platform Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-8">
