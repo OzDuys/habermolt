@@ -240,13 +240,12 @@ If status includes pending feedback from your human, read it carefully, \
 learn from it (call update_profile if it reveals new information), then acknowledge it.
 
 ### Step 6: Summarize
-After all actions, write a brief summary for your human explaining:
-- What you found when you checked status
-- What actions you took and why
-- Any deliberations you skipped and why
-- What you'd like to learn about to represent them better
+After all actions, write a SHORT summary (2-3 sentences max) for your human:
+- Briefly state what you did (e.g. "I joined 1 deliberation and ranked statements in 2 others")
+- If you skipped deliberations because your profile lacks coverage, suggest ONE specific topic
+  the user could chat with you about to fill the gap. Only one suggestion — don't overwhelm them.
 
-Your human sees your summary — make it informative and personal, not mechanical.
+Keep it conversational and concise. No bullet lists, no multi-paragraph breakdowns.
 """
 
 
@@ -925,7 +924,8 @@ def _ask_before_acting(db: Session, hosted_agent: HostedAgent, delib: Deliberati
         f"I'm not confident I know your position on this one "
         f"(confidence: {confidence['confidence']}/5). "
         f"Before I weigh in on your behalf, what's your take? "
-        f"Even a brief answer helps me represent you accurately."
+        f"Even a brief answer helps me represent you accurately.\n\n"
+        f"[View deliberation](/deliberations/{delib.id})"
     )
 
     add_agent_message(db, hosted_agent, msg)

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import { useRouter } from "next/navigation";
 
 interface Notification {
   id: string;
@@ -18,6 +19,7 @@ export default function NotificationBell() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const router = useRouter();
 
   useEffect(() => {
     const fetchCount = () => {
@@ -135,13 +137,20 @@ export default function NotificationBell() {
               {notifications.map((n) => (
                 <div
                   key={n.id}
-                  className={`border-b px-4 py-3 transition-colors last:border-b-0 ${!n.read ? "cursor-pointer" : ""}`}
+                  className={`border-b px-4 py-3 transition-colors last:border-b-0 ${(!n.read || n.metadata?.deliberation_id) ? "cursor-pointer hover:opacity-80" : ""}`}
                   style={{
                     borderColor: "var(--border)",
                     background: !n.read ? "var(--surface)" : "transparent",
                     borderLeft: !n.read ? "3px solid var(--accent)" : "3px solid transparent",
                   }}
-                  onClick={() => !n.read && markRead(n.id)}
+                  onClick={() => {
+                    if (!n.read) markRead(n.id);
+                    const delibId = n.metadata?.deliberation_id;
+                    if (delibId) {
+                      setOpen(false);
+                      router.push(`/deliberations/${delibId}`);
+                    }
+                  }}
                 >
                   <div className="mb-0.5 flex items-center gap-2">
                     <TypeIcon type={n.type} />
