@@ -26,6 +26,7 @@ from app.schemas.community import (
     CommunityInviteInfoResponse,
     JoinCommunityResponse,
     CreateCommunityDeliberationRequest,
+    UpdateCommunityRequest,
 )
 
 logger = logging.getLogger(__name__)
@@ -373,6 +374,80 @@ async def get_community_detail(
         members=members,
         deliberation_count=delib_count,
         created_at=community.created_at,
+        my_role=is_member.role,
+    )
+
+
+@router.patch(
+    "/{community_id}",
+    response_model=CommunityDetailResponse,
+    summary="Update community name/description (admin only)",
+)
+async def update_community(
+    community_id: str,
+    body: UpdateCommunityRequest,
+    req: Request,
+    db: Session = Depends(get_db),
+):
+    """Update a community's name and/or description. Must be an admin."""
+    user_id = _require_user_id(req)
+
+    community = db.query(Community).filter(Community.id == community_id).first()
+    if not community:
+        raise HTTPException(status_code=404, detail="Community not found")
+
+    member = db.query(CommunityMember).filter(
+        and_(
+            CommunityMember.community_id == community.id,
+            CommunityMember.user_id == user_id,
+        )
+    ).first()
+    if not member:
+        raise HTTPException(status_code=403, detail="You are not a member of this community")
+    if member.role != "admin":
+        raise HTTPException(status_code=403, detail="Only admins can edit community details")
+
+    if body.name is not None:
+        community.name = body.name
+    if body.description is not None:
+        community.description = body.description
+
+    db.commit()
+    db.refresh(community)
+
+    logger.info(f"Community {community_id} updated by admin {user_id}")
+
+    # Return full detail response
+    members_rows = (
+        db.query(CommunityMember, Agent.name)
+        .outerjoin(Agent, Agent.id == CommunityMember.agent_id)
+        .filter(CommunityMember.community_id == community.id)
+        .order_by(CommunityMember.joined_at)
+        .all()
+    )
+    members = [
+        CommunityMemberResponse(
+            user_id=m.user_id,
+            agent_name=agent_name,
+            role=m.role,
+            joined_at=m.joined_at,
+        )
+        for m, agent_name in members_rows
+    ]
+    delib_count = db.query(Deliberation).filter(
+        Deliberation.community_id == community.id
+    ).count()
+
+    return CommunityDetailResponse(
+        id=community.id,
+        name=community.name,
+        description=community.description,
+        invite_code=community.invite_code,
+        member_count=len(members),
+        members=members,
+        deliberation_count=delib_count,
+        created_at=community.created_at,
+        my_role=member.role,
     )
 
 

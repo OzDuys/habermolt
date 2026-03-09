@@ -35,6 +35,10 @@ export default function CommunityDetailPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [leaving, setLeaving] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!session?.user || !communityId) return;
@@ -71,6 +75,30 @@ export default function CommunityDetailPage() {
       setError(err instanceof Error ? err.message : "Failed to leave community");
       setShowLeaveConfirm(false);
       setLeaving(false);
+    }
+  };
+
+  const startEditing = () => {
+    if (!community) return;
+    setEditName(community.name);
+    setEditDescription(community.description || "");
+    setEditing(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!community) return;
+    setSaving(true);
+    try {
+      const updated = await api.updateCommunity(communityId, {
+        name: editName,
+        description: editDescription || undefined,
+      });
+      setCommunity(updated);
+      setEditing(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update community");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -116,18 +144,75 @@ export default function CommunityDetailPage() {
 
       {/* Header */}
       <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="font-serif text-2xl sm:text-3xl" style={{ color: "var(--foreground)" }}>
-            {community.name}
-          </h1>
-          {community.description && (
-            <p className="mt-1 text-sm" style={{ color: "var(--muted)" }}>
-              {community.description}
-            </p>
+        <div className="min-w-0 flex-1">
+          {editing ? (
+            <div className="space-y-2">
+              <input
+                type="text"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                className="w-full rounded-lg border px-3 py-2 font-serif text-2xl sm:text-3xl"
+                style={{ borderColor: "var(--border)", background: "var(--surface)", color: "var(--foreground)" }}
+                maxLength={100}
+              />
+              <input
+                type="text"
+                value={editDescription}
+                onChange={(e) => setEditDescription(e.target.value)}
+                placeholder="Description (optional)"
+                className="w-full rounded-lg border px-3 py-1.5 text-sm"
+                style={{ borderColor: "var(--border)", background: "var(--surface)", color: "var(--foreground)" }}
+                maxLength={500}
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={handleSaveEdit}
+                  disabled={saving || !editName.trim()}
+                  className="rounded-full px-3 py-1.5 text-xs font-medium text-white transition-colors hover:opacity-90 disabled:opacity-50"
+                  style={{ background: "var(--accent)" }}
+                >
+                  {saving ? "Saving..." : "Save"}
+                </button>
+                <button
+                  onClick={() => setEditing(false)}
+                  className="rounded-full border px-3 py-1.5 text-xs font-medium transition-colors hover:border-stone-400"
+                  style={{ borderColor: "var(--border)", color: "var(--foreground)" }}
+                  disabled={saving}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center gap-2">
+                <h1 className="font-serif text-2xl sm:text-3xl" style={{ color: "var(--foreground)" }}>
+                  {community.name}
+                </h1>
+                {community.my_role === "admin" && (
+                  <button
+                    onClick={startEditing}
+                    className="rounded p-1 text-xs transition-colors hover:bg-black/5"
+                    style={{ color: "var(--muted)" }}
+                    title="Edit community"
+                  >
+                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+                      <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+              {community.description && (
+                <p className="mt-1 text-sm" style={{ color: "var(--muted)" }}>
+                  {community.description}
+                </p>
+              )}
+              <p className="mt-2 text-xs" style={{ color: "var(--muted)" }}>
+                {community.member_count} member{community.member_count !== 1 ? "s" : ""}
+              </p>
+            </>
           )}
-          <p className="mt-2 text-xs" style={{ color: "var(--muted)" }}>
-            {community.member_count} member{community.member_count !== 1 ? "s" : ""}
-          </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <button

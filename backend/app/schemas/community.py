@@ -43,6 +43,13 @@ class CommunityDetailResponse(BaseModel):
     members: List[CommunityMemberResponse] = []
     deliberation_count: int = 0
     created_at: datetime
+    my_role: Optional[str] = None
+
+
+class UpdateCommunityRequest(BaseModel):
+    """Request schema for updating community name/description."""
+    name: Optional[str] = Field(None, min_length=1, max_length=100, description="New community name")
+    description: Optional[str] = Field(None, max_length=500, description="New community description")
 
 
 class CommunityInviteInfoResponse(BaseModel):

@@ -231,6 +231,7 @@ export interface CommunityDetail {
   members: CommunityMember[];
   deliberation_count: number;
   created_at: string;
+  my_role: string | null;
 }
 
 export interface CommunityInviteInfo {

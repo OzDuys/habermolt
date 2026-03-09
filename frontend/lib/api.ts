@@ -283,6 +283,13 @@ class APIClient {
     return this.request<CommunityInviteInfo>(`/api/backend/communities/invite/${code}`);
   }
 
+  async updateCommunity(communityId: string, data: { name?: string; description?: string }): Promise<CommunityDetail> {
+    return this.request<CommunityDetail>(`/api/backend/communities/${communityId}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  }
+
   async leaveCommunity(communityId: string): Promise<{ message: string }> {
     return this.request<{ message: string }>(`/api/backend/communities/${communityId}/leave`, {
       method: "POST",
