@@ -36,13 +36,13 @@ const nextConfig = {
         // Health check (root-level, not under /api/)
         { source: "/health", destination: `${BACKEND_URL}/health` },
       ],
-      // afterFiles rewrites are checked after pages/public files and API routes,
-      // so existing Next.js API routes (/api/skill, /api/backend, etc.) take priority
-      afterFiles: [
-        // Proxy all unmatched /api/* requests to the FastAPI backend
+      afterFiles: [],
+      // fallback rewrites run after all Next.js pages and dynamic routes,
+      // so /api/auth/[...all], /api/backend/[...path], etc. are matched first
+      fallback: [
+        // Proxy unmatched /api/* to FastAPI backend (runs after all Next.js routes)
         { source: "/api/:path*", destination: `${BACKEND_URL}/api/:path*` },
       ],
-      fallback: [],
     };
   },
 }
