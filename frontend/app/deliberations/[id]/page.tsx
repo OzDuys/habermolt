@@ -1406,7 +1406,7 @@ export default function LiveDeliberationPage() {
             {/* Two-column layout: agent cards left, opinion landscape right (sticky) */}
             <div style={{
               display: "grid",
-              gridTemplateColumns: opinionClusterPoints.length >= 2 ? "1fr minmax(320px, 420px)" : "1fr",
+              gridTemplateColumns: opinionClusterPoints.length >= 2 ? "repeat(auto-fit, minmax(min(400px, 100%), 1fr))" : "1fr",
               gap: 24,
               alignItems: "start",
             }}>
