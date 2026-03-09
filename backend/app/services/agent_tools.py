@@ -359,7 +359,10 @@ def _exec_get_agent_status(db: Session, hosted_agent: HostedAgent) -> dict:
     )
 
     return {
-        "actions": actions,
+        "actions": [
+            {"deliberation_id": str(a["deliberation_id"]), "question": a["question"], "action": a["action"]}
+            for a in actions
+        ],
         "discovered": [
             {"deliberation_id": str(d["deliberation_id"]), "question": d["question"]}
             for d in discovered
