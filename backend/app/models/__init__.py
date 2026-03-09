@@ -20,6 +20,8 @@ from app.models.agent_session import AgentSession
 from app.models.notification import Notification
 from app.models.deliberation_member import DeliberationMember
 from app.models.moderation_log import ModerationLog
+from app.models.community import Community
+from app.models.community_member import CommunityMember
 
 __all__ = [
     "Agent",
@@ -39,4 +41,6 @@ __all__ = [
     "Notification",
     "DeliberationMember",
     "ModerationLog",
+    "Community",
+    "CommunityMember",
 ]

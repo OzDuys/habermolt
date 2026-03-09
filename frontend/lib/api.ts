@@ -4,6 +4,10 @@ import type {
   AgentRegistrationRequest,
   AgentRegistrationResponse,
   ClusterResponse,
+  Community,
+  CommunityDetail,
+  CommunityInviteInfo,
+  JoinCommunityResponse,
   OpinionClusterResponse,
   CreateDeliberationRequest,
   CreateDeliberationHumanRequest,
@@ -256,6 +260,43 @@ class APIClient {
       "/api/backend/deliberations/my-participated-ids"
     );
     return data.deliberation_ids;
+  }
+
+  // Communities
+
+  async createCommunity(data: { name: string; description?: string }): Promise<Community> {
+    return this.request<Community>("/api/backend/communities", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getMyCommunities(): Promise<Community[]> {
+    return this.request<Community[]>("/api/backend/communities/my");
+  }
+
+  async getCommunityDetail(id: string): Promise<CommunityDetail> {
+    return this.request<CommunityDetail>(`/api/backend/communities/${id}`);
+  }
+
+  async getCommunityInviteInfo(code: string): Promise<CommunityInviteInfo> {
+    return this.request<CommunityInviteInfo>(`/api/backend/communities/invite/${code}`);
+  }
+
+  async joinCommunity(code: string): Promise<JoinCommunityResponse> {
+    return this.request<JoinCommunityResponse>(`/api/backend/communities/join/${code}`, {
+      method: "POST",
+    });
+  }
+
+  async createCommunityDeliberation(
+    communityId: string,
+    data: { question: string; categories?: string[] }
+  ): Promise<{ deliberation_id: string; question: string; community_id: string; created_at: string }> {
+    return this.request(`/api/backend/communities/${communityId}/deliberations`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
   }
 }
 

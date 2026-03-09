@@ -404,8 +404,12 @@ async def get_deliberation(
         rankings = list(deliberation.rankings)
         statements = list(deliberation.statements)
 
+    delib_resp = DeliberationResponse.from_orm(deliberation)
+    if deliberation.community_id and deliberation.community:
+        delib_resp.community_name = deliberation.community.name
+
     return DeliberationDetailResponse(
-        deliberation=DeliberationResponse.from_orm(deliberation),
+        deliberation=delib_resp,
         created_by=creator,
         opinions=[OpinionResponse.from_orm(o) for o in opinions],
         statements=[StatementResponse.from_orm(s) for s in statements],

@@ -6,6 +6,7 @@ import { useSession } from "@/lib/auth-client";
 import { api } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import SignInModal from "@/components/SignInModal";
+import type { Community } from "@/lib/types";
 
 const CATEGORIES = [
   "ai", "current-affairs", "geopolitics", "societal",
@@ -17,9 +18,11 @@ type AgentType = "loading" | "none" | "hosted" | "openclaw";
 export default function CreateDeliberationModal({
   open,
   onClose,
+  communityId,
 }: {
   open: boolean;
   onClose: () => void;
+  communityId?: string;
 }) {
   const { data: session } = useSession();
   const router = useRouter();
@@ -30,6 +33,10 @@ export default function CreateDeliberationModal({
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+
+  // Community scoping state (only used when !communityId prop)
+  const [communities, setCommunities] = useState<Community[]>([]);
+  const [selectedCommunityId, setSelectedCommunityId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!session?.user || !open) return;
@@ -42,7 +49,12 @@ export default function CreateDeliberationModal({
       else if (openclaw) setAgentType("openclaw");
       else setAgentType("none");
     }).catch(() => setAgentType("none"));
-  }, [session, open]);
+
+    // Fetch communities for the scope selector
+    if (!communityId) {
+      api.getMyCommunities().then(setCommunities).catch(() => {});
+    }
+  }, [session, open, communityId]);
 
   // Reset form when modal opens
   useEffect(() => {
@@ -51,9 +63,10 @@ export default function CreateDeliberationModal({
       setSelectedCategories([]);
       setError(null);
       setCreating(false);
-      setIsPrivate(false);
+      setIsPrivate(!!communityId);
+      setSelectedCommunityId(null);
     }
-  }, [open]);
+  }, [open, communityId]);
 
   // Close on Escape
   useEffect(() => {
@@ -75,6 +88,9 @@ export default function CreateDeliberationModal({
     );
   };
 
+  // The effective community ID — either from prop or from user selection
+  const effectiveCommunityId = communityId || selectedCommunityId;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (question.length < 10) {
@@ -91,18 +107,26 @@ export default function CreateDeliberationModal({
         setAgentType("hosted");
       }
 
-      const data = await api.createDeliberationHuman({
-        question,
-        categories: selectedCategories.length > 0 ? selectedCategories : undefined,
-        is_private: isPrivate,
-      });
-
-      onClose();
-      const params = new URLSearchParams({ created: "true" });
-      if (data.invite_code) {
-        params.set("invite_code", data.invite_code);
+      if (effectiveCommunityId) {
+        const data = await api.createCommunityDeliberation(effectiveCommunityId, {
+          question,
+          categories: selectedCategories.length > 0 ? selectedCategories : undefined,
+        });
+        onClose();
+        router.push(`/deliberations/${data.deliberation_id}?created=true`);
+      } else {
+        const data = await api.createDeliberationHuman({
+          question,
+          categories: selectedCategories.length > 0 ? selectedCategories : undefined,
+          is_private: isPrivate,
+        });
+        onClose();
+        const params = new URLSearchParams({ created: "true" });
+        if (data.invite_code) {
+          params.set("invite_code", data.invite_code);
+        }
+        router.push(`/deliberations/${data.deliberation_id}?${params.toString()}`);
       }
-      router.push(`/deliberations/${data.deliberation_id}?${params.toString()}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
       setCreating(false);
@@ -119,6 +143,13 @@ export default function CreateDeliberationModal({
       />
     );
   }
+
+  // Helper text for the current privacy mode
+  const privacyHelpText = effectiveCommunityId
+    ? `All members of "${communities.find((c) => c.id === effectiveCommunityId)?.name || "this community"}" will have access.`
+    : isPrivate
+      ? "Only people with the invite link can join."
+      : "Anyone can discover and join this deliberation.";
 
   return (
     <AnimatePresence>
@@ -178,12 +209,13 @@ export default function CreateDeliberationModal({
                       </div>
                     )}
 
-                    {/* Public / Private Toggle */}
+                    {/* Public / Private Toggle — hidden when communityId prop forces community mode */}
+                    {!communityId && (
                     <div className="mb-4">
                       <div className="flex overflow-hidden rounded-lg border border-stone-200">
                         <button
                           type="button"
-                          onClick={() => setIsPrivate(false)}
+                          onClick={() => { setIsPrivate(false); setSelectedCommunityId(null); }}
                           className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
                             !isPrivate
                               ? "bg-red-500 text-white"
@@ -204,12 +236,43 @@ export default function CreateDeliberationModal({
                           Private
                         </button>
                       </div>
+
+                      {/* Community scope selector — shown when Private and user has communities */}
+                      {isPrivate && communities.length > 0 && (
+                        <div className="mt-2.5 flex flex-wrap gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedCommunityId(null)}
+                            className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                              !selectedCommunityId
+                                ? "border-red-300 bg-red-50 text-red-600"
+                                : "border-stone-200 text-stone-500 hover:border-stone-300 hover:text-stone-700"
+                            }`}
+                          >
+                            Invite link
+                          </button>
+                          {communities.map((c) => (
+                            <button
+                              key={c.id}
+                              type="button"
+                              onClick={() => setSelectedCommunityId(c.id)}
+                              className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                                selectedCommunityId === c.id
+                                  ? "border-blue-300 bg-blue-50 text-blue-600"
+                                  : "border-stone-200 text-stone-500 hover:border-stone-300 hover:text-stone-700"
+                              }`}
+                            >
+                              {c.name}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
                       <p className="mt-1.5 text-xs text-stone-400">
-                        {isPrivate
-                          ? "Only people with the invite link can join."
-                          : "Anyone can discover and join this deliberation."}
+                        {privacyHelpText}
                       </p>
                     </div>
+                    )}
 
                     {/* Question */}
                     <div className="mb-4">
@@ -219,7 +282,7 @@ export default function CreateDeliberationModal({
                       <textarea
                         value={question}
                         onChange={(e) => setQuestion(e.target.value)}
-                        placeholder={isPrivate
+                        placeholder={isPrivate || communityId
                           ? "e.g. Where should we go for dinner on Friday?"
                           : "e.g. Should AI-generated art be eligible for copyright protection?"}
                         rows={3}

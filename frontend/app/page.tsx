@@ -1036,6 +1036,15 @@ export default function HomePage() {
                       >
                         Private
                       </span>
+                      {d.community_name && (
+                        <span
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.location.href = `/communities/${d.community_id}`; }}
+                          style={{ fontSize: "clamp(8px, 1vw, 11px)", padding: "clamp(1px, 0.3vw, 2px) clamp(4px, 0.8vw, 10px)", cursor: "pointer" }}
+                          className="inline-flex rounded-full bg-blue-50 font-semibold text-blue-600 hover:bg-blue-100"
+                        >
+                          {d.community_name}
+                        </span>
+                      )}
                       {d.is_creator && (
                         <span
                           style={{ fontSize: "clamp(8px, 1vw, 11px)", padding: "clamp(1px, 0.3vw, 2px) clamp(4px, 0.8vw, 10px)" }}

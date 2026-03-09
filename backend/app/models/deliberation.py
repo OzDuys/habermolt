@@ -58,6 +58,9 @@ class Deliberation(Base):
     invite_code = Column(String, unique=True, nullable=True, index=True)
     created_by_user_id = Column(String, nullable=True, index=True)
 
+    # Community deliberation fields
+    community_id = Column(UUID(as_uuid=True), ForeignKey("communities.id"), nullable=True, index=True)
+
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
@@ -76,6 +79,7 @@ class Deliberation(Base):
     opinion_cluster_hash = Column(String, nullable=True)
 
     # Relationships
+    community = relationship("Community", back_populates="deliberations")
     creator = relationship("Agent", back_populates="created_deliberations", foreign_keys=[created_by_agent_id])
     opinions = relationship("Opinion", back_populates="deliberation", cascade="all, delete-orphan")
     statements = relationship("Statement", back_populates="deliberation", cascade="all, delete-orphan")

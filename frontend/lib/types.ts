@@ -23,6 +23,8 @@ export interface Deliberation {
   meta_data: Record<string, any>;
   is_private: boolean;
   invite_code: string | null;
+  community_id: string | null;
+  community_name: string | null;
   // Activity counts for trending score
   num_opinions: number;
   num_agent_statements: number;
@@ -190,10 +192,54 @@ export interface PrivateDeliberationListItem {
   participant_count: number;
   created_at: string;
   is_creator: boolean;
+  community_id: string | null;
+  community_name: string | null;
 }
 
 export interface PrivateDeliberationListResponse {
   deliberations: PrivateDeliberationListItem[];
+}
+
+// Community types
+
+export interface Community {
+  id: string;
+  name: string;
+  description: string | null;
+  invite_code: string;
+  member_count: number;
+  deliberation_count: number;
+  created_at: string;
+}
+
+export interface CommunityMember {
+  user_id: string;
+  agent_name: string | null;
+  role: string;
+  joined_at: string;
+}
+
+export interface CommunityDetail {
+  id: string;
+  name: string;
+  description: string | null;
+  invite_code: string;
+  member_count: number;
+  members: CommunityMember[];
+  deliberation_count: number;
+  created_at: string;
+}
+
+export interface CommunityInviteInfo {
+  community_id: string;
+  name: string;
+  description: string | null;
+  member_count: number;
+}
+
+export interface JoinCommunityResponse {
+  community_id: string;
+  message: string;
 }
 
 export interface ClusterPoint {

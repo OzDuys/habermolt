@@ -26,6 +26,8 @@ from app.models import (
 )
 from app.models.agent_rating import AgentRating
 from app.models.deliberation_member import DeliberationMember
+from app.models.community import Community
+from app.models.community_member import CommunityMember
 from app.middleware.auth import APIKeyAuth, get_current_agent
 from app.config import settings
 from app.schemas.agent_status import (
@@ -72,6 +74,19 @@ async def get_agent_status(
         .all()
     )
 
+    # Pre-load community memberships for this agent's user
+    user_community_ids = set()
+    if agent.user_id:
+        user_community_ids = {
+            cm.community_id for cm in
+            db.query(CommunityMember.community_id)
+            .filter(CommunityMember.user_id == agent.user_id)
+            .all()
+        }
+
+    # Pre-load community names for community deliberations
+    community_names: dict = {}
+
     actions = []
     discovered = []
 
@@ -84,6 +99,16 @@ async def get_agent_status(
                     DeliberationMember.agent_id == agent.id,
                 )
             ).first()
+            # For community deliberations, also check community membership
+            if not is_member and delib.community_id and delib.community_id in user_community_ids:
+                # Auto-add as deliberation member
+                db.add(DeliberationMember(
+                    deliberation_id=delib.id,
+                    agent_id=agent.id,
+                    joined_by_user_id=agent.user_id,
+                ))
+                db.flush()
+                is_member = True
             if not is_member:
                 continue
 
@@ -102,14 +127,26 @@ async def get_agent_status(
             )
         ).first()
 
+        # Helper: resolve community name for this deliberation
+        def _community_info():
+            if not delib.community_id:
+                return None, None
+            if delib.community_id not in community_names:
+                c = db.query(Community.name).filter(Community.id == delib.community_id).first()
+                community_names[delib.community_id] = c[0] if c else None
+            return delib.community_id, community_names[delib.community_id]
+
         # Agent has NOT participated — this is a discovered deliberation
         if not opinion:
             if len(discovered) < 10:
+                c_id, c_name = _community_info()
                 discovered.append(DiscoveredDeliberation(
                     deliberation_id=delib.id,
                     question=delib.question,
                     participant_count=delib.num_citizens,
                     created_at=delib.created_at,
+                    community_id=c_id,
+                    community_name=c_name,
                 ))
             continue
 
@@ -122,11 +159,14 @@ async def get_agent_status(
                 Statement.deliberation_id == delib.id,
             ).count() > 0
             if has_statements:
+                c_id, c_name = _community_info()
                 actions.append(AgentActionItem(
                     deliberation_id=delib.id,
                     question=delib.question,
                     action="rank_statements",
                     participant_count=delib.num_citizens,
+                    community_id=c_id,
+                    community_name=c_name,
                 ))
             continue
 
@@ -144,6 +184,7 @@ async def get_agent_status(
             for entry in ranking.statement_rankings
         )
 
+        c_id, c_name = _community_info()
         if has_predicted:
             actions.append(AgentActionItem(
                 deliberation_id=delib.id,
@@ -151,6 +192,8 @@ async def get_agent_status(
                 action="review_predicted_rankings",
                 participant_count=delib.num_citizens,
                 new_statements_count=new_count if new_count > 0 else None,
+                community_id=c_id,
+                community_name=c_name,
             ))
         elif new_count > 0:
             actions.append(AgentActionItem(
@@ -159,6 +202,8 @@ async def get_agent_status(
                 action="update_rankings",
                 participant_count=delib.num_citizens,
                 new_statements_count=new_count,
+                community_id=c_id,
+                community_name=c_name,
             ))
         else:
             # Check if agent should propose a statement
@@ -180,6 +225,8 @@ async def get_agent_status(
                     question=delib.question,
                     action="add_statement",
                     participant_count=delib.num_citizens,
+                    community_id=c_id,
+                    community_name=c_name,
                 ))
 
     # Query unacknowledged human feedback for this agent

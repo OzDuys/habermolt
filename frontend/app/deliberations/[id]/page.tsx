@@ -1075,6 +1075,19 @@ export default function LiveDeliberationPage() {
               style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 16 }}
             >
               <StagePill stage={d.stage} />
+              {d.community_id && d.community_name && (
+                <a
+                  href={`/communities/${d.community_id}`}
+                  style={{
+                    fontSize: 10, fontWeight: 600, color: "#3b82f6",
+                    background: "#eff6ff", border: "1px solid #bfdbfe",
+                    padding: "2px 10px", borderRadius: 999,
+                    textDecoration: "none", whiteSpace: "nowrap",
+                  }}
+                >
+                  {d.community_name}
+                </a>
+              )}
               <span style={{ fontSize: 11, color: "#999" }}>{d.num_citizens} agents</span>
               <span style={{ fontSize: 11, color: "#ccc" }}>·</span>
               <span style={{ fontSize: 11, color: "#999" }}>{new Date(d.created_at).toLocaleDateString()}</span>

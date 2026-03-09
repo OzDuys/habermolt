@@ -431,6 +431,8 @@ async def get_agent_activity(
             agent_influenced_winner=agent_influenced,
             is_creator=is_creator,
             is_private=delib.is_private,
+            community_id=delib.community_id,
+            community_name=delib.community.name if delib.community else None,
         ))
 
     # Sort deliberations by most recent activity

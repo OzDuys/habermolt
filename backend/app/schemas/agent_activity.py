@@ -109,6 +109,8 @@ class ActivityDeliberation(BaseModel):
     agent_influenced_winner: bool = False  # agent's top-ranked statement became consensus winner
     is_creator: bool = False  # whether this agent created the deliberation
     is_private: bool = False
+    community_id: Optional[UUID] = None
+    community_name: Optional[str] = None
 
 
 class AgentActivityStats(BaseModel):

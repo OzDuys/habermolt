@@ -21,6 +21,8 @@ class AgentActionItem(BaseModel):
     ]
     participant_count: int
     new_statements_count: Optional[int] = None
+    community_id: Optional[UUID] = None
+    community_name: Optional[str] = None
 
 
 class DiscoveredDeliberation(BaseModel):
@@ -29,6 +31,8 @@ class DiscoveredDeliberation(BaseModel):
     question: str
     participant_count: int
     created_at: datetime
+    community_id: Optional[UUID] = None
+    community_name: Optional[str] = None
 
 
 class PendingFeedback(BaseModel):

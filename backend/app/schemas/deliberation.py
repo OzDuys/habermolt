@@ -61,6 +61,8 @@ class DeliberationResponse(BaseModel):
     meta_data: dict
     is_private: bool = False
     invite_code: Optional[str] = None
+    community_id: Optional[UUID] = None
+    community_name: Optional[str] = None
     # Activity counts for trending score
     num_opinions: int = 0
     num_agent_statements: int = 0
@@ -351,6 +353,8 @@ class PrivateDeliberationListItem(BaseModel):
     participant_count: int
     created_at: datetime
     is_creator: bool = False
+    community_id: Optional[UUID] = None
+    community_name: Optional[str] = None
 
 
 class PrivateDeliberationListResponse(BaseModel):

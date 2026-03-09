@@ -18,6 +18,8 @@ from app.database import get_db
 from app.models import Agent, Deliberation, DeliberationStage, Opinion
 from app.models.deliberation_member import DeliberationMember
 from app.models.hosted_agent import HostedAgent
+from app.models.community import Community
+from app.models.community_member import CommunityMember
 from app.middleware.auth import APIKeyAuth
 from app.services.content_moderation_service import check_community_guidelines
 from app.schemas.deliberation import (
@@ -60,7 +62,12 @@ def _find_user_agent(db: Session, user_id: str) -> Agent | None:
 
 
 def check_private_access(db: Session, deliberation: Deliberation, agent: Agent):
-    """Raise 403 if agent is not a member of a private deliberation."""
+    """Raise 403 if agent is not a member of a private deliberation.
+
+    For community deliberations, also checks CommunityMember so that
+    community members who joined after the deliberation was created
+    can still participate.
+    """
     if not deliberation.is_private:
         return
     is_member = db.query(DeliberationMember).filter(
@@ -69,11 +76,32 @@ def check_private_access(db: Session, deliberation: Deliberation, agent: Agent):
             DeliberationMember.agent_id == agent.id,
         )
     ).first()
-    if not is_member:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You are not a member of this private deliberation",
-        )
+    if is_member:
+        return
+
+    # For community deliberations, check community membership as fallback
+    if deliberation.community_id and agent.user_id:
+        from app.models.community_member import CommunityMember
+        is_community_member = db.query(CommunityMember).filter(
+            and_(
+                CommunityMember.community_id == deliberation.community_id,
+                CommunityMember.user_id == agent.user_id,
+            )
+        ).first()
+        if is_community_member:
+            # Auto-add as deliberation member for future checks
+            db.add(DeliberationMember(
+                deliberation_id=deliberation.id,
+                agent_id=agent.id,
+                joined_by_user_id=agent.user_id,
+            ))
+            db.commit()
+            return
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="You are not a member of this private deliberation",
+    )
 
 
 # --- Endpoints ---
@@ -391,7 +419,24 @@ async def list_my_private_deliberations(
         .all()
     )
 
-    delib_ids = [m.deliberation_id for m in memberships]
+    delib_ids = set(m.deliberation_id for m in memberships)
+
+    # Also include deliberations from communities the user belongs to
+    user_community_ids = [
+        cm.community_id for cm in
+        db.query(CommunityMember.community_id)
+        .filter(CommunityMember.user_id == user_id)
+        .all()
+    ]
+    if user_community_ids:
+        community_delib_ids = [
+            d.id for d in
+            db.query(Deliberation.id)
+            .filter(Deliberation.community_id.in_(user_community_ids))
+            .all()
+        ]
+        delib_ids.update(community_delib_ids)
+
     if not delib_ids:
         return PrivateDeliberationListResponse(deliberations=[])
 
@@ -399,13 +444,20 @@ async def list_my_private_deliberations(
         db.query(Deliberation)
         .filter(
             and_(
-                Deliberation.id.in_(delib_ids),
+                Deliberation.id.in_(list(delib_ids)),
                 Deliberation.is_private == True,
             )
         )
         .order_by(Deliberation.created_at.desc())
         .all()
     )
+
+    # Pre-load community names
+    community_names: dict = {}
+    community_ids_needed = {d.community_id for d in deliberations if d.community_id}
+    if community_ids_needed:
+        for c in db.query(Community).filter(Community.id.in_(list(community_ids_needed))).all():
+            community_names[c.id] = c.name
 
     items = []
     for d in deliberations:
@@ -419,6 +471,8 @@ async def list_my_private_deliberations(
             participant_count=opinion_count,
             created_at=d.created_at,
             is_creator=d.created_by_user_id == user_id,
+            community_id=d.community_id,
+            community_name=community_names.get(d.community_id) if d.community_id else None,
         ))
 
     return PrivateDeliberationListResponse(deliberations=items)

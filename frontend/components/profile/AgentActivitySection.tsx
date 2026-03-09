@@ -72,6 +72,8 @@ interface ActivityDeliberation {
   agent_influenced_winner: boolean;
   is_creator: boolean;
   is_private: boolean;
+  community_id: string | null;
+  community_name: string | null;
 }
 
 interface AgentActivityStats {
@@ -327,15 +329,24 @@ function DeliberationCard({
     >
       <div className="min-w-0 p-3 sm:p-4">
         {/* Badges */}
-        {(delib.is_private || delib.is_creator || delib.agent_influenced_winner) && (
+        {(delib.is_private || delib.is_creator || delib.agent_influenced_winner || delib.community_name) && (
           <div className="mb-1.5 flex flex-wrap gap-1.5">
-            {delib.is_private && (
+            {delib.is_private && !delib.community_name && (
               <span
                 className="rounded-full px-2 py-0.5 text-[10px] font-medium"
                 style={{ background: "var(--surface-dim)", color: "var(--muted)" }}
               >
                 Private
               </span>
+            )}
+            {delib.community_name && (
+              <a
+                href={`/communities/${delib.community_id}`}
+                className="rounded-full px-2 py-0.5 text-[10px] font-medium hover:opacity-80"
+                style={{ background: "#eff6ff", color: "#3b82f6", border: "1px solid #bfdbfe", textDecoration: "none" }}
+              >
+                {delib.community_name}
+              </a>
             )}
             {delib.is_creator && (
               <span
