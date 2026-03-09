@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
+import { motion, AnimatePresence } from "framer-motion";
 
 // --- Types ---
 
@@ -71,6 +72,7 @@ function cleanMessage(content: string): string {
 
 export default function AgentChatBubble() {
   const [open, setOpen] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
@@ -429,34 +431,54 @@ export default function AgentChatBubble() {
   return (
     <>
       {/* Floating bubble */}
-      {!open && (
-        <button
-          onClick={() => setOpen(true)}
-          style={{
-            position: "fixed", bottom: 24, right: 24, zIndex: 300,
-            width: 52, height: 52, borderRadius: "50%",
-            background: "#c84a20", color: "#fff", border: "none",
-            cursor: "pointer", boxShadow: "0 4px 16px rgba(200,74,32,0.3)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: 22, transition: "transform 0.2s",
-          }}
-          onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.1)")}
-          onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
-          title="Chat with your agent"
-        >
-          💬
-        </button>
-      )}
+      <AnimatePresence>
+        {!open && (
+          <motion.button
+            key="chat-bubble"
+            initial={{ scale: 0, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0, opacity: 0 }}
+            transition={{ type: "spring", stiffness: 400, damping: 25 }}
+            onClick={() => setOpen(true)}
+            style={{
+              position: "fixed", bottom: 24, right: 24, zIndex: 140,
+              width: 52, height: 52, borderRadius: "50%",
+              background: "#c84a20", color: "#fff", border: "none",
+              cursor: "pointer", boxShadow: "0 4px 16px rgba(200,74,32,0.3)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 22,
+            }}
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.95 }}
+            title="Chat with your agent"
+          >
+            💬
+          </motion.button>
+        )}
+      </AnimatePresence>
 
       {/* Chat panel */}
-      {open && (
-        <div className="agent-chat-panel" style={{
-          position: "fixed", bottom: 0, right: 0, zIndex: 300,
-          width: "min(370px, 100vw)", maxHeight: "min(520px, 100dvh)", borderRadius: "16px 16px 0 0",
-          background: "#fff", border: "1px solid rgba(0,0,0,0.1)",
-          boxShadow: "0 8px 32px rgba(0,0,0,0.15)",
-          display: "flex", flexDirection: "column", overflow: "hidden",
-        }}>
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            key="chat-panel"
+            className="agent-chat-panel"
+            initial={{ opacity: 0, y: 40, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 40, scale: 0.95 }}
+            transition={{ type: "spring", stiffness: 400, damping: 30 }}
+            style={{
+              position: "fixed", bottom: 0, right: 0, zIndex: 140,
+              width: expanded ? "min(480px, 100vw)" : "min(370px, 100vw)",
+              height: expanded ? "min(600px, 100dvh)" : "min(520px, 100dvh)",
+              borderRadius: "16px 16px 0 0",
+              background: "#fff", border: "1px solid rgba(0,0,0,0.1)",
+              boxShadow: "0 8px 32px rgba(0,0,0,0.15)",
+              display: "flex", flexDirection: "column", overflow: "hidden",
+              transformOrigin: "bottom right",
+              transition: "width 0.3s ease, height 0.3s ease",
+            }}
+          >
           {/* Header */}
           <div style={{
             padding: "10px 16px", borderBottom: "1px solid rgba(0,0,0,0.06)",
@@ -491,10 +513,28 @@ export default function AgentChatBubble() {
                 </button>
               )}
               <button
-                onClick={() => setOpen(false)}
-                style={{ background: "none", border: "none", cursor: "pointer", fontSize: 18, color: "#999", padding: 4 }}
+                onClick={() => setExpanded(!expanded)}
+                title={expanded ? "Collapse" : "Expand"}
+                style={{ background: "none", border: "none", cursor: "pointer", padding: 4, display: "flex", alignItems: "center" }}
               >
-                ✕
+                {expanded ? (
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#999" strokeWidth="1.5" strokeLinecap="round">
+                    <path d="M10 2h4v4M6 14H2v-4M10.5 5.5L14 2M5.5 10.5L2 14" />
+                  </svg>
+                ) : (
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#999" strokeWidth="1.5" strokeLinecap="round">
+                    <path d="M14 6V2h-4M2 10v4h4M14 2L9.5 6.5M2 14l4.5-4.5" />
+                  </svg>
+                )}
+              </button>
+              <button
+                onClick={() => setOpen(false)}
+                title="Minimize"
+                style={{ background: "none", border: "none", cursor: "pointer", padding: 4, display: "flex", alignItems: "center" }}
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#999" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M4 6l4 4 4-4" />
+                </svg>
               </button>
             </div>
 
@@ -534,7 +574,7 @@ export default function AgentChatBubble() {
           <div style={{
             flex: 1, overflowY: "auto", padding: "12px 16px",
             display: "flex", flexDirection: "column", gap: 10,
-            minHeight: 200, maxHeight: 360,
+            minHeight: 200,
           }}>
             {!loaded && (
               <div style={{ textAlign: "center", color: "#999", fontSize: 12, padding: 20 }}>Loading...</div>
@@ -624,8 +664,9 @@ export default function AgentChatBubble() {
               {runningHeartbeat ? <span style={{ display: "inline-block", animation: "pulse 1.5s infinite" }}>🚀</span> : "🚀"}
             </button>
           </div>
-        </div>
-      )}
+        </motion.div>
+        )}
+      </AnimatePresence>
       <style>{`
         .chat-markdown { white-space: normal; }
         .chat-markdown p { margin: 0 0 12px; }
