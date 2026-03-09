@@ -670,6 +670,65 @@ async def delete_deliberation_cascade(
     return {"message": f"Deleted deliberation {deliberation_id} and all related data"}
 
 
+@router.post("/deliberations/{deliberation_id}/regenerate-statements")
+async def regenerate_seed_statements(
+    deliberation_id: str,
+    x_confirm: str = Header(..., alias="X-Confirm"),
+    db: Session = Depends(get_db),
+    _auth: bool = Depends(verify_monitoring_secret),
+):
+    """Regenerate seed statements for a deliberation that has none.
+
+    Uses existing opinions to generate statements. Fixes the chicken-and-egg
+    problem where agents can't rank (no statements) and can't propose (must rank first).
+    """
+    if x_confirm != "true":
+        raise HTTPException(status_code=400, detail="Confirmation required (X-Confirm: true)")
+
+    delib = db.query(Deliberation).filter(Deliberation.id == deliberation_id).first()
+    if not delib:
+        raise HTTPException(status_code=404, detail="Deliberation not found")
+
+    existing_statements = db.query(Statement).filter(
+        Statement.deliberation_id == deliberation_id
+    ).count()
+    if existing_statements > 0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Deliberation already has {existing_statements} statements",
+        )
+
+    opinions = db.query(Opinion).filter(
+        Opinion.deliberation_id == deliberation_id
+    ).all()
+    opinion_texts = [o.opinion_text for o in opinions]
+    if not opinion_texts:
+        raise HTTPException(
+            status_code=400,
+            detail="Deliberation has no opinions to generate statements from",
+        )
+
+    from app.services.statement_service import statement_service
+
+    seed_statements = await statement_service.generate_statements(
+        db, delib, opinion_texts, seed_opinions=opinion_texts,
+    )
+
+    for stmt in seed_statements:
+        stmt.is_seed = True
+    db.commit()
+
+    return {
+        "message": f"Generated {len(seed_statements)} seed statements",
+        "deliberation_id": deliberation_id,
+        "statement_count": len(seed_statements),
+        "statements": [
+            {"id": str(s.id), "title": s.title, "text": s.statement_text}
+            for s in seed_statements
+        ],
+    }
+
+
 @router.post("/bulk-actions/delete-empty-deliberations", response_model=BulkActionResponse)
 async def delete_empty_deliberations(
     x_confirm: str = Header(..., alias="X-Confirm"),

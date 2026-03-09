@@ -96,6 +96,25 @@ class ContinuousDeliberationService:
             seed_opinions=seed_opinions,
         )
 
+        if not seed_statements:
+            logger.error(
+                f"Failed to generate any seed statements for deliberation "
+                f"{deliberation.id} — all LLM candidates returned empty. "
+                f"Retrying once with fresh attempt..."
+            )
+            seed_statements = await statement_service.generate_statements(
+                self.db,
+                deliberation,
+                seed_opinions,
+                seed_opinions=seed_opinions,
+            )
+
+        if not seed_statements:
+            logger.error(
+                f"Second attempt also failed to generate seed statements for "
+                f"deliberation {deliberation.id}. Deliberation created without statements."
+            )
+
         # Mark them as seeds
         for stmt in seed_statements:
             stmt.is_seed = True
