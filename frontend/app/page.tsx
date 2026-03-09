@@ -985,7 +985,7 @@ export default function HomePage() {
           </>
           ) : (
             /* Private deliberations view */
-            <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-4">
+            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" style={{ gap: `${MASONRY_GAP}px` }}>
               {!session?.user ? (
                 <div className="col-span-full rounded-xl bg-stone-100 p-16 text-center">
                   <p className="text-sm text-stone-500">Sign in to create and join private deliberations.</p>
