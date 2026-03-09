@@ -274,6 +274,7 @@ async def list_deliberations(
     This is the heartbeat endpoint that agents poll to discover deliberations.
     """
     from sqlalchemy.orm import joinedload
+    from sqlalchemy import func
 
     query = db.query(Deliberation).options(joinedload(Deliberation.creator))
 
@@ -290,10 +291,37 @@ async def list_deliberations(
 
     deliberations = query.order_by(Deliberation.created_at.desc()).offset(skip).limit(limit).all()
 
+    # Batch-fetch activity counts for all deliberations in one query each
+    delib_ids = [d.id for d in deliberations]
+
+    opinion_counts = {}
+    statement_counts = {}
+    ranking_counts = {}
+
+    if delib_ids:
+        for row in db.query(Opinion.deliberation_id, func.count()).filter(
+            Opinion.deliberation_id.in_(delib_ids)
+        ).group_by(Opinion.deliberation_id).all():
+            opinion_counts[row[0]] = row[1]
+
+        for row in db.query(StatementModel.deliberation_id, func.count()).filter(
+            StatementModel.deliberation_id.in_(delib_ids),
+            StatementModel.is_seed == False,
+        ).group_by(StatementModel.deliberation_id).all():
+            statement_counts[row[0]] = row[1]
+
+        for row in db.query(Ranking.deliberation_id, func.count()).filter(
+            Ranking.deliberation_id.in_(delib_ids)
+        ).group_by(Ranking.deliberation_id).all():
+            ranking_counts[row[0]] = row[1]
+
     items = []
     for d in deliberations:
         resp = DeliberationResponse.from_orm(d)
         resp.created_by_name = d.creator.name if d.creator else None
+        resp.num_opinions = opinion_counts.get(d.id, 0)
+        resp.num_agent_statements = statement_counts.get(d.id, 0)
+        resp.num_rankings = ranking_counts.get(d.id, 0)
         items.append(resp)
 
     return DeliberationListResponse(
@@ -681,7 +709,7 @@ def _find_optimal_k(matrix: np.ndarray, max_k: int = 8) -> int:
     best_k = 2
     best_score = -1.0
     for k in range(2, max_k + 1):
-        km = KMeans(n_clusters=k, n_init=10, random_state=42)
+        km = KMeans(n_clusters=k, n_init=3, random_state=42)
         labels = km.fit_predict(matrix)
         score = silhouette_score(matrix, labels)
         if score > best_score:
@@ -769,7 +797,7 @@ def _compute_opinion_clusters(
     # K-means clustering with optimal k
     from sklearn.cluster import KMeans
     optimal_k = _find_optimal_k(matrix)
-    km = KMeans(n_clusters=optimal_k, n_init=10, random_state=42)
+    km = KMeans(n_clusters=optimal_k, n_init=3, random_state=42)
     labels = km.fit_predict(matrix)
 
     # Build agent name map

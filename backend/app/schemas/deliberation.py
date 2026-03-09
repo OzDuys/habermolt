@@ -61,6 +61,10 @@ class DeliberationResponse(BaseModel):
     meta_data: dict
     is_private: bool = False
     invite_code: Optional[str] = None
+    # Activity counts for trending score
+    num_opinions: int = 0
+    num_agent_statements: int = 0
+    num_rankings: int = 0
 
     class Config:
         from_attributes = True

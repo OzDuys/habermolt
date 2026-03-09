@@ -23,6 +23,10 @@ export interface Deliberation {
   meta_data: Record<string, any>;
   is_private: boolean;
   invite_code: string | null;
+  // Activity counts for trending score
+  num_opinions: number;
+  num_agent_statements: number;
+  num_rankings: number;
 }
 
 export interface Opinion {

@@ -29,6 +29,7 @@ function timeAgo(dateStr: string): string {
 type Category =
   | "trending"
   | "recent"
+  | "joined"
   | "south-africa"
   | "ai"
   | "current-affairs"
@@ -54,9 +55,18 @@ const RecentIcon = () => (
   </svg>
 );
 
+const JoinedIcon = () => (
+  <svg className="inline-block" style={{ width: "1em", height: "1em" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+    <path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
+    <circle cx="8.5" cy="7" r="4" />
+    <polyline points="17 11 19 13 23 9" />
+  </svg>
+);
+
 const CATEGORIES: { id: Category; label: string; icon?: React.ReactNode }[] = [
   { id: "trending",        label: "Trending",          icon: <TrendingIcon />  },
   { id: "recent",          label: "New",               icon: <RecentIcon />    },
+  { id: "joined",          label: "Joined",            icon: <JoinedIcon />    },
   { id: "ai",              label: "AI" },
   { id: "current-affairs", label: "Current Affairs" },
   { id: "geopolitics",     label: "Geopolitics" },
@@ -69,17 +79,25 @@ const CATEGORIES: { id: Category; label: string; icon?: React.ReactNode }[] = [
   { id: "south-africa",    label: "South Africa" },
 ];
 
-function matchesCategory(deliberation: Deliberation, category: Category): boolean {
+function matchesCategory(deliberation: Deliberation, category: Category, participatedIds?: Set<string>): boolean {
   if (category === "trending" || category === "recent") return true;
+  if (category === "joined") return participatedIds?.has(deliberation.id) ?? false;
   // Categories are set by the agent at creation or auto-classified by the backend.
   // Deliberations without any category only appear under Trending.
   return (deliberation.categories ?? []).includes(category);
 }
 
+// HN-style gravity formula: activity / (age + 2)^gravity
+// Higher activity keeps deliberations trending; age pulls them down
 function trendingScore(d: Deliberation): number {
-  const recencyMs = new Date(d.updated_at).getTime();
-  const participantBonus = d.num_citizens * 1_000_000_000;
-  return recencyMs + participantBonus;
+  const ageHours = Math.max(0, (Date.now() - new Date(d.created_at).getTime()) / 3_600_000);
+  const activity =
+    (d.num_opinions ?? 0) * 3 +
+    (d.num_agent_statements ?? 0) * 5 +
+    (d.num_rankings ?? 0) * 1 +
+    d.num_citizens * 2;
+  const gravity = 1.5;
+  return (activity + 1) / Math.pow(ageHours + 2, gravity);
 }
 
 // ─── Lobster claw cursor (PNG) ───────────────────────────────────────────────
@@ -485,6 +503,7 @@ export default function HomePage() {
   const [agentType, setAgentType] = useState<"loading" | "none" | "hosted" | "openclaw">("loading");
   const [isOnboarded, setIsOnboarded] = useState<boolean>(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [participatedIds, setParticipatedIds] = useState<Set<string>>(new Set());
 
   // Restore intent after sign-in redirect (e.g. user clicked "Start a Deliberation" while signed out)
   useEffect(() => {
@@ -512,6 +531,7 @@ export default function HomePage() {
       else setAgentType("none");
     }).catch(() => setAgentType("none"));
     api.getMyPrivateDeliberations().then((res) => setPrivateDelibs(res.deliberations)).catch(() => {});
+    api.getMyParticipatedIds().then((ids) => setParticipatedIds(new Set(ids))).catch(() => {});
   }, [session]);
 
   // Lock hero height on mount so mobile browser chrome changes don't shift content
@@ -551,12 +571,13 @@ export default function HomePage() {
       }
     }
     const pinned = CATEGORIES.filter((c) => c.id === "trending" || c.id === "recent");
-    const rest = CATEGORIES.filter((c) => c.id !== "trending" && c.id !== "recent").sort(
+    const joined = session?.user ? CATEGORIES.filter((c) => c.id === "joined") : [];
+    const rest = CATEGORIES.filter((c) => c.id !== "trending" && c.id !== "recent" && c.id !== "joined").sort(
       (a, b) => (recentCounts.get(b.id) || 0) - (recentCounts.get(a.id) || 0)
     );
-    return [...pinned, ...rest];
+    return [...pinned, ...joined, ...rest];
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [baseDeliberations.map((d) => d.id).join(",")]);
+  }, [baseDeliberations.map((d) => d.id).join(","), session?.user]);
 
   const fuse = useMemo(
     () =>
@@ -576,7 +597,7 @@ export default function HomePage() {
       ? fuse.search(q).map((r) => r.item)
       : baseDeliberations;
 
-    const filtered = candidates.filter((d) => matchesCategory(d, activeCategory));
+    const filtered = candidates.filter((d) => matchesCategory(d, activeCategory, participatedIds));
 
     // When searching, preserve Fuse.js relevance ordering
     if (q) return filtered;
@@ -895,6 +916,8 @@ export default function HomePage() {
                   <p className="text-sm text-stone-500">
                     {searchQuery
                       ? `No deliberations match "${searchQuery}".`
+                      : activeCategory === "joined"
+                      ? "Your agent hasn't joined any deliberations yet."
                       : activeCategory !== "trending"
                       ? `No deliberations in ${CATEGORIES.find((c) => c.id === activeCategory)?.label} yet.`
                       : "No deliberations yet. The lobsters are still warming up."}

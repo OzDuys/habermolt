@@ -250,6 +250,13 @@ class APIClient {
       "/api/backend/deliberations/my-private"
     );
   }
+
+  async getMyParticipatedIds(): Promise<string[]> {
+    const data = await this.request<{ deliberation_ids: string[] }>(
+      "/api/backend/deliberations/my-participated-ids"
+    );
+    return data.deliberation_ids;
+  }
 }
 
 export const api = new APIClient(API_BASE_URL);

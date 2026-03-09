@@ -422,3 +422,26 @@ async def list_my_private_deliberations(
         ))
 
     return PrivateDeliberationListResponse(deliberations=items)
+
+
+@router.get(
+    "/my-participated-ids",
+    summary="List deliberation IDs the user's agent participated in (human auth)",
+)
+async def list_my_participated_ids(
+    req: Request,
+    db: Session = Depends(get_db),
+):
+    """Return deliberation IDs where the user's agent has submitted an opinion."""
+    user_id = _require_user_id(req)
+    agent = _find_user_agent(db, user_id)
+    if not agent:
+        return {"deliberation_ids": []}
+
+    rows = (
+        db.query(Opinion.deliberation_id)
+        .filter(Opinion.agent_id == agent.id)
+        .distinct()
+        .all()
+    )
+    return {"deliberation_ids": [str(r[0]) for r in rows]}
