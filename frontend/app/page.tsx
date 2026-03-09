@@ -56,7 +56,7 @@ const RecentIcon = () => (
 
 const CATEGORIES: { id: Category; label: string; icon?: React.ReactNode }[] = [
   { id: "trending",        label: "Trending",          icon: <TrendingIcon />  },
-  { id: "recent",          label: "Recent",            icon: <RecentIcon />    },
+  { id: "recent",          label: "New",               icon: <RecentIcon />    },
   { id: "ai",              label: "AI" },
   { id: "current-affairs", label: "Current Affairs" },
   { id: "geopolitics",     label: "Geopolitics" },
@@ -584,8 +584,6 @@ export default function HomePage() {
     return filtered.sort((a, b) =>
       activeCategory === "trending"
         ? trendingScore(b) - trendingScore(a)
-        : activeCategory === "recent"
-        ? new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
         : new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     );
   })();
@@ -946,7 +944,7 @@ export default function HomePage() {
                               </div>
                             ) : <div />}
                             <span className="shrink-0 text-stone-400" style={{ fontSize: "clamp(8px, 0.9vw, 11px)" }}>
-                              {timeAgo(deliberation.updated_at)}
+                              {timeAgo(deliberation.created_at)}
                             </span>
                           </div>
 
