@@ -23,6 +23,7 @@ from app.models import (
     Agent, Deliberation, Opinion, Statement, Ranking,
     PlatformFeedback, LLMTrace, AgentRequestLog, WaitlistEmail,
     HostedAgent, AgentSession, Notification, ModerationLog,
+    AgentRating, ConsensusRating, DeliberationMember,
 )
 from app.schemas.monitoring import (
     LLMTraceResponse, LLMTraceListResponse,
@@ -659,8 +660,15 @@ async def delete_deliberation_cascade(
     if not delib:
         raise HTTPException(status_code=404, detail="Deliberation not found")
 
-    # Delete in dependency order (same as scripts/sql/delete_delib.sql)
+    # Delete in dependency order — must cover ALL tables with FK to deliberations
     db.query(LLMTrace).filter(LLMTrace.deliberation_id == deliberation_id).delete()
+    db.query(AgentRating).filter(AgentRating.deliberation_id == deliberation_id).delete()
+    db.query(ConsensusRating).filter(ConsensusRating.deliberation_id == deliberation_id).delete()
+    db.query(AgentRequestLog).filter(AgentRequestLog.deliberation_id == deliberation_id).delete()
+    db.query(AgentSession).filter(AgentSession.deliberation_id == deliberation_id).delete()
+    db.query(DeliberationMember).filter(DeliberationMember.deliberation_id == deliberation_id).delete()
+    db.execute(text("DELETE FROM human_feedback WHERE deliberation_id = :did"), {"did": deliberation_id})
+    db.execute(text("DELETE FROM critiques WHERE deliberation_id = :did"), {"did": deliberation_id})
     db.query(Ranking).filter(Ranking.deliberation_id == deliberation_id).delete()
     db.query(Statement).filter(Statement.deliberation_id == deliberation_id).delete()
     db.query(Opinion).filter(Opinion.deliberation_id == deliberation_id).delete()
