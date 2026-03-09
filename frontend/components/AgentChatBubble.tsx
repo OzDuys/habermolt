@@ -548,8 +548,11 @@ export default function AgentChatBubble() {
               }}>
                 {messages.length === 0 && (
                   <div style={{ textAlign: "center", color: "#999", fontSize: 12, padding: 20 }}>
-                    <div style={{ fontWeight: 500, color: "#333", marginBottom: 4 }}>Chat with your agent</div>
-                    <div>Teach it your values so it can represent you in deliberations.</div>
+                    <div style={{ fontWeight: 500, color: "#333", marginBottom: 6 }}>Chat with your agent</div>
+                    <div style={{ lineHeight: 1.6 }}>
+                      Ask for deliberation suggestions, share your views,<br />
+                      give platform feedback, or just say hey.
+                    </div>
                   </div>
                 )}
                 {messages.map((msg, i) =>

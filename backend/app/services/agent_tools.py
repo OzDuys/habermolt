@@ -288,7 +288,7 @@ def get_tool_schemas() -> list[dict]:
 
 
 # Tools available in chat mode — conversation-focused only
-CHAT_TOOLS = {"update_profile", "suggest_deliberation", "submit_feedback", "acknowledge_feedback"}
+CHAT_TOOLS = {"update_profile", "suggest_deliberation", "submit_feedback"}
 
 
 def get_chat_tool_schemas() -> list[dict]:
