@@ -53,9 +53,9 @@ export default function AccountSection({ session, onSignOut }: { session: { user
               </button>
             </div>
           ) : (
-            <button onClick={() => setEditingName(true)} className="group flex items-center gap-1.5 text-sm font-medium transition-opacity hover:opacity-70" style={{ color: "var(--foreground)" }}>
+            <button onClick={() => setEditingName(true)} className="flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-sm font-medium transition-colors hover:border-stone-400" style={{ color: "var(--foreground)", borderColor: "var(--border)" }}>
               {displayName || "—"}
-              <svg className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <svg className="h-3 w-3" style={{ color: "var(--muted)" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
               </svg>
             </button>
