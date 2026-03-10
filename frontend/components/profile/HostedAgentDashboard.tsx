@@ -324,8 +324,8 @@ export default function HostedAgentDashboard() {
       {/* Single agent card */}
       <div className="mb-6 rounded-xl border p-5" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
         {/* Card header */}
-        <div className="mb-5 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             <h3 className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>Your HaberAgent</h3>
             {editingName ? (
               <div className="flex items-center gap-2">
@@ -340,7 +340,7 @@ export default function HostedAgentDashboard() {
                     }
                     if (e.key === "Escape") setEditingName(false);
                   }}
-                  className="rounded-lg border px-2 py-0.5 text-sm"
+                  className="min-w-0 rounded-lg border px-2 py-0.5 text-sm"
                   style={{ borderColor: "var(--border)", background: "var(--background)", color: "var(--foreground)" }}
                   autoFocus
                 />
@@ -361,11 +361,11 @@ export default function HostedAgentDashboard() {
             ) : (
               <button
                 onClick={() => { setNameDraft(agent.display_name); setEditingName(true); }}
-                className="flex items-center gap-1.5 rounded-lg border px-2.5 py-0.5 text-sm transition-colors hover:border-stone-400"
+                className="flex min-w-0 items-center gap-1.5 rounded-lg border px-2.5 py-0.5 text-sm transition-colors hover:border-stone-400"
                 style={{ color: "var(--muted)", borderColor: "var(--border)" }}
               >
-                {agent.display_name}
-                <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <span className="truncate">{agent.display_name}</span>
+                <svg className="h-3 w-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                 </svg>
               </button>
@@ -479,8 +479,8 @@ export default function HostedAgentDashboard() {
         {/* API Key (BYOK) */}
         <SettingsGroup title="API Key" last>
           {agent.pricing_tier === "byok" ? (
-            <div className="flex items-center justify-between py-2.5">
-              <div className="flex items-center gap-2">
+            <div className="flex flex-col gap-2 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
                   <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
@@ -492,7 +492,7 @@ export default function HostedAgentDashboard() {
               <button
                 onClick={handleRemoveByokKey}
                 disabled={byokSaving}
-                className="rounded-lg border px-3 py-1.5 text-xs font-medium text-red-600 transition-opacity hover:opacity-80 disabled:opacity-40"
+                className="shrink-0 rounded-lg border px-3 py-1.5 text-xs font-medium text-red-600 transition-opacity hover:opacity-80 disabled:opacity-40"
                 style={{ borderColor: "var(--border)" }}
               >
                 {byokSaving ? "Removing..." : "Remove Key"}
@@ -642,14 +642,14 @@ function SettingsRow({
   action: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 py-2.5">
+    <div className="flex flex-col gap-2 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
       <div className="min-w-0">
         <div className="text-sm font-medium" style={{ color: "var(--foreground)" }}>{label}</div>
         {description && (
           <div className="text-xs" style={{ color: "var(--muted)" }}>{description}</div>
         )}
       </div>
-      <div className="shrink-0">{action}</div>
+      <div className="sm:shrink-0">{action}</div>
     </div>
   );
 }
@@ -669,7 +669,7 @@ function MemoryPreviewCard({
   return (
     <button
       onClick={onClick}
-      className="max-w-xs rounded-lg border p-2.5 text-left transition-colors hover:opacity-80"
+      className="w-full rounded-lg border p-2.5 text-left transition-colors hover:opacity-80 sm:max-w-xs"
       style={{ borderColor: "var(--border)", background: "var(--background)" }}
     >
       <p className="line-clamp-2 text-xs" style={{ color: "var(--foreground)" }}>
