@@ -1,8 +1,33 @@
 "use client";
 
+import { useState } from "react";
+import { authClient } from "@/lib/auth-client";
+
 export default function AccountSection({ session, onSignOut }: { session: { user: { name?: string | null; email: string; createdAt?: Date | string } }; onSignOut: () => void }) {
   const formatDate = (dateStr: string) =>
     new Date(dateStr).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+
+  const [editingName, setEditingName] = useState(false);
+  const [nameValue, setNameValue] = useState(session.user.name || "");
+  const [displayName, setDisplayName] = useState(session.user.name || "");
+  const [savingName, setSavingName] = useState(false);
+
+  const handleSaveName = async () => {
+    const trimmed = nameValue.trim();
+    if (!trimmed || trimmed === displayName) { setEditingName(false); return; }
+    setSavingName(true);
+    try {
+      await authClient.updateUser({ name: trimmed });
+      await fetch("/api/backend/agents/me/human-name", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ human_name: trimmed }),
+      });
+      setDisplayName(trimmed);
+      setEditingName(false);
+    } catch {}
+    finally { setSavingName(false); }
+  };
 
   return (
     <div className="rounded-xl border p-5" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
@@ -10,7 +35,31 @@ export default function AccountSection({ session, onSignOut }: { session: { user
       <div className="divide-y" style={{ borderColor: "var(--border)" }}>
         <div className="flex items-center justify-between py-2.5">
           <span className="text-sm" style={{ color: "var(--muted)" }}>Username</span>
-          <span className="text-sm font-medium" style={{ color: "var(--foreground)" }}>{session.user.name || "—"}</span>
+          {editingName ? (
+            <div className="flex items-center gap-2">
+              <input
+                value={nameValue}
+                onChange={(e) => setNameValue(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleSaveName(); if (e.key === "Escape") { setEditingName(false); setNameValue(displayName); } }}
+                className="rounded-lg border px-2 py-1 text-sm"
+                style={{ borderColor: "var(--border)", background: "var(--background)", color: "var(--foreground)" }}
+                autoFocus
+              />
+              <button onClick={handleSaveName} disabled={savingName} className="text-xs font-medium" style={{ color: "var(--accent)" }}>
+                {savingName ? "..." : "Save"}
+              </button>
+              <button onClick={() => { setEditingName(false); setNameValue(displayName); }} className="text-xs" style={{ color: "var(--muted)" }}>
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button onClick={() => setEditingName(true)} className="group flex items-center gap-1.5 text-sm font-medium transition-opacity hover:opacity-70" style={{ color: "var(--foreground)" }}>
+              {displayName || "—"}
+              <svg className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+              </svg>
+            </button>
+          )}
         </div>
         <div className="flex items-center justify-between py-2.5" style={{ borderColor: "var(--border)" }}>
           <span className="text-sm" style={{ color: "var(--muted)" }}>Email</span>

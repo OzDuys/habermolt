@@ -180,6 +180,29 @@ async def unlink_agent_endpoint(
         )
 
 
+@router.patch(
+    "/me/human-name",
+    summary="Update the human_name on the user's agent",
+)
+async def update_human_name(
+    req: Request,
+    db: Session = Depends(get_db),
+):
+    """Sync agent human_name when the user changes their display name."""
+    user_id = _require_user_id(req)
+    agent = get_agent_by_user_id(db, user_id)
+    if not agent:
+        return {"ok": True}  # No agent to update, that's fine
+    import json
+    body = json.loads(await req.body())
+    new_name = body.get("human_name", "").strip()
+    if not new_name:
+        raise HTTPException(status_code=400, detail="human_name is required")
+    agent.human_name = new_name
+    db.commit()
+    return {"ok": True}
+
+
 @router.post(
     "/me/refresh-key",
     response_model=RefreshApiKeyResponse,

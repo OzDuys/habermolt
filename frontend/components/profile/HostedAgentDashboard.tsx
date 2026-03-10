@@ -69,6 +69,10 @@ export default function HostedAgentDashboard() {
   const [importing, setImporting] = useState(false);
   const [importCopied, setImportCopied] = useState(false);
 
+  // Agent name editing
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
+
   // Modal state
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
@@ -282,7 +286,49 @@ export default function HostedAgentDashboard() {
         <div className="mb-5 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <h3 className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>Your HaberAgent</h3>
-            <span className="text-sm" style={{ color: "var(--muted)" }}>{agent.display_name}</span>
+            {editingName ? (
+              <div className="flex items-center gap-2">
+                <input
+                  value={nameDraft}
+                  onChange={(e) => setNameDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      const trimmed = nameDraft.trim();
+                      if (trimmed && trimmed !== agent.display_name) handleConfigUpdate("display_name", trimmed);
+                      setEditingName(false);
+                    }
+                    if (e.key === "Escape") setEditingName(false);
+                  }}
+                  className="rounded-lg border px-2 py-0.5 text-sm"
+                  style={{ borderColor: "var(--border)", background: "var(--background)", color: "var(--foreground)" }}
+                  autoFocus
+                />
+                <button
+                  onClick={() => {
+                    const trimmed = nameDraft.trim();
+                    if (trimmed && trimmed !== agent.display_name) handleConfigUpdate("display_name", trimmed);
+                    setEditingName(false);
+                  }}
+                  disabled={saving}
+                  className="text-xs font-medium"
+                  style={{ color: "var(--accent)" }}
+                >
+                  {saving ? "..." : "Save"}
+                </button>
+                <button onClick={() => setEditingName(false)} className="text-xs" style={{ color: "var(--muted)" }}>Cancel</button>
+              </div>
+            ) : (
+              <button
+                onClick={() => { setNameDraft(agent.display_name); setEditingName(true); }}
+                className="group flex items-center gap-1.5 text-sm transition-opacity hover:opacity-70"
+                style={{ color: "var(--muted)" }}
+              >
+                {agent.display_name}
+                <svg className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                </svg>
+              </button>
+            )}
             <StatusBadge active={agent.is_active} reason={agent.paused_reason} />
           </div>
           {lastActive && (
