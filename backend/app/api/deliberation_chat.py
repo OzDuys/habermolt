@@ -74,15 +74,10 @@ async def start_chat(
     """Start or resume a deliberation chat session."""
     user_id = _require_user_id(req)
     hosted = _find_hosted_agent(db, user_id)
-
-    if not check_token_limit(hosted):
-        db.commit()  # persist any un-pause state changes
-        raise HTTPException(
-            status_code=429,
-            detail="You've hit the token limit for this week. Your agent can't respond until the limit resets or you upgrade.",
-        )
-
     agent = hosted.agent
+    at_token_limit = not check_token_limit(hosted)
+    if at_token_limit:
+        db.commit()  # persist any un-pause state changes
 
     deliberation = db.query(Deliberation).filter(
         Deliberation.id == body.deliberation_id
@@ -94,9 +89,17 @@ async def start_chat(
 
     # Generate greeting only for new sessions (no messages yet)
     if not session.messages:
-        greeting = deliberation_chat_service.generate_greeting(
-            db, agent, deliberation, phase=session.phase or "browsing"
-        )
+        if at_token_limit:
+            # Skip LLM call — use static greeting
+            phase = session.phase or "browsing"
+            if phase == "participating":
+                greeting = f"Hey! This deliberation is about: \"{deliberation.question}\". You've hit the weekly token limit, so I can't respond right now — but you can still browse the page."
+            else:
+                greeting = f"Hi! This deliberation is about: \"{deliberation.question}\". You've hit the weekly token limit, so I can't chat right now — but you can still browse the page."
+        else:
+            greeting = deliberation_chat_service.generate_greeting(
+                db, agent, deliberation, phase=session.phase or "browsing"
+            )
         session.messages = [{"role": "assistant", "content": greeting}]
         db.commit()
     else:
