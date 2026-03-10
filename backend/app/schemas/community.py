@@ -28,7 +28,7 @@ class CommunityResponse(BaseModel):
 class CommunityMemberResponse(BaseModel):
     """Response schema for a community member."""
     user_id: str
-    agent_name: Optional[str] = None
+    user_name: Optional[str] = None
     role: str
     joined_at: datetime
 

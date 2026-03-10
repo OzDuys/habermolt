@@ -9,7 +9,7 @@ import secrets
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, func
+from sqlalchemy import and_, func, text
 
 from app.config import settings
 from app.database import get_db
@@ -45,6 +45,31 @@ def _require_user_id(req: Request) -> str:
     if not user_id:
         raise HTTPException(status_code=401, detail="Authentication required.")
     return user_id
+
+
+def _get_user_name(db: Session, user_id: str) -> str | None:
+    """Get a user's name from the better-auth user table."""
+    row = db.execute(text('SELECT name FROM "user" WHERE id = :uid'), {"uid": user_id}).fetchone()
+    return row[0] if row and row[0] else None
+
+
+def _build_member_responses(db: Session, community_id) -> list[CommunityMemberResponse]:
+    """Build member responses with human names instead of agent names."""
+    members_rows = (
+        db.query(CommunityMember)
+        .filter(CommunityMember.community_id == community_id)
+        .order_by(CommunityMember.joined_at)
+        .all()
+    )
+    return [
+        CommunityMemberResponse(
+            user_id=m.user_id,
+            user_name=_get_user_name(db, m.user_id),
+            role=m.role,
+            joined_at=m.joined_at,
+        )
+        for m in members_rows
+    ]
 
 
 def _find_user_agent(db: Session, user_id: str) -> Agent | None:
@@ -343,23 +368,7 @@ async def get_community_detail(
     if not is_member:
         raise HTTPException(status_code=403, detail="You are not a member of this community")
 
-    # Get members with agent names
-    members_rows = (
-        db.query(CommunityMember, Agent.name)
-        .outerjoin(Agent, Agent.id == CommunityMember.agent_id)
-        .filter(CommunityMember.community_id == community.id)
-        .order_by(CommunityMember.joined_at)
-        .all()
-    )
-    members = [
-        CommunityMemberResponse(
-            user_id=m.user_id,
-            agent_name=agent_name,
-            role=m.role,
-            joined_at=m.joined_at,
-        )
-        for m, agent_name in members_rows
-    ]
+    members = _build_member_responses(db, community.id)
 
     delib_count = db.query(Deliberation).filter(
         Deliberation.community_id == community.id
@@ -418,22 +427,7 @@ async def update_community(
     logger.info(f"Community {community_id} updated by admin {user_id}")
 
     # Return full detail response
-    members_rows = (
-        db.query(CommunityMember, Agent.name)
-        .outerjoin(Agent, Agent.id == CommunityMember.agent_id)
-        .filter(CommunityMember.community_id == community.id)
-        .order_by(CommunityMember.joined_at)
-        .all()
-    )
-    members = [
-        CommunityMemberResponse(
-            user_id=m.user_id,
-            agent_name=agent_name,
-            role=m.role,
-            joined_at=m.joined_at,
-        )
-        for m, agent_name in members_rows
-    ]
+    members = _build_member_responses(db, community.id)
     delib_count = db.query(Deliberation).filter(
         Deliberation.community_id == community.id
     ).count()

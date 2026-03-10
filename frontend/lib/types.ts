@@ -217,7 +217,7 @@ export interface Community {
 
 export interface CommunityMember {
   user_id: string;
-  agent_name: string | null;
+  user_name: string | null;
   role: string;
   joined_at: string;
 }

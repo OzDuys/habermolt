@@ -244,7 +244,7 @@ export default function CommunityDetailPage() {
               className="inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs"
               style={{ borderColor: "var(--border)", color: "var(--foreground)" }}
             >
-              {m.agent_name || "No agent"}
+              {m.user_name || "Anonymous"}
               {m.role === "admin" && (
                 <span className="text-xs" style={{ color: "var(--muted)" }}>(admin)</span>
               )}
