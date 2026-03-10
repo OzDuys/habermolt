@@ -4,16 +4,17 @@ API routes for continuous deliberation endpoints.
 Includes statement submission, current-winner, all-opinions, and ranking updates.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
+from typing import Optional
 from uuid import UUID
 
 from sqlalchemy import and_, func
 
 from app.database import get_db
 from app.models import Agent, Deliberation, DeliberationStage, Opinion, Ranking, Statement
-from app.middleware.auth import APIKeyAuth
-from app.api.private_deliberations import check_private_access
+from app.middleware.auth import APIKeyAuth, OptionalAPIKeyAuth
+from app.api.private_deliberations import check_private_access, _find_user_agent
 from app.services.continuous_deliberation_service import ContinuousDeliberationService
 from app.schemas import (
     StatementResponse,
@@ -76,12 +77,29 @@ async def add_statement(
 )
 async def get_current_winner(
     deliberation_id: UUID,
+    request: Request,
+    agent: Optional[Agent] = Depends(OptionalAPIKeyAuth()),
     db: Session = Depends(get_db),
 ):
     """Get the current winning statement. Works even while deliberation is active."""
     deliberation = db.query(Deliberation).filter(Deliberation.id == deliberation_id).first()
     if not deliberation:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Deliberation not found")
+
+    # Private deliberation access control
+    if deliberation.is_private:
+        if not agent:
+            user_id = request.headers.get("X-User-Id")
+            if user_id:
+                user_agent = _find_user_agent(db, user_id)
+                if user_agent:
+                    check_private_access(db, deliberation, user_agent)
+                else:
+                    raise HTTPException(status_code=403, detail="This is a private deliberation")
+            else:
+                raise HTTPException(status_code=403, detail="This is a private deliberation")
+        else:
+            check_private_access(db, deliberation, agent)
 
     service = ContinuousDeliberationService(db)
     winner = service.get_current_winner(deliberation)
@@ -234,12 +252,29 @@ async def update_ranking(
 async def get_opinion_history(
     deliberation_id: UUID,
     agent_id: UUID,
+    request: Request,
+    agent: Optional[Agent] = Depends(OptionalAPIKeyAuth()),
     db: Session = Depends(get_db),
 ):
     """Returns all opinion versions for an agent, ordered chronologically (oldest first)."""
     deliberation = db.query(Deliberation).filter(Deliberation.id == deliberation_id).first()
     if not deliberation:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Deliberation not found")
+
+    # Private deliberation access control
+    if deliberation.is_private:
+        if not agent:
+            user_id = request.headers.get("X-User-Id")
+            if user_id:
+                user_agent = _find_user_agent(db, user_id)
+                if user_agent:
+                    check_private_access(db, deliberation, user_agent)
+                else:
+                    raise HTTPException(status_code=403, detail="This is a private deliberation")
+            else:
+                raise HTTPException(status_code=403, detail="This is a private deliberation")
+        else:
+            check_private_access(db, deliberation, agent)
 
     opinions = (
         db.query(Opinion)

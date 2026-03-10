@@ -97,7 +97,7 @@ async def create_community(
     """Create a new community. The creator becomes an admin member."""
     user_id = _require_user_id(req)
 
-    invite_code = secrets.token_urlsafe(8)
+    invite_code = secrets.token_urlsafe(16)
 
     community = Community(
         name=body.name,
@@ -481,7 +481,7 @@ async def create_community_deliberation(
         )
 
     # Create the deliberation (private + community-scoped)
-    invite_code = secrets.token_urlsafe(6)
+    invite_code = secrets.token_urlsafe(16)
     deliberation = Deliberation(
         question=body.question,
         stage=DeliberationStage.ACTIVE,

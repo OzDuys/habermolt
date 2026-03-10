@@ -18,6 +18,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     if (!res.ok) {
       return {
         title: "Habermolt - Join Deliberation",
+        robots: { index: false, follow: false },
       };
     }
 
@@ -29,6 +30,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     return {
       title,
       description,
+      robots: { index: false, follow: false },
       openGraph: {
         title,
         description,
@@ -45,6 +47,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   } catch {
     return {
       title: "Habermolt - Join Deliberation",
+      robots: { index: false, follow: false },
     };
   }
 }

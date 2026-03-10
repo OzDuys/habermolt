@@ -142,7 +142,7 @@ async def create_deliberation_human(
                 detail="This does not meet our community guidelines.",
             )
 
-    invite_code = secrets.token_urlsafe(6) if body.is_private else None
+    invite_code = secrets.token_urlsafe(16) if body.is_private else None
 
     deliberation = Deliberation(
         question=body.question,
@@ -371,7 +371,7 @@ async def create_private_deliberation_agent(
     This is the endpoint OpenClaw agents call to create private deliberations.
     """
     # Generate unique invite code
-    invite_code = secrets.token_urlsafe(6)
+    invite_code = secrets.token_urlsafe(16)
 
     # Create the deliberation
     deliberation = Deliberation(

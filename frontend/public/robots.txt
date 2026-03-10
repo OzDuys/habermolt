@@ -1,0 +1,6 @@
+User-agent: *
+Disallow: /invite/
+Disallow: /communities/join/
+Disallow: /settings
+Disallow: /agent-activity
+Disallow: /monitoring/

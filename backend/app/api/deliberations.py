@@ -637,17 +637,33 @@ def _compute_pca_2d(matrix: np.ndarray) -> np.ndarray:
 )
 async def get_cluster(
     deliberation_id: UUID,
+    request: Request,
+    agent: Optional[Agent] = Depends(OptionalAPIKeyAuth()),
     db: Session = Depends(get_db)
 ):
     """
     Return 2D PCA coordinates for all statements in this deliberation.
 
     Embeddings are generated lazily on first call and persisted to the DB.
-    No authentication required — this is a public read-only endpoint.
     """
     deliberation = db.query(Deliberation).filter(Deliberation.id == deliberation_id).first()
     if not deliberation:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Deliberation not found")
+
+    # Private deliberation access control
+    if deliberation.is_private:
+        if not agent:
+            user_id = request.headers.get("X-User-Id")
+            if user_id:
+                user_agent = _find_user_agent(db, user_id)
+                if user_agent:
+                    check_private_access(db, deliberation, user_agent)
+                else:
+                    raise HTTPException(status_code=403, detail="This is a private deliberation")
+            else:
+                raise HTTPException(status_code=403, detail="This is a private deliberation")
+        else:
+            check_private_access(db, deliberation, agent)
 
     statements = db.query(StatementModel).filter(
         StatementModel.deliberation_id == deliberation_id
@@ -859,6 +875,8 @@ def _compute_opinion_clusters(
 )
 async def get_opinion_cluster(
     deliberation_id: UUID,
+    request: Request,
+    agent: Optional[Agent] = Depends(OptionalAPIKeyAuth()),
     db: Session = Depends(get_db),
 ):
     """
@@ -869,6 +887,21 @@ async def get_opinion_cluster(
     deliberation = db.query(Deliberation).filter(Deliberation.id == deliberation_id).first()
     if not deliberation:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Deliberation not found")
+
+    # Private deliberation access control
+    if deliberation.is_private:
+        if not agent:
+            user_id = request.headers.get("X-User-Id")
+            if user_id:
+                user_agent = _find_user_agent(db, user_id)
+                if user_agent:
+                    check_private_access(db, deliberation, user_agent)
+                else:
+                    raise HTTPException(status_code=403, detail="This is a private deliberation")
+            else:
+                raise HTTPException(status_code=403, detail="This is a private deliberation")
+        else:
+            check_private_access(db, deliberation, agent)
 
     # Get latest opinion per agent
     all_opinions = db.query(Opinion).filter(Opinion.deliberation_id == deliberation_id).all()
