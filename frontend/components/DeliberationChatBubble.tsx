@@ -103,7 +103,13 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
         body: JSON.stringify({ deliberation_id: deliberationId }),
       })
         .then(async (res) => {
-          if (!res.ok) throw new Error("Failed to start chat");
+          if (!res.ok) {
+            const errorData = await res.json().catch(() => null);
+            const errorMsg = errorData?.detail || "Failed to start chat. Please try again.";
+            setMessages([{ role: "assistant", content: errorMsg }]);
+            setLoading(false);
+            return;
+          }
           const data = await res.json();
           setSessionId(data.session_id);
           setPhase(data.phase || "browsing");
@@ -345,11 +351,11 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
 
     const headerTitle = phase === "participating" ? "Deliberation Chat"
       : phase === "setup" ? "Setting Up..."
-      : "Ask About This";
+      : "Chat About This Topic";
 
     const placeholder = phase === "participating"
-      ? "Ask about this deliberation..."
-      : "Ask a question or join...";
+      ? "Discuss the deliberation, update your rankings, or propose a statement..."
+      : "Ask about this topic or say 'join' to participate...";
 
     return (
       <>
@@ -513,10 +519,16 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
                   <div style={{ fontSize: 11, fontWeight: 600, color: "#999" }}>
                     Setting up your participation...
                   </div>
-                  {SETUP_STEPS.map((step) => {
+                  {SETUP_STEPS.filter((step) => {
+                    const completed = setupProgress.completed_steps?.includes(step.key);
+                    const isCurrent = setupProgress.current_step === step.key;
+                    const currentIdx = SETUP_STEPS.findIndex(s => s.key === setupProgress.current_step);
+                    const stepIdx = SETUP_STEPS.findIndex(s => s.key === step.key);
+                    // Show completed steps, current step, and future steps (after current)
+                    return completed || isCurrent || stepIdx > currentIdx;
+                  }).map((step) => {
                     const completed = setupProgress.completed_steps?.includes(step.key);
                     const isCurrent = setupProgress.current_step === step.key && !completed;
-                    const isFuture = !completed && !isCurrent;
                     return (
                       <div key={step.key} style={{
                         display: "flex", alignItems: "center", gap: 6,

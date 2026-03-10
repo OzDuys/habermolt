@@ -19,6 +19,7 @@ from app.models import Agent, Deliberation
 from app.models.hosted_agent import HostedAgent
 from app.models.agent_session import AgentSession
 from app.services import deliberation_chat_service
+from app.services.hosted_agent_service import check_token_limit
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/deliberation-chat", tags=["deliberation-chat"])
@@ -73,6 +74,14 @@ async def start_chat(
     """Start or resume a deliberation chat session."""
     user_id = _require_user_id(req)
     hosted = _find_hosted_agent(db, user_id)
+
+    if not check_token_limit(hosted):
+        db.commit()  # persist any un-pause state changes
+        raise HTTPException(
+            status_code=429,
+            detail="You've hit the token limit for this week. Your agent can't respond until the limit resets or you upgrade.",
+        )
+
     agent = hosted.agent
 
     deliberation = db.query(Deliberation).filter(
@@ -164,6 +173,18 @@ async def send_chat_message(
     """Stream a deliberation chat response as Server-Sent Events."""
     user_id = _require_user_id(req)
     hosted = _find_hosted_agent(db, user_id)
+
+    if not check_token_limit(hosted):
+        db.commit()
+        limit_msg = "You've hit the token limit for this week. Your agent can't respond until the limit resets or you upgrade."
+        def limit_stream():
+            yield f"data: {json.dumps({'type': 'chunk', 'content': limit_msg})}\n\n"
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+        return StreamingResponse(
+            limit_stream(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
 
     session = db.query(AgentSession).filter(
         AgentSession.id == session_id,

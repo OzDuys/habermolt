@@ -22,104 +22,99 @@ from app.models import Agent, Deliberation, Opinion, Statement, Ranking
 from app.models.hosted_agent import HostedAgent
 from app.models.agent_session import AgentSession
 from app.services.continuous_deliberation_service import ContinuousDeliberationService
+from app.services.hosted_agent_service import record_token_usage
 from app.services.llm_client import LLMClient
 
 logger = logging.getLogger(__name__)
 
 
+# --- Token Tracking ---
+
+def _track_chat_tokens(db: Session, hosted_agent: HostedAgent) -> None:
+    """Record token usage from the most recent LLM trace for this agent."""
+    from app.models.llm_trace import LLMTrace
+
+    trace = (
+        db.query(LLMTrace)
+        .filter(LLMTrace.hosted_agent_id == hosted_agent.id)
+        .order_by(LLMTrace.created_at.desc())
+        .first()
+    )
+    if trace and trace.tokens_in is not None and trace.tokens_out is not None:
+        record_token_usage(db, hosted_agent, trace.tokens_in + trace.tokens_out)
+
+
 # --- System Prompts ---
 
-BROWSE_SYSTEM_PROMPT = """\
-You are a helpful assistant for a democratic deliberation on Habermolt. The user is browsing \
-this deliberation and may have questions about it before deciding to join.
+SYSTEM_PROMPT = """\
+You are a helpful assistant on Habermolt, a platform for AI-assisted democratic deliberation. \
+Deliberations use the Schulze voting method: participants rank consensus statements in order \
+of preference, and the winner is the statement that beats every other in pairwise comparisons.
 
 ## Deliberation Question
 "{question}"
 
-{profile_context}
-
-{deliberation_context}
-
-Your role: Answer the user's questions about this deliberation — what it's about, what \
-positions people hold, how the process works. Be informative and conversational.
-
-If the user expresses interest in joining or sharing their opinion (e.g. "I want to join", \
-"I'd like to participate", "let me share my views"), transition into interview mode: \
-start asking them about their position on the topic, and when you have enough, call \
-submit_opinion to formally join them.
-
-Rules:
-- Keep messages SHORT. Be concise and direct.
-- If just answering questions, do NOT call any tools.
-- Only call submit_opinion when the user clearly wants to join and you've gathered their view.
-- Stay focused on this specific deliberation topic.
-
-Tools:
-- **submit_opinion**: Submit the human's synthesized opinion for this deliberation. \
-Only call this when the user wants to join and you have enough to represent their view.
-- **update_profile**: Save what you learned about this person's values (optional).
-"""
-
-PARTICIPATING_SYSTEM_PROMPT = """\
-You are a helpful assistant on Habermolt, a platform for AI-assisted democratic deliberation.
-You're helping a participant in an ongoing deliberation.
-
-## Deliberation Question
-"{question}"
+## Deliberation Status
+{participant_count} participant(s), {statement_count} statement(s). \
+{categories_info}
 
 ## Current Consensus Winner
 {winner_info}
 
-## Your Human's Current Opinion
-{opinion_info}
+## Participants' Opinions
+{all_opinions_info}
 
-## Your Human's Current Rankings
-{rankings_info}
-
-## All Statements
+## All Statements (ranked by Schulze consensus)
 {statements_info}
 
+{user_section}
+
 {profile_context}
 
-You can help the user:
-- Understand what's happening in this deliberation (explain the consensus, statements, voting)
-- Update their opinion if their views have changed
-- Re-rank statements based on their preferences
-- Propose a new consensus statement
+{role_guidance}
 
 Rules:
-- Be conversational and concise
-- When the user wants to take an action, confirm what you'll do before calling the tool
-- When reranking, show the user the proposed new order and get confirmation before submitting
-- Explain the Schulze voting method simply if asked
+- Keep messages SHORT. Be concise and direct.
+- Stay focused on this specific deliberation topic.
+- When the user wants to take an action, confirm what you'll do before calling the tool.
+- When reranking, show the user the proposed new order and get confirmation before submitting.
 """
 
-BROWSE_GREETING_PROMPT = """\
-You are a helpful assistant for a deliberation on Habermolt. The user is browsing \
-this deliberation. Generate a short, welcoming message and let them know they can \
-ask questions about the deliberation or join when they're ready.
+BROWSING_GUIDANCE = """\
+The user is browsing this deliberation and hasn't joined yet. You can:
+- Answer questions about the deliberation, the consensus process, and what participants think
+- Explain what joining means: submitting an opinion, then your agent ranks statements on your behalf using the Schulze method
 
-The deliberation question is: "{question}"
+If the user wants to join or share their views, interview them briefly about their position, \
+then call submit_opinion. Only call it when you have enough to represent their view (2-4 sentences).
 
-{profile_context}
+Tools:
+- **submit_opinion**: Submit the human's synthesized opinion for this deliberation.
+- **update_profile**: Save what you learned about this person's values (optional)."""
 
-{deliberation_context}
+PARTICIPATING_GUIDANCE = """\
+The user is a participant in this deliberation. You can help them:
+- **Understand** what's happening — the consensus winner, how others voted, the Schulze method
+- **Update their opinion** if their views have changed
+- **Re-rank statements** to change how they influence the consensus
+- **Propose a new consensus statement** to add to the pool
 
-Keep it to 1-2 short sentences. Mention they can ask questions or join when ready. \
-No long introductions."""
+Tools:
+- **update_opinion**: Update the user's stated position
+- **rerank_statements**: Submit a new ranking of all statements (most preferred first)
+- **propose_statement**: Add a new consensus statement to the pool"""
 
-PARTICIPATING_GREETING_PROMPT = """\
-You're greeting a participant who wants to chat about a deliberation they're in.
+GREETING_PROMPT = """\
+You're greeting a user who opened the chat on a Habermolt deliberation page.
 
-Deliberation: "{question}"
-Current winner: {winner_info}
-Their opinion: {opinion_info}
+{context_summary}
 
 {profile_context}
 
 Give a brief, friendly greeting (1-2 sentences). Mention something specific about \
-the current state — like the consensus winner or how many statements there are. \
-Ask how you can help."""
+the current state — like the consensus winner or participant count. \
+{greeting_cta}
+No long introductions."""
 
 
 # --- Tool Definitions ---
@@ -250,66 +245,96 @@ def _get_profile_context(db: Session, agent: Agent) -> str:
     return ""
 
 
-def _get_deliberation_context(db: Session, deliberation: Deliberation) -> str:
-    """Get a summary of the deliberation for browse mode."""
-    opinion_count = db.query(Opinion).filter(
-        Opinion.deliberation_id == deliberation.id
-    ).distinct(Opinion.agent_id).count()
-    statement_count = db.query(Statement).filter(
-        Statement.deliberation_id == deliberation.id
-    ).count()
-
-    parts = [f"This deliberation currently has {opinion_count} participating agent(s) and {statement_count} consensus statement(s)."]
-
-    if deliberation.categories:
-        parts.append(f"Categories: {', '.join(deliberation.categories)}.")
-
-    return " ".join(parts)
-
-
-def _build_participating_context(db: Session, agent: Agent, deliberation: Deliberation) -> dict:
-    """Build the full deliberation context for participating prompt."""
-    opinion = db.query(Opinion).filter(
-        and_(Opinion.deliberation_id == deliberation.id, Opinion.agent_id == agent.id)
-    ).order_by(Opinion.version.desc()).first()
-
+def _build_full_context(db: Session, agent: Agent, deliberation: Deliberation, is_participating: bool) -> dict:
+    """Build the full deliberation context for both browsing and participating prompts."""
+    # Get all statements
     statements = db.query(Statement).filter(
         Statement.deliberation_id == deliberation.id
     ).order_by(Statement.social_ranking.nulls_last()).all()
 
-    ranking = db.query(Ranking).filter(
-        and_(Ranking.deliberation_id == deliberation.id, Ranking.agent_id == agent.id)
-    ).first()
+    # Get latest opinion per agent (subquery for latest version)
+    latest_ver = (
+        db.query(Opinion.agent_id, func.max(Opinion.version).label("max_v"))
+        .filter(Opinion.deliberation_id == deliberation.id)
+        .group_by(Opinion.agent_id)
+        .subquery()
+    )
+    all_opinions = (
+        db.query(Opinion, Agent.human_name, Agent.name)
+        .join(Agent, Opinion.agent_id == Agent.id)
+        .join(latest_ver, and_(
+            Opinion.agent_id == latest_ver.c.agent_id,
+            Opinion.version == latest_ver.c.max_v,
+        ))
+        .filter(Opinion.deliberation_id == deliberation.id)
+        .all()
+    )
 
+    # Participant count
+    participant_count = len(all_opinions)
+    statement_count = len(statements)
+    categories_info = f"Categories: {', '.join(deliberation.categories)}." if deliberation.categories else ""
+
+    # Winner
     winner = next((s for s in statements if s.social_ranking == 1), None)
-
     winner_info = f"{winner.title or 'Untitled'}: {winner.statement_text}" if winner else "No consensus winner yet."
-    opinion_info = opinion.opinion_text if opinion else "No opinion submitted yet."
 
-    if ranking and ranking.statement_rankings:
-        stmt_map = {str(s.id): s for s in statements}
-        ranked_items = sorted(ranking.statement_rankings, key=lambda r: r.get("rank", 999))
-        rankings_lines = []
-        for r in ranked_items:
-            s = stmt_map.get(r["statement_id"])
-            predicted = " (predicted)" if r.get("is_predicted") else ""
-            if s:
-                rankings_lines.append(f"  {r['rank']}. [{s.id}] {s.title or 'Untitled'}: {s.statement_text[:100]}{predicted}")
-        rankings_info = "\n".join(rankings_lines) if rankings_lines else "No rankings yet."
-    else:
-        rankings_info = "No rankings yet."
+    # All opinions with human names
+    opinions_lines = []
+    for opinion, human_name, agent_name in all_opinions:
+        display_name = human_name or agent_name or "Anonymous"
+        is_self = opinion.agent_id == agent.id
+        label = f"{display_name} (you)" if is_self else display_name
+        opinions_lines.append(f"- {label}: {opinion.opinion_text[:200]}")
+    all_opinions_info = "\n".join(opinions_lines) if opinions_lines else "No opinions submitted yet."
 
+    # Statements with social rankings
     statements_lines = []
     for s in statements:
         rank_str = f"(#{s.social_ranking})" if s.social_ranking else ""
         statements_lines.append(f"- [{s.id}] {rank_str} {s.title or 'Untitled'}: {s.statement_text[:150]}")
     statements_info = "\n".join(statements_lines) if statements_lines else "No statements yet."
 
+    # User-specific section (opinion + rankings if participating)
+    user_section = ""
+    if is_participating:
+        user_opinion = next((o for o, _, _ in all_opinions if o.agent_id == agent.id), None)
+        ranking = db.query(Ranking).filter(
+            and_(Ranking.deliberation_id == deliberation.id, Ranking.agent_id == agent.id)
+        ).first()
+
+        opinion_info = user_opinion.opinion_text if user_opinion else "No opinion submitted yet."
+
+        if ranking and ranking.statement_rankings:
+            stmt_map = {str(s.id): s for s in statements}
+            ranked_items = sorted(ranking.statement_rankings, key=lambda r: r.get("rank", 999))
+            rankings_lines = []
+            for r in ranked_items:
+                s = stmt_map.get(r["statement_id"])
+                predicted = " (predicted)" if r.get("is_predicted") else ""
+                if s:
+                    rankings_lines.append(f"  {r['rank']}. [{s.id}] {s.title or 'Untitled'}: {s.statement_text[:100]}{predicted}")
+            rankings_info = "\n".join(rankings_lines) if rankings_lines else "No rankings yet."
+        else:
+            rankings_info = "No rankings yet."
+
+        user_section = (
+            f"## Your Human's Current Opinion\n{opinion_info}\n\n"
+            f"## Your Human's Current Rankings\n{rankings_info}"
+        )
+
+    # Role guidance
+    role_guidance = PARTICIPATING_GUIDANCE if is_participating else BROWSING_GUIDANCE
+
     return {
+        "participant_count": participant_count,
+        "statement_count": statement_count,
+        "categories_info": categories_info,
         "winner_info": winner_info,
-        "opinion_info": opinion_info,
-        "rankings_info": rankings_info,
+        "all_opinions_info": all_opinions_info,
         "statements_info": statements_info,
+        "user_section": user_section,
+        "role_guidance": role_guidance,
     }
 
 
@@ -359,6 +384,19 @@ def get_or_create_session(
 def generate_greeting(db: Session, agent: Agent, deliberation: Deliberation, phase: str = "browsing") -> str:
     """Generate a contextual greeting based on the session phase."""
     profile_context = _get_profile_context(db, agent)
+    is_participating = phase == "participating"
+    context = _build_full_context(db, agent, deliberation, is_participating)
+
+    context_summary = (
+        f"Deliberation: \"{deliberation.question}\"\n"
+        f"{context['participant_count']} participants, {context['statement_count']} statements.\n"
+        f"Current winner: {context['winner_info']}"
+    )
+    greeting_cta = (
+        "Ask how you can help (update opinion, rerank, propose)."
+        if is_participating else
+        "Let them know they can ask questions or say 'join' when ready."
+    )
 
     client = _get_llm_client(db, agent)
     client.set_trace_context(
@@ -367,24 +405,21 @@ def generate_greeting(db: Session, agent: Agent, deliberation: Deliberation, pha
         agent_id=agent.id,
     )
 
-    if phase == "participating":
-        context = _build_participating_context(db, agent, deliberation)
-        prompt = PARTICIPATING_GREETING_PROMPT.format(
-            question=deliberation.question,
-            profile_context=profile_context,
-            **context,
-        )
-    else:
-        deliberation_context = _get_deliberation_context(db, deliberation)
-        prompt = BROWSE_GREETING_PROMPT.format(
-            question=deliberation.question,
-            profile_context=profile_context,
-            deliberation_context=deliberation_context,
-        )
+    prompt = GREETING_PROMPT.format(
+        context_summary=context_summary,
+        profile_context=profile_context,
+        greeting_cta=greeting_cta,
+    )
 
     greeting = client.sample_text(prompt=prompt, temperature=0.7, max_tokens=200)
+
+    # Track tokens
+    hosted = db.query(HostedAgent).filter(HostedAgent.agent_id == agent.id).first()
+    if hosted:
+        _track_chat_tokens(db, hosted)
+
     if not greeting:
-        if phase == "participating":
+        if is_participating:
             greeting = f"Hey! I'm here to help you with the deliberation on \"{deliberation.question}\". What would you like to do?"
         else:
             greeting = f"Hi! This deliberation is about: \"{deliberation.question}\". Feel free to ask questions or let me know when you'd like to join!"
@@ -406,28 +441,19 @@ def stream_message(
     Yields tuples: ("text", chunk), ("action_start", {...}), ("action_done", {...})
     """
     phase = session.phase or "browsing"
+    is_participating = phase == "participating"
     messages = list(session.messages or [])
     messages.append({"role": "user", "content": user_content})
 
     profile_context = _get_profile_context(db, agent)
+    context = _build_full_context(db, agent, deliberation, is_participating)
 
-    # Pick system prompt and tools based on phase
-    if phase == "participating":
-        context = _build_participating_context(db, agent, deliberation)
-        system_prompt = PARTICIPATING_SYSTEM_PROMPT.format(
-            question=deliberation.question,
-            profile_context=profile_context,
-            **context,
-        )
-        tools = PARTICIPATING_TOOLS
-    else:  # browsing (handles both Q&A and opinion extraction)
-        deliberation_context = _get_deliberation_context(db, deliberation)
-        system_prompt = BROWSE_SYSTEM_PROMPT.format(
-            question=deliberation.question,
-            profile_context=profile_context,
-            deliberation_context=deliberation_context,
-        )
-        tools = INTERVIEW_TOOLS
+    system_prompt = SYSTEM_PROMPT.format(
+        question=deliberation.question,
+        profile_context=profile_context,
+        **context,
+    )
+    tools = PARTICIPATING_TOOLS if is_participating else INTERVIEW_TOOLS
 
     llm_messages = [{"role": "system", "content": system_prompt}]
     # Rebuild LLM message history.
@@ -533,6 +559,11 @@ def stream_message(
             )
 
     finally:
+        # Track token usage
+        hosted = db.query(HostedAgent).filter(HostedAgent.agent_id == agent.id).first()
+        if hosted:
+            _track_chat_tokens(db, hosted)
+
         response_text = "".join(full_response_parts)
         if not response_text:
             response_text = "I'm sorry, I had trouble processing that. Could you try again?"
@@ -720,7 +751,7 @@ def _exec_propose(
 
     return {
         "action": "propose_statement",
-        "description": f"New consensus statement proposed: \"{title}\"",
+        "description": f"New consensus statement proposed: '{title}'. It was automatically ranked #1 in your rankings, and the system predicted how other participants would rank it.",
         "detail": statement_text,
         "statement_id": str(statement.id),
     }
@@ -805,6 +836,10 @@ def _do_ranking_for_agent(db: Session, agent: Agent, deliberation: Deliberation)
         temperature=0.3,
     )
 
+    # Track tokens
+    if hosted:
+        _track_chat_tokens(db, hosted)
+
     if not response:
         return
 
@@ -877,6 +912,10 @@ def _do_propose_for_agent(db: Session, agent: Agent, deliberation: Deliberation)
         system_prompt=STATEMENT_SYSTEM_PROMPT.format(profile=profile, opinions=opinions_text),
         temperature=0.7,
     )
+
+    # Track tokens
+    if hosted:
+        _track_chat_tokens(db, hosted)
 
     if not response:
         return
