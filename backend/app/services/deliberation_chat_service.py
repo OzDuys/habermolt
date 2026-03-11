@@ -11,6 +11,7 @@ Single session per agent per deliberation, with phases:
 import json
 import logging
 import threading
+from datetime import datetime, timezone
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -957,6 +958,7 @@ def _run_setup_background(
         def _update_progress(current_step: str, completed_step: str = None):
             progress = dict(session.setup_progress or {})
             progress["current_step"] = current_step
+            progress["last_updated"] = datetime.now(timezone.utc).isoformat()
             if completed_step:
                 steps = list(progress.get("completed_steps", []))
                 steps.append(completed_step)
@@ -976,6 +978,12 @@ def _run_setup_background(
             })
             session.messages = msgs
             db.commit()
+
+        # Record start timestamp for stale detection
+        progress = dict(session.setup_progress or {})
+        progress["last_updated"] = datetime.now(timezone.utc).isoformat()
+        session.setup_progress = progress
+        db.commit()
 
         # Step 1: Generate seed statements (if creator)
         if needs_seed:
@@ -1027,9 +1035,13 @@ def _run_setup_background(
 
 
 def retry_setup(db: Session, session: AgentSession):
-    """Retry a failed background setup from where it left off."""
+    """Retry a failed or stale background setup from where it left off."""
     progress = session.setup_progress or {}
-    if not progress.get("error"):
+
+    # Allow retry if there's an error OR if setup is stale
+    has_error = bool(progress.get("error"))
+    is_stale = _is_setup_stale(progress, session.created_at)
+    if not has_error and not is_stale:
         return
 
     completed = set(progress.get("completed_steps", []))
@@ -1051,3 +1063,47 @@ def retry_setup(db: Session, session: AgentSession):
         daemon=True,
     )
     thread.start()
+
+
+# Stale setup threshold in seconds — if no progress update for this long, consider it dead
+STALE_SETUP_TIMEOUT_SECONDS = 180  # 3 minutes
+
+
+def _is_setup_stale(progress: dict, session_created_at: datetime) -> bool:
+    """Check if a setup has stalled (no progress update for >3 minutes)."""
+    if not progress or progress.get("current_step") == "completed":
+        return False
+
+    last_updated_str = progress.get("last_updated")
+    if last_updated_str:
+        try:
+            last_updated = datetime.fromisoformat(last_updated_str)
+            if last_updated.tzinfo is None:
+                last_updated = last_updated.replace(tzinfo=timezone.utc)
+        except (ValueError, TypeError):
+            last_updated = session_created_at.replace(tzinfo=timezone.utc)
+    else:
+        # Legacy sessions without last_updated — fall back to created_at
+        last_updated = session_created_at.replace(tzinfo=timezone.utc) if session_created_at.tzinfo is None else session_created_at
+
+    age = (datetime.now(timezone.utc) - last_updated).total_seconds()
+    return age > STALE_SETUP_TIMEOUT_SECONDS
+
+
+def detect_and_mark_stale_setup(db: Session, session: AgentSession) -> bool:
+    """If setup is stale, mark it with an error so the retry button appears. Returns True if stale."""
+    if session.phase != "setup":
+        return False
+
+    progress = session.setup_progress or {}
+    if progress.get("error") or progress.get("current_step") == "completed":
+        return False
+
+    if not _is_setup_stale(progress, session.created_at):
+        return False
+
+    progress["error"] = "Setup interrupted — please retry."
+    session.setup_progress = progress
+    db.commit()
+    logger.warning(f"Marked stale setup for session {session.id} (stuck at {progress.get('current_step')})")
+    return True

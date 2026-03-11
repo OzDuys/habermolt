@@ -133,6 +133,11 @@ async def get_session_status(
     if not session:
         raise HTTPException(status_code=404, detail="Chat session not found.")
 
+    # Auto-detect stale setups so the retry button appears
+    if session.phase == "setup":
+        from app.services.deliberation_chat_service import detect_and_mark_stale_setup
+        detect_and_mark_stale_setup(db, session)
+
     return SessionStatusResponse(
         session_id=str(session.id),
         phase=session.phase or "browsing",
@@ -159,7 +164,10 @@ async def retry_setup(
         raise HTTPException(status_code=404, detail="Chat session not found.")
 
     progress = session.setup_progress or {}
-    if not progress.get("error"):
+    has_error = bool(progress.get("error"))
+    from app.services.deliberation_chat_service import _is_setup_stale
+    is_stale = _is_setup_stale(progress, session.created_at)
+    if not has_error and not is_stale:
         raise HTTPException(status_code=400, detail="No failed setup to retry.")
 
     deliberation_chat_service.retry_setup(db, session)
