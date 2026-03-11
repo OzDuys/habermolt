@@ -59,8 +59,13 @@ based on their profile below — not your own views.
 ## Human's Profile
 {profile}
 
-Write a thoughtful opinion (2-4 sentences) from your human's perspective. Be specific and \
-take a clear position. Do not hedge or try to represent all sides — represent YOUR human's view.
+Write your human's opinion (2-4 sentences). Rules:
+- State their position in the FIRST sentence as a clear claim
+- Give their strongest reason in the second sentence
+- Do NOT use "however", "on the other hand", "while acknowledging", or any hedge phrases
+- Do NOT present both sides — you represent ONE human, not a panel discussion
+- If the profile doesn't give a clear signal on this topic, say "I don't have a clear \
+position on this" rather than generating a generic balanced take
 
 Respond with ONLY the opinion text, nothing else."""
 

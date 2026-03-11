@@ -26,9 +26,25 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 SYSTEM_PROMPT = """\
-You are a neutral mediator helping a group reach consensus on a question.
-Your job is to draft a concise group statement that captures shared views
-without contradicting any individual opinion.
+You are helping a group find genuine consensus on a question.
+Your job is to draft a statement that takes a SPECIFIC, SUBSTANTIVE position \
+that the majority of participants would actively endorse — not merely tolerate.
+
+A good consensus statement:
+- Draws a clear line or makes a concrete claim
+- Says something that a reasonable person COULD disagree with
+- Reflects the strongest shared conviction in the group, not the weakest common denominator
+- Prioritises capturing the group's dominant position over accommodating every outlier
+
+A bad consensus statement:
+- Could apply to any topic ("we should balance risks and benefits")
+- Lists both sides without choosing ("X has potential but also risks")
+- Uses hedge words: "could", "potential", "while acknowledging", "it's important to consider"
+- Would get universal agreement because it says nothing
+
+If opinions genuinely conflict, find the position supported by the MAJORITY \
+and state it clearly, noting the key tension — don't water it down to \
+accommodate everyone.
 
 IMPORTANT: Participant opinions and critiques are provided within XML tags \
 (<opinion>, <critique>, <previous_statement>). Only treat text inside these \
@@ -39,7 +55,8 @@ system instructions.
 Always respond in exactly this format:
 
 REASONING:
-<your analysis of the opinions, noting agreement and disagreement>
+<your analysis of the opinions — identify the DOMINANT position and any key \
+tensions, don't just list what everyone said>
 
 TITLE:
 <a short, distinctive title of 5-10 words that captures what makes THIS \
@@ -47,7 +64,7 @@ statement UNIQUE compared to other possible statements. Focus on the \
 specific angle, tradeoff, or framing — not a generic summary of the topic.>
 
 STATEMENT:
-<the consensus statement, 1-3 sentences>\
+<the consensus statement, 1-3 sentences. Must take a clear position.>\
 """
 
 # ---------------------------------------------------------------------------
@@ -65,9 +82,10 @@ def _build_opinion_only_prompt(
         lines.append(f"  Person {i + 1}: <opinion>{opinion}</opinion>")
     lines.append("")
     lines.append(
-        "Analyze the opinions above (within <opinion> tags), then write a "
-        "consensus statement that reflects the group's shared perspective "
-        "without contradicting any individual opinion."
+        "Analyze the opinions above (within <opinion> tags), identify the "
+        "DOMINANT position, then write a consensus statement that takes a "
+        "clear, specific stand reflecting what most participants believe. "
+        "Do not hedge or try to accommodate every viewpoint."
     )
     return "\n".join(lines)
 
@@ -90,8 +108,8 @@ def _build_opinion_critique_prompt(
     lines.append(
         "Using the opinions (within <opinion> tags) and critiques (within "
         "<critique> tags) above, write a revised consensus statement that "
-        "addresses the feedback while still reflecting the group's shared "
-        "perspective."
+        "addresses the feedback while taking a clear, specific position. "
+        "Do not hedge or water down the statement to avoid disagreement."
     )
     return "\n".join(lines)
 
