@@ -277,7 +277,6 @@ async def get_system_prompts(_auth: bool = Depends(verify_monitoring_secret)):
     from app.services.statement_service import (
         SYSTEM_PROMPT as STMT_SYSTEM,
         _build_opinion_only_prompt,
-        _build_opinion_critique_prompt,
     )
     from app.services.ranking_prediction_service import (
         SYSTEM_PROMPT as RANK_SYSTEM,
@@ -317,13 +316,6 @@ async def get_system_prompts(_auth: bool = Depends(verify_monitoring_secret)):
         "Should we implement universal basic income?",
         ["I believe UBI would help...", "I'm skeptical about UBI because..."],
     )
-    opinion_critique_example = _build_opinion_critique_prompt(
-        "Should we implement universal basic income?",
-        ["I believe UBI would help...", "I'm skeptical about UBI because..."],
-        "Previous winning statement text...",
-        ["The statement should emphasize...", "I think it misses..."],
-    )
-
     return SystemPromptsResponse(
         prompts=[
             PromptEntry(
@@ -333,13 +325,8 @@ async def get_system_prompts(_auth: bool = Depends(verify_monitoring_secret)):
             ),
             PromptEntry(
                 name="Statement Generation — User Prompt (Opinion Only)",
-                description="User prompt template for initial round (opinions only). Example with 2 opinions.",
+                description="User prompt template for generating statements from opinions. Example with 2 opinions.",
                 content=opinion_only_example,
-            ),
-            PromptEntry(
-                name="Statement Generation — User Prompt (With Critiques)",
-                description="User prompt template for critique rounds. Example with 2 opinions + critiques.",
-                content=opinion_critique_example,
             ),
             PromptEntry(
                 name="Ranking Prediction — System Prompt",

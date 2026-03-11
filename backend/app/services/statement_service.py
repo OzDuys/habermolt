@@ -90,30 +90,6 @@ def _build_opinion_only_prompt(
     return "\n".join(lines)
 
 
-def _build_opinion_critique_prompt(
-    question: str,
-    opinions: list[str],
-    previous_winner: str,
-    critiques: list[str],
-) -> str:
-    """User prompt for critique rounds (opinions + previous statement + critiques)."""
-    lines = [f"Question: {question}", "", "Individual opinions:"]
-    for i, opinion in enumerate(opinions):
-        lines.append(f"  Person {i + 1}: <opinion>{opinion}</opinion>")
-    lines.append(f"\nPrevious draft statement: <previous_statement>{previous_winner}</previous_statement>")
-    lines.append("\nCritiques of the draft:")
-    for i, critique in enumerate(critiques):
-        lines.append(f"  Person {i + 1}: <critique>{critique}</critique>")
-    lines.append("")
-    lines.append(
-        "Using the opinions (within <opinion> tags) and critiques (within "
-        "<critique> tags) above, write a revised consensus statement that "
-        "addresses the feedback while taking a clear, specific position. "
-        "Do not hedge or water down the statement to avoid disagreement."
-    )
-    return "\n".join(lines)
-
-
 # ---------------------------------------------------------------------------
 # Response parsing
 # ---------------------------------------------------------------------------
@@ -175,23 +151,14 @@ class StatementService:
         client: LLMClient,
         question: str,
         opinions: list[str],
-        previous_winner: Optional[str] = None,
-        critiques: Optional[list[str]] = None,
         deliberation_id=None,
     ) -> Tuple[str, str, str]:
         """Generate one candidate statement with retries. Returns (statement, title, reasoning)."""
-        # Shuffle opinions (and critiques) to avoid ordering bias
-        indices = list(range(len(opinions)))
-        random.shuffle(indices)
-        shuffled_opinions = [opinions[i] for i in indices]
-        shuffled_critiques = [critiques[i] for i in indices] if critiques else None
+        # Shuffle opinions to avoid ordering bias
+        shuffled_opinions = list(opinions)
+        random.shuffle(shuffled_opinions)
 
-        if previous_winner and shuffled_critiques:
-            user_prompt = _build_opinion_critique_prompt(
-                question, shuffled_opinions, previous_winner, shuffled_critiques
-            )
-        else:
-            user_prompt = _build_opinion_only_prompt(question, shuffled_opinions)
+        user_prompt = _build_opinion_only_prompt(question, shuffled_opinions)
 
         seed = random.randint(0, 2**31 - 1)
 
@@ -222,8 +189,6 @@ class StatementService:
         db: Session,
         deliberation: Deliberation,
         opinions: list[str],
-        previous_winner: Optional[str] = None,
-        critiques: Optional[list[str]] = None,
         seed_opinions: Optional[list[str]] = None,
     ) -> List[Statement]:
         """
@@ -242,7 +207,7 @@ class StatementService:
             )
             stmt, title, reasoning = await asyncio.to_thread(
                 self._generate_single_statement,
-                client, deliberation.question, opinions, previous_winner, critiques,
+                client, deliberation.question, opinions,
                 deliberation.id,
             )
             return (stmt, title, reasoning, model_name)
