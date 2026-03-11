@@ -435,6 +435,7 @@ async def get_agent_activity(
             winning_statement_text=winner_stmt.statement_text if winner_stmt else None,
             created_at=delib.created_at,
             opinion_text=opinion.opinion_text if opinion else None,
+            opinion_source=opinion.source if opinion else None,
             opinion_submitted_at=opinion.submitted_at if opinion else None,
             rankings=ranking_items,
             proposed_statements=[

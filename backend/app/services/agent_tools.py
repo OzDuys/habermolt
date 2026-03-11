@@ -473,7 +473,7 @@ def _exec_update_opinion(db: Session, hosted_agent: HostedAgent, deliberation_id
         return {"error": f"Deliberation {deliberation_id} not found."}
 
     service = ContinuousDeliberationService(db)
-    opinion = service.submit_opinion(delib, agent, opinion_text)
+    opinion = service.submit_opinion(delib, agent, opinion_text, source="chat_tool")
     return {
         "action": "update_opinion",
         "deliberation_id": deliberation_id,

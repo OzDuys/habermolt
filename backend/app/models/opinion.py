@@ -7,7 +7,7 @@ The latest version (highest version number) is the current opinion.
 
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, Integer, Text, DateTime, ForeignKey, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from pgvector.sqlalchemy import Vector
@@ -37,6 +37,14 @@ class Opinion(Base):
 
     # Content
     opinion_text = Column(Text, nullable=False)
+
+    # Source tracking: how was this opinion gathered?
+    # "topic_interview" = user was directly interviewed about this specific topic
+    # "autonomous" = agent acted on its own based on user profile
+    # "api" = submitted by external agent via REST API
+    # "creation" = initial opinion when creating a deliberation
+    # "chat_tool" = submitted/updated via general chat tool
+    source = Column(String(50), nullable=True)
 
     # Embedding (1536-dim, text-embedding-3-small)
     opinion_embedding = Column(Vector(1536), nullable=True)

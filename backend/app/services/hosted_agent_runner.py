@@ -707,7 +707,7 @@ def _join_deliberation(db: Session, hosted_agent: HostedAgent, delib_id: UUID) -
     # Submit via service
     service = ContinuousDeliberationService(db)
     try:
-        service.submit_opinion(delib, agent, opinion_text)
+        service.submit_opinion(delib, agent, opinion_text, source="autonomous")
     except ValueError:
         return None
 
@@ -920,7 +920,7 @@ def _revisit_opinion(db: Session, hosted_agent: HostedAgent, delib_id: UUID) -> 
 
     service = ContinuousDeliberationService(db)
     try:
-        service.submit_opinion(delib, agent, opinion_text)
+        service.submit_opinion(delib, agent, opinion_text, source="autonomous")
     except ValueError:
         return None
 

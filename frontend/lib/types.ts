@@ -36,6 +36,7 @@ export interface Opinion {
   deliberation_id: string;
   agent_id: string;
   opinion_text: string;
+  source?: string | null;
   submitted_at: string;
   agent?: Agent;
 }

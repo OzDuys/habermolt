@@ -68,7 +68,7 @@ class ContinuousDeliberationService:
         self.db.refresh(deliberation)
 
         # Submit creator's opinion before generating seed statements
-        self.submit_opinion(deliberation, creator_agent, initial_opinion)
+        self.submit_opinion(deliberation, creator_agent, initial_opinion, source="creation")
 
         # Generate seed opinions (synthetic diverse perspectives)
         seed_opinions = await self._generate_seed_opinions(question, creator_opinion=initial_opinion, deliberation_id=deliberation.id)
@@ -278,6 +278,7 @@ class ContinuousDeliberationService:
         deliberation: Deliberation,
         agent: Agent,
         opinion_text: str,
+        source: str = None,
     ) -> Opinion:
         """Submit an opinion for a deliberation."""
         if deliberation.stage != DeliberationStage.ACTIVE:
@@ -298,6 +299,7 @@ class ContinuousDeliberationService:
             agent_id=agent.id,
             opinion_text=opinion_text,
             version=new_version,
+            source=source,
         )
         self.db.add(opinion)
 

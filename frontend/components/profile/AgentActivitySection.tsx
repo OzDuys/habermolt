@@ -61,6 +61,7 @@ interface ActivityDeliberation {
   winning_statement_text: string | null;
   created_at: string | null;
   opinion_text: string | null;
+  opinion_source: string | null;
   opinion_submitted_at: string | null;
   rankings: ActivityRankingItem[];
   proposed_statements: ProposedStatement[];
@@ -576,7 +577,17 @@ function DeliberationCard({
           {/* Opinion */}
           {delib.opinion_text && (
             <div className="mt-4">
-              <h4 className="mb-2 text-sm font-semibold" style={{ color: "var(--foreground)" }}>Opinion submitted</h4>
+              <h4 className="mb-2 text-sm font-semibold" style={{ color: "var(--foreground)" }}>
+                Opinion submitted
+                {delib.opinion_source && (
+                  <span className="ml-2 rounded-full px-2 py-0.5 text-xs font-normal" style={{
+                    background: delib.opinion_source === "topic_interview" ? "var(--accent-dim)" : "var(--surface-dim)",
+                    color: delib.opinion_source === "topic_interview" ? "var(--accent)" : "var(--muted)",
+                  }}>
+                    {delib.opinion_source === "topic_interview" ? "interviewed" : delib.opinion_source === "autonomous" ? "autonomous" : delib.opinion_source}
+                  </span>
+                )}
+              </h4>
               <div className="rounded-lg p-3 text-sm leading-relaxed" style={{ background: "var(--surface-dim)", color: "var(--foreground)" }}>
                 {delib.opinion_text}
               </div>

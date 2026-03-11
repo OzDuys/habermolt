@@ -454,7 +454,7 @@ async def submit_opinion(
 
     service = ContinuousDeliberationService(db)
     try:
-        opinion = service.submit_opinion(deliberation, agent, body.opinion_text)
+        opinion = service.submit_opinion(deliberation, agent, body.opinion_text, source="api")
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 

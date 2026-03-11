@@ -88,6 +88,7 @@ class ActivityDeliberation(BaseModel):
 
     # What the agent submitted
     opinion_text: Optional[str] = None
+    opinion_source: Optional[str] = None
     opinion_submitted_at: Optional[datetime] = None
 
     # Agent's ranking vs consensus

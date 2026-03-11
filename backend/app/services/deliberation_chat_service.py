@@ -638,7 +638,7 @@ def _exec_submit_opinion(
     service = ContinuousDeliberationService(db)
 
     try:
-        service.submit_opinion(deliberation, agent, opinion_text)
+        service.submit_opinion(deliberation, agent, opinion_text, source="topic_interview")
     except ValueError as e:
         return {"error": str(e)}
 
@@ -707,7 +707,7 @@ def _exec_update_opinion(
 ) -> dict:
     service = ContinuousDeliberationService(db)
     try:
-        opinion = service.submit_opinion(deliberation, agent, opinion_text)
+        opinion = service.submit_opinion(deliberation, agent, opinion_text, source="topic_interview")
     except ValueError as e:
         return {"error": str(e)}
 
