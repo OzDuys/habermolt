@@ -51,10 +51,10 @@ function buildCategoryTabs(defs: CategoryDef[]): CategoryTab[] {
   return defs.map((d) => ({ id: d.slug, label: d.label }));
 }
 
-function buildCategoryColors(defs: CategoryDef[]): Record<string, string> {
-  const colors: Record<string, string> = {};
+function buildCategoryColors(defs: CategoryDef[]): Record<string, { bg: string; text: string }> {
+  const colors: Record<string, { bg: string; text: string }> = {};
   for (const d of defs) {
-    colors[d.slug] = `${d.color_bg} ${d.color_text}`;
+    colors[d.slug] = { bg: d.color_bg, text: d.color_text };
   }
   return colors;
 }
@@ -927,10 +927,13 @@ export default function HomePage() {
                                 {deliberation.categories.map((cat) => (
                                   <span
                                     key={cat}
-                                    style={{ fontSize: "clamp(8px, 1vw, 11px)", padding: "clamp(1px, 0.3vw, 2px) clamp(4px, 0.8vw, 10px)" }}
-                                    className={`inline-flex rounded-full font-semibold ${
-                                      CATEGORY_COLORS[cat] || "bg-stone-100 text-stone-600"
-                                    }`}
+                                    style={{
+                                      fontSize: "clamp(8px, 1vw, 11px)",
+                                      padding: "clamp(1px, 0.3vw, 2px) clamp(4px, 0.8vw, 10px)",
+                                      backgroundColor: CATEGORY_COLORS[cat]?.bg ?? "#f5f5f4",
+                                      color: CATEGORY_COLORS[cat]?.text ?? "#57534e",
+                                    }}
+                                    className="inline-flex rounded-full font-semibold"
                                   >
                                     {categoryLabels[cat] || cat}
                                   </span>
