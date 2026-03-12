@@ -6,6 +6,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import type { CategoryDef, Deliberation } from "@/lib/types";
+import { BRAND_COLOR } from "@/lib/constants";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -39,8 +40,8 @@ interface SeedAnswer {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const USER_COLOR = "#c84a20";
-const AGENT_COLORS = ["#2a6fb0", "#9b3a8a", "#2a8a4a"];
+const USER_COLOR = BRAND_COLOR;
+const DEMO_AGENT_COLORS = ["#2a6fb0", "#9b3a8a", "#2a8a4a"];
 
 const ALL_PHASES: Phase[] = [
   "intro",
@@ -684,7 +685,7 @@ function ExplainAgentScene({ onNext }: { onNext: () => void }) {
               marginBottom: 14,
             }}
           >
-            {[USER_COLOR, ...AGENT_COLORS].map((c, i) => (
+            {[USER_COLOR, ...DEMO_AGENT_COLORS].map((c, i) => (
               <motion.div
                 key={i}
                 animate={{ y: [0, -5, 0] }}
@@ -1573,7 +1574,7 @@ function LaunchScene({
             marginBottom: 16,
           }}
         >
-          {[USER_COLOR, ...AGENT_COLORS].map((c, i) => (
+          {[USER_COLOR, ...DEMO_AGENT_COLORS].map((c, i) => (
             <motion.div
               key={i}
               initial={{ opacity: 0, scale: 0, rotate: -20 }}

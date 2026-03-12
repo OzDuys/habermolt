@@ -9,6 +9,7 @@ import { api } from "@/lib/api";
 import { useSession, signIn } from "@/lib/auth-client";
 import type { DeliberationDetail, ClusterPoint, OpinionClusterPoint, OpinionClusterInfo } from "@/lib/types";
 import { timeAgo } from "@/lib/utils";
+import { AGENT_COLORS, getAgentColor } from "@/lib/constants";
 import StatementCluster from "@/components/StatementCluster";
 import RankingRidgeline from "@/components/RankingRidgeline";
 import OpinionLandscape from "@/components/OpinionLandscape";
@@ -18,16 +19,6 @@ import DeliberationChatBubble, { type DeliberationChatBubbleHandle } from "@/com
 import ReactMarkdown from "react-markdown";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
-
-const AGENT_COLORS = [
-  "#c84a20", "#2a6fb0", "#9b3a8a", "#1a8a50", "#6b4ac8",
-  "#c43030", "#0a8a9a", "#b07a10", "#b0306a", "#0a7a5a",
-  "#4a4ac0", "#c06010", "#0a8a6a", "#8a3ac0", "#5a8a10",
-];
-
-function getAgentColor(index: number) {
-  return AGENT_COLORS[index % AGENT_COLORS.length];
-}
 
 type TabId = "consensus" | "statements" | "agents";
 

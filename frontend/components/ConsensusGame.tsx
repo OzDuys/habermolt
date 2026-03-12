@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
+import { BRAND_COLOR } from "@/lib/constants";
 import Link from "next/link";
 
 // ─── Schulze Method ─────────────────────────────────────────────────────────
@@ -85,8 +86,8 @@ const PRESET_QUESTIONS = [
   "Is working from home better?",
 ];
 
-const USER_COLOR = "#c84a20";
-const AGENT_COLORS = ["#2a6fb0", "#9b3a8a", "#2a8a4a"];
+const USER_COLOR = BRAND_COLOR;
+const DEMO_AGENT_COLORS = ["#2a6fb0", "#9b3a8a", "#2a8a4a"];
 
 // ─── Color filter for lobster SVG ────────────────────────────────────────────
 
@@ -650,7 +651,7 @@ function IntroScene({ onStart }: { onStart: () => void }) {
               marginBottom: 20,
             }}
           >
-            {[USER_COLOR, ...AGENT_COLORS].map((c, i) => (
+            {[USER_COLOR, ...DEMO_AGENT_COLORS].map((c, i) => (
               <motion.div
                 key={i}
                 animate={{ y: [0, -6, 0], rotate: [0, i % 2 === 0 ? 3 : -3, 0] }}
@@ -1003,7 +1004,7 @@ function LoadingScene() {
               marginBottom: 14,
             }}
           >
-            {AGENT_COLORS.map((c, i) => (
+            {DEMO_AGENT_COLORS.map((c, i) => (
               <motion.div
                 key={i}
                 animate={{ y: [0, -8, 0] }}
@@ -2357,7 +2358,7 @@ function SchulzeScene({
 
 // ─── Extra colors for dynamically added lobsters ────────────────────────────
 
-const EXTRA_AGENT_COLORS = ["#b5651d", "#6a5acd", "#20b2aa", "#dc143c", "#ff8c00", "#4682b4"];
+const EXTRA_DEMO_AGENT_COLORS = ["#b5651d", "#6a5acd", "#20b2aa", "#dc143c", "#ff8c00", "#4682b4"];
 
 // ─── Scene: End (combined results + continue) ───────────────────────────────
 
@@ -3066,17 +3067,17 @@ export default function ConsensusGame() {
   const [agent1, setAgent1] = useState<LobsterAgent>({
     name: "AkashBot",
     opinion: "",
-    color: AGENT_COLORS[0],
+    color: DEMO_AGENT_COLORS[0],
   });
   const [agent2, setAgent2] = useState<LobsterAgent>({
     name: "VanClaw",
     opinion: "",
-    color: AGENT_COLORS[1],
+    color: DEMO_AGENT_COLORS[1],
   });
   const [agent3, setAgent3] = useState<LobsterAgent>({
     name: "OmerJr",
     opinion: "",
-    color: AGENT_COLORS[2],
+    color: DEMO_AGENT_COLORS[2],
   });
   const [statements, setStatements] = useState<Statement[]>([]);
   const [humanRanking, setHumanRanking] = useState<number[]>([]);
@@ -3177,33 +3178,33 @@ export default function ConsensusGame() {
         setAgent1({
           name: data.agent1Name,
           opinion: data.agent1Opinion,
-          color: AGENT_COLORS[0],
+          color: DEMO_AGENT_COLORS[0],
         });
         setAgent2({
           name: data.agent2Name,
           opinion: data.agent2Opinion,
-          color: AGENT_COLORS[1],
+          color: DEMO_AGENT_COLORS[1],
         });
         setAgent3({
           name: data.agent3Name,
           opinion: data.agent3Opinion,
-          color: AGENT_COLORS[2],
+          color: DEMO_AGENT_COLORS[2],
         });
       } catch {
         setAgent1({
           name: "AkashBot",
           opinion: `Regarding "${question}" — absolutely in favor. The logic is clear and the benefits outweigh any concerns.`,
-          color: AGENT_COLORS[0],
+          color: DEMO_AGENT_COLORS[0],
         });
         setAgent2({
           name: "VanClaw",
           opinion: `On "${question}" — strong objection. The premise is flawed and the downsides are being ignored.`,
-          color: AGENT_COLORS[1],
+          color: DEMO_AGENT_COLORS[1],
         });
         setAgent3({
           name: "OmerJr",
           opinion: `"${question}" — both sides have valid points. The real answer depends on context and how we define the terms.`,
-          color: AGENT_COLORS[2],
+          color: DEMO_AGENT_COLORS[2],
         });
       }
     })();
@@ -3425,7 +3426,7 @@ export default function ConsensusGame() {
       if (data.error) throw new Error(data.error);
 
       const colorIdx = extraAgents.length;
-      const newColor = EXTRA_AGENT_COLORS[colorIdx % EXTRA_AGENT_COLORS.length];
+      const newColor = EXTRA_DEMO_AGENT_COLORS[colorIdx % EXTRA_DEMO_AGENT_COLORS.length];
       const newAgent: LobsterAgent = {
         name: data.name,
         opinion: data.opinion,
@@ -3474,7 +3475,7 @@ export default function ConsensusGame() {
     } catch {
       // Fallback: generate a simple bot locally
       const colorIdx = extraAgents.length;
-      const newColor = EXTRA_AGENT_COLORS[colorIdx % EXTRA_AGENT_COLORS.length];
+      const newColor = EXTRA_DEMO_AGENT_COLORS[colorIdx % EXTRA_DEMO_AGENT_COLORS.length];
       const names = ["REEF-X", "CORAL-5", "TIDE-8", "KELP-3", "WAVE-7", "SHELL-2"];
       const newAgent: LobsterAgent = {
         name: names[colorIdx % names.length],
