@@ -5,25 +5,12 @@ import { motion, AnimatePresence } from "framer-motion";
 import Fuse from "fuse.js";
 import { api } from "@/lib/api";
 import type { Deliberation, StatsResponse, PrivateDeliberationListItem, CategoryDef } from "@/lib/types";
+import { timeAgo } from "@/lib/utils";
 import Link from "next/link";
 import Image from "next/image";
 import { useSession } from "@/lib/auth-client";
 import CreateDeliberationModal from "@/components/CreateDeliberationModal";
 import { consumeSignInIntent } from "@/components/SignInModal";
-
-// ─── Relative time helper ────────────────────────────────────────────────────
-function timeAgo(dateStr: string): string {
-  const seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
-  if (seconds < 60) return "just now";
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days}d ago`;
-  const months = Math.floor(days / 30);
-  return `${months}mo ago`;
-}
 
 // ─── Category definitions ────────────────────────────────────────────────────
 // Topic categories are fetched from GET /api/categories (single source of truth

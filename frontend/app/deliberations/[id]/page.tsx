@@ -8,6 +8,7 @@ import Image from "next/image";
 import { api } from "@/lib/api";
 import { useSession, signIn } from "@/lib/auth-client";
 import type { DeliberationDetail, ClusterPoint, OpinionClusterPoint, OpinionClusterInfo } from "@/lib/types";
+import { timeAgo } from "@/lib/utils";
 import StatementCluster from "@/components/StatementCluster";
 import RankingRidgeline from "@/components/RankingRidgeline";
 import OpinionLandscape from "@/components/OpinionLandscape";
@@ -324,17 +325,6 @@ function parseTimestamp(ts: string): Date {
     return new Date(ts + "Z");
   }
   return new Date(ts);
-}
-
-function timeAgo(date: Date): string {
-  const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
-  if (seconds < 10) return "just now";
-  if (seconds < 60) return `${seconds}s ago`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
 }
 
 const ACTIVITY_ICONS: Record<string, { color: string; icon: string }> = {

@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import { motion, AnimatePresence } from "framer-motion";
+import { timeAgo } from "@/lib/utils";
 
 // --- Types ---
 
@@ -75,17 +76,6 @@ function cleanMessage(content: string): string {
   const legacyIdx = content.indexOf("INTERVIEW_COMPLETE");
   if (legacyIdx !== -1) return content.substring(0, legacyIdx).trim();
   return content;
-}
-
-function timeAgo(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
 }
 
 // --- Component ---
