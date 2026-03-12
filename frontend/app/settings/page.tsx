@@ -7,6 +7,7 @@ import { useSession, signOut } from "@/lib/auth-client";
 import HostedAgentDashboard from "@/components/profile/HostedAgentDashboard";
 import AccountSection from "@/components/profile/AccountSection";
 import OpenClawAgentSection from "@/components/profile/OpenClawAgentSection";
+import { api } from "@/lib/api";
 
 
 export default function ProfilePage() {
@@ -78,19 +79,11 @@ function ProfilePageContent() {
     if (isPending) return;
     if (!session) { router.push("/sign-in"); return; }
 
-    fetch("/api/backend/hosted-agents/me")
-      .then(async (res) => {
-        if (res.status === 404) { setHasHostedAgent(false); return; }
-        setHasHostedAgent(true);
-        const data = await res.json();
-        setIsOnboarded(!!data.onboarded);
-      })
-      .catch(() => setHasHostedAgent(false));
-
-    fetch("/api/backend/agents/me")
-      .then((res) => res.json())
-      .then((data) => setHasOpenClawAgent(!!data.agent))
-      .catch(() => setHasOpenClawAgent(false));
+    api.getMyAgentType().then(({ type, onboarded }) => {
+      setHasHostedAgent(type === "hosted");
+      setHasOpenClawAgent(type === "openclaw");
+      if (type === "hosted") setIsOnboarded(!!onboarded);
+    });
   }, [session, isPending, router]);
 
   if (isPending || !session) return <LoadingSkeleton />;

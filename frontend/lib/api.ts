@@ -308,6 +308,71 @@ class APIClient {
     });
   }
 
+  // User's agent info (human auth — proxied via session)
+
+  /** GET /api/backend/hosted-agents/me — returns null if user has no hosted agent. */
+  async getMyHostedAgent(): Promise<any | null> {
+    try {
+      const res = await fetch(`${this.baseURL}/api/backend/hosted-agents/me`, {
+        headers: { "Content-Type": "application/json" },
+      });
+      if (res.status === 404) return null;
+      if (!res.ok) return null;
+      return await res.json();
+    } catch {
+      return null;
+    }
+  }
+
+  /** GET /api/backend/agents/me — returns { agent: true/false }. */
+  async getMyAgent(): Promise<{ agent: boolean }> {
+    try {
+      return await this.request<{ agent: boolean }>("/api/backend/agents/me");
+    } catch {
+      return { agent: false };
+    }
+  }
+
+  /**
+   * Convenience: resolve whether the user has a hosted agent, openclaw agent, or none.
+   * Encapsulates the "check hosted then check openclaw" pattern used in 4+ pages.
+   */
+  async getMyAgentType(): Promise<{
+    type: "hosted" | "openclaw" | "none";
+    onboarded?: boolean;
+    agentId?: string;
+  }> {
+    const [hosted, openclaw] = await Promise.all([
+      this.getMyHostedAgent(),
+      this.getMyAgent(),
+    ]);
+    if (hosted) {
+      return {
+        type: "hosted",
+        onboarded: !!hosted.onboarded,
+        agentId: hosted.agent_id,
+      };
+    }
+    if (openclaw.agent) {
+      return { type: "openclaw" };
+    }
+    return { type: "none" };
+  }
+
+  /** POST /api/backend/agents/me/rate-consensus */
+  async rateConsensus(data: {
+    deliberation_id: string;
+    representativeness: number;
+    specificity: number;
+    usefulness: number;
+    feedback?: string | null;
+  }): Promise<any> {
+    return this.request<any>("/api/backend/agents/me/rate-consensus", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
   async createCommunityDeliberation(
     communityId: string,
     data: { question: string; categories?: string[] }

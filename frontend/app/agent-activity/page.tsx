@@ -7,6 +7,7 @@ import { useSession } from "@/lib/auth-client";
 import AgentActivitySection from "@/components/profile/AgentActivitySection";
 import AgentChatBubble from "@/components/AgentChatBubble";
 import CreateDeliberationModal from "@/components/CreateDeliberationModal";
+import { api } from "@/lib/api";
 
 export default function AgentPage() {
   return (
@@ -79,19 +80,11 @@ function AgentPageContent() {
     if (isPending) return;
     if (!session) return;
 
-    fetch("/api/backend/hosted-agents/me")
-      .then(async (res) => {
-        if (res.status === 404) { setHasHostedAgent(false); return; }
-        setHasHostedAgent(true);
-        const data = await res.json();
-        setIsOnboarded(!!data.onboarded);
-      })
-      .catch(() => setHasHostedAgent(false));
-
-    fetch("/api/backend/agents/me")
-      .then((res) => res.json())
-      .then((data) => { setHasOpenClawAgent(!!data.agent); })
-      .catch(() => setHasOpenClawAgent(false));
+    api.getMyAgentType().then(({ type, onboarded }) => {
+      setHasHostedAgent(type === "hosted");
+      setHasOpenClawAgent(type === "openclaw");
+      if (type === "hosted") setIsOnboarded(!!onboarded);
+    });
   }, [session, isPending, router]);
 
   if (isPending) {

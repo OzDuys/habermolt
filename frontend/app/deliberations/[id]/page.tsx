@@ -582,22 +582,15 @@ function ConsensusRatingWidget({
     }
     setSaving(true);
     try {
-      const res = await fetch("/api/backend/agents/me/rate-consensus", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          deliberation_id: deliberationId,
-          representativeness,
-          specificity,
-          usefulness,
-          feedback: feedback || null,
-        }),
+      const data = await api.rateConsensus({
+        deliberation_id: deliberationId,
+        representativeness,
+        specificity,
+        usefulness,
+        feedback: feedback || null,
       });
-      if (res.ok) {
-        const data = await res.json();
-        setExisting(data);
-        setExpanded(false);
-      }
+      setExisting(data);
+      setExpanded(false);
     } catch {} finally {
       setSaving(false);
     }
@@ -786,22 +779,11 @@ export default function LiveDeliberationPage() {
       setAgentType("none");
       return;
     }
-    Promise.all([
-      fetch("/api/backend/hosted-agents/me").then(async (res) => {
-        if (res.status === 404) return null;
-        if (!res.ok) return null;
-        return res.json();
-      }),
-      fetch("/api/backend/agents/me").then((res) => res.json()).then((d) => !!d.agent).catch(() => false),
-    ]).then(([hosted, openclaw]) => {
-      if (hosted) {
-        setAgentType("hosted");
-        if (hosted.agent_id) setUserAgentId(hosted.agent_id);
-        setHasProfile(!!hosted.onboarded);
-      } else if (openclaw) {
-        setAgentType("openclaw");
-      } else {
-        setAgentType("none");
+    api.getMyAgentType().then(({ type, onboarded, agentId }) => {
+      setAgentType(type);
+      if (type === "hosted") {
+        if (agentId) setUserAgentId(agentId);
+        setHasProfile(!!onboarded);
       }
     }).catch(() => setAgentType("none"));
   }, [session]);

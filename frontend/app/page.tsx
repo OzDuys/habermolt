@@ -506,18 +506,9 @@ export default function HomePage() {
   // Check agent type and fetch private deliberations when session is available
   useEffect(() => {
     if (!session?.user) { setAgentType("loading"); setPrivateDelibs([]); return; }
-    Promise.all([
-      fetch("/api/backend/hosted-agents/me").then(async (res) => {
-        if (!res.ok) return null;
-        return res.json();
-      }).catch(() => null),
-      fetch("/api/backend/agents/me").then((res) => res.json()).then((data) => !!data.agent).catch(() => false),
-    ]).then(([hosted, openclaw]) => {
-      if (hosted) {
-        setAgentType("hosted");
-        setIsOnboarded(!!hosted.onboarded);
-      } else if (openclaw) setAgentType("openclaw");
-      else setAgentType("none");
+    api.getMyAgentType().then(({ type, onboarded }) => {
+      setAgentType(type);
+      if (type === "hosted") setIsOnboarded(!!onboarded);
     }).catch(() => setAgentType("none"));
     api.getMyPrivateDeliberations().then((res) => setPrivateDelibs(res.deliberations)).catch(() => {});
     api.getMyParticipatedIds().then((ids) => setParticipatedIds(new Set(ids))).catch(() => {});
