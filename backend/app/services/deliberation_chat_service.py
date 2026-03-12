@@ -23,7 +23,7 @@ from app.models import Agent, Deliberation, Opinion, Statement, Ranking
 from app.models.hosted_agent import HostedAgent
 from app.models.agent_session import AgentSession
 from app.services.continuous_deliberation_service import ContinuousDeliberationService
-from app.services.hosted_agent_service import record_token_usage
+from app.services.hosted_agent_service import track_tokens_from_latest_trace
 from app.services.llm_client import LLMClient
 
 logger = logging.getLogger(__name__)
@@ -31,18 +31,6 @@ logger = logging.getLogger(__name__)
 
 # --- Token Tracking ---
 
-def _track_chat_tokens(db: Session, hosted_agent: HostedAgent) -> None:
-    """Record token usage from the most recent LLM trace for this agent."""
-    from app.models.llm_trace import LLMTrace
-
-    trace = (
-        db.query(LLMTrace)
-        .filter(LLMTrace.hosted_agent_id == hosted_agent.id)
-        .order_by(LLMTrace.created_at.desc())
-        .first()
-    )
-    if trace and trace.tokens_in is not None and trace.tokens_out is not None:
-        record_token_usage(db, hosted_agent, trace.tokens_in + trace.tokens_out)
 
 
 # --- System Prompts ---
@@ -417,7 +405,7 @@ def generate_greeting(db: Session, agent: Agent, deliberation: Deliberation, pha
     # Track tokens
     hosted = db.query(HostedAgent).filter(HostedAgent.agent_id == agent.id).first()
     if hosted:
-        _track_chat_tokens(db, hosted)
+        track_tokens_from_latest_trace(db, hosted)
 
     if not greeting:
         if is_participating:
@@ -563,7 +551,7 @@ def stream_message(
         # Track token usage
         hosted = db.query(HostedAgent).filter(HostedAgent.agent_id == agent.id).first()
         if hosted:
-            _track_chat_tokens(db, hosted)
+            track_tokens_from_latest_trace(db, hosted)
 
         response_text = "".join(full_response_parts)
         if not response_text:
@@ -839,7 +827,7 @@ def _do_ranking_for_agent(db: Session, agent: Agent, deliberation: Deliberation)
 
     # Track tokens
     if hosted:
-        _track_chat_tokens(db, hosted)
+        track_tokens_from_latest_trace(db, hosted)
 
     if not response:
         return
@@ -916,7 +904,7 @@ def _do_propose_for_agent(db: Session, agent: Agent, deliberation: Deliberation)
 
     # Track tokens
     if hosted:
-        _track_chat_tokens(db, hosted)
+        track_tokens_from_latest_trace(db, hosted)
 
     if not response:
         return

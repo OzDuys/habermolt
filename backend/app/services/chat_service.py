@@ -14,24 +14,12 @@ from sqlalchemy.orm import Session
 
 from app.models.hosted_agent import HostedAgent
 from app.models.agent_session import AgentSession
-from app.services.hosted_agent_service import get_llm_client, record_token_usage
+from app.services.hosted_agent_service import get_llm_client, track_tokens_from_latest_trace
 from app.services.agent_tools import get_chat_tool_schemas, execute_tool
 
 logger = logging.getLogger(__name__)
 
 
-def _track_chat_tokens(db: Session, hosted_agent: HostedAgent) -> None:
-    """Record token usage from the most recent LLM trace for this agent."""
-    from app.models.llm_trace import LLMTrace
-
-    trace = (
-        db.query(LLMTrace)
-        .filter(LLMTrace.hosted_agent_id == hosted_agent.id)
-        .order_by(LLMTrace.created_at.desc())
-        .first()
-    )
-    if trace and trace.tokens_in is not None and trace.tokens_out is not None:
-        record_token_usage(db, hosted_agent, trace.tokens_in + trace.tokens_out)
 
 
 CHAT_SYSTEM_PROMPT = """\
@@ -221,7 +209,7 @@ def add_user_message(
         )
 
         result = client.chat(messages=llm_messages, temperature=0.7, tools=tools)
-        _track_chat_tokens(db, hosted_agent)
+        track_tokens_from_latest_trace(db, hosted_agent)
 
         if result.content:
             response_parts.append(result.content)
@@ -313,7 +301,7 @@ def stream_user_message(
                     tool_calls_this_turn.append(event_data)
 
             text_this_turn = "".join(accumulated_text)
-            _track_chat_tokens(db, hosted_agent)
+            track_tokens_from_latest_trace(db, hosted_agent)
 
             if not tool_calls_this_turn:
                 # No tool calls — LLM is done, flush buffered text
@@ -528,7 +516,7 @@ def get_initial_greeting(
         messages=llm_messages,
         temperature=0.7,
     ).content or ""
-    _track_chat_tokens(db, hosted_agent)
+    track_tokens_from_latest_trace(db, hosted_agent)
 
     if not response:
         response = (

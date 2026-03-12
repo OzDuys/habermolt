@@ -29,7 +29,7 @@ from app.models.hosted_agent import HostedAgent
 from app.services.hosted_agent_service import (
     get_llm_client,
     check_token_limit,
-    record_token_usage,
+    track_tokens_from_latest_trace,
 )
 from app.services.continuous_deliberation_service import ContinuousDeliberationService
 from app.services import notification_service
@@ -717,7 +717,7 @@ def _join_deliberation(db: Session, hosted_agent: HostedAgent, delib_id: UUID) -
         return None
 
     # Track tokens
-    _track_tokens_from_recent_trace(db, hosted_agent)
+    track_tokens_from_latest_trace(db, hosted_agent)
 
     # Immediately rank statements
     _do_ranking(db, hosted_agent, delib.id)
@@ -800,7 +800,7 @@ def _do_ranking(db: Session, hosted_agent: HostedAgent, delib_id: UUID) -> Optio
         logger.warning(f"Ranking submission failed: {e}")
         return None
 
-    _track_tokens_from_recent_trace(db, hosted_agent)
+    track_tokens_from_latest_trace(db, hosted_agent)
     return rankings
 
 
@@ -872,7 +872,7 @@ def _do_add_statement(db: Session, hosted_agent: HostedAgent, delib_id: UUID) ->
         logger.warning(f"Statement submission failed: {e}")
         return None
 
-    _track_tokens_from_recent_trace(db, hosted_agent)
+    track_tokens_from_latest_trace(db, hosted_agent)
     return {"title": title, "text": statement_text}
 
 
@@ -929,7 +929,7 @@ def _revisit_opinion(db: Session, hosted_agent: HostedAgent, delib_id: UUID) -> 
     except ValueError:
         return None
 
-    _track_tokens_from_recent_trace(db, hosted_agent)
+    track_tokens_from_latest_trace(db, hosted_agent)
     return opinion_text
 
 
@@ -1025,7 +1025,7 @@ def _do_create_deliberation(db: Session, hosted_agent: HostedAgent) -> Optional[
         logger.error(f"Hosted agent {hosted_agent.id}: LLM returned empty opinion for new deliberation")
         return None
 
-    _track_tokens_from_recent_trace(db, hosted_agent)
+    track_tokens_from_latest_trace(db, hosted_agent)
 
     # Create deliberation via service
     import asyncio
@@ -1102,15 +1102,3 @@ def _parse_statement_response(response: str) -> tuple[str, str]:
     return title[:200], statement
 
 
-def _track_tokens_from_recent_trace(db: Session, hosted_agent: HostedAgent) -> None:
-    """Look up the most recent trace for this hosted agent and record its token usage."""
-    from app.models.llm_trace import LLMTrace
-
-    trace = (
-        db.query(LLMTrace)
-        .filter(LLMTrace.hosted_agent_id == hosted_agent.id)
-        .order_by(LLMTrace.created_at.desc())
-        .first()
-    )
-    if trace and trace.tokens_in is not None and trace.tokens_out is not None:
-        record_token_usage(db, hosted_agent, trace.tokens_in + trace.tokens_out)

@@ -194,6 +194,20 @@ def check_token_limit(hosted_agent: HostedAgent) -> bool:
     return under_limit
 
 
+def track_tokens_from_latest_trace(db: Session, hosted_agent: HostedAgent) -> None:
+    """Look up the most recent LLM trace for this hosted agent and record its token usage."""
+    from app.models.llm_trace import LLMTrace
+
+    trace = (
+        db.query(LLMTrace)
+        .filter(LLMTrace.hosted_agent_id == hosted_agent.id)
+        .order_by(LLMTrace.created_at.desc())
+        .first()
+    )
+    if trace and trace.tokens_in is not None and trace.tokens_out is not None:
+        record_token_usage(db, hosted_agent, trace.tokens_in + trace.tokens_out)
+
+
 def record_token_usage(db: Session, hosted_agent: HostedAgent, tokens: int) -> None:
     """Record token usage and pause if limit reached."""
     _maybe_reset_billing_period(hosted_agent)
