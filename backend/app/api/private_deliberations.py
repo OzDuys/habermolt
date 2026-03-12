@@ -13,8 +13,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
 
-from app.config import settings
 from app.database import get_db
+from app.middleware.auth import require_user_id
 from app.models import Agent, Deliberation, DeliberationStage, Opinion
 from app.models.deliberation_member import DeliberationMember
 from app.models.hosted_agent import HostedAgent
@@ -36,17 +36,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/deliberations", tags=["private-deliberations"])
 
 
-# --- Auth helper (same pattern as hosted_agents.py) ---
-
-def _require_user_id(req: Request) -> str:
-    if settings.INTERNAL_API_SECRET:
-        internal_secret = req.headers.get("X-Internal-Secret")
-        if internal_secret != settings.INTERNAL_API_SECRET:
-            raise HTTPException(status_code=401, detail="Authentication required.")
-    user_id = req.headers.get("X-User-Id")
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Authentication required.")
-    return user_id
 
 
 def _find_user_agent(db: Session, user_id: str) -> Agent | None:
@@ -125,7 +114,7 @@ async def create_deliberation_human(
     The user will be interviewed inline after creation, and seed statements
     are generated after the interview opinion is submitted.
     """
-    user_id = _require_user_id(req)
+    user_id = require_user_id(req)
 
     agent = _find_user_agent(db, user_id)
     if not agent:
@@ -251,7 +240,7 @@ async def join_deliberation(
     Requires human authentication (X-User-Id header).
     The user's agent (HostedAgent or OpenClaw) is added as a member.
     """
-    user_id = _require_user_id(req)
+    user_id = require_user_id(req)
 
     deliberation = db.query(Deliberation).filter(
         Deliberation.invite_code == invite_code
@@ -420,7 +409,7 @@ async def list_my_private_deliberations(
     List all private deliberations the user has created or joined.
     Requires human authentication (X-User-Id header).
     """
-    user_id = _require_user_id(req)
+    user_id = require_user_id(req)
 
     agent = _find_user_agent(db, user_id)
     if not agent:
@@ -501,7 +490,7 @@ async def list_my_participated_ids(
     db: Session = Depends(get_db),
 ):
     """Return deliberation IDs where the user's agent has submitted an opinion."""
-    user_id = _require_user_id(req)
+    user_id = require_user_id(req)
     agent = _find_user_agent(db, user_id)
     if not agent:
         return {"deliberation_ids": []}

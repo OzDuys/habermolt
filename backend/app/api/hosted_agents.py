@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db, SessionLocal
+from app.middleware.auth import require_user_id
 from app.models import Deliberation
 from app.models.hosted_agent import HostedAgent
 from app.services import hosted_agent_service, notification_service
@@ -94,17 +95,6 @@ class DownloadSessionsRequest(BaseModel):
     session_ids: list[str]
 
 
-# --- Auth helper (same pattern as agents.py) ---
-
-def _require_user_id(req: Request) -> str:
-    if settings.INTERNAL_API_SECRET:
-        internal_secret = req.headers.get("X-Internal-Secret")
-        if internal_secret != settings.INTERNAL_API_SECRET:
-            raise HTTPException(status_code=401, detail="Authentication required.")
-    user_id = req.headers.get("X-User-Id")
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Authentication required.")
-    return user_id
 
 
 def _require_cron_secret(req: Request) -> None:
@@ -261,7 +251,7 @@ async def create_hosted_agent(
     req: Request,
     db: Session = Depends(get_db),
 ):
-    user_id = _require_user_id(req)
+    user_id = require_user_id(req)
     try:
         ha = hosted_agent_service.create_hosted_agent(
             db, user_id, body.display_name, body.pricing_tier, body.byok_api_key, body.model
@@ -291,7 +281,7 @@ async def create_default_hosted_agent(
 ):
     """Create a default unnamed haberagent for quick onboarding (e.g., invite link flow).
     Idempotent: returns existing agent if user already has one."""
-    user_id = _require_user_id(req)
+    user_id = require_user_id(req)
 
     # If user already has a hosted agent, return it
     existing_hosted = hosted_agent_service.get_hosted_agent_by_user(db, user_id)
@@ -324,7 +314,7 @@ async def create_default_hosted_agent(
 
 @router.get("/me")
 async def get_my_hosted_agent(req: Request, db: Session = Depends(get_db)):
-    user_id = _require_user_id(req)
+    user_id = require_user_id(req)
     ha = hosted_agent_service.get_hosted_agent_by_user(db, user_id)
     if not ha:
         raise HTTPException(status_code=404, detail="No hosted agent found")
@@ -340,7 +330,7 @@ async def update_my_hosted_agent(
     req: Request,
     db: Session = Depends(get_db),
 ):
-    user_id = _require_user_id(req)
+    user_id = require_user_id(req)
     ha = hosted_agent_service.get_hosted_agent_by_user(db, user_id)
     if not ha:
         raise HTTPException(status_code=404, detail="No hosted agent found")
@@ -355,7 +345,7 @@ async def update_my_hosted_agent(
 
 @router.delete("/me", status_code=204)
 async def delete_my_hosted_agent(req: Request, db: Session = Depends(get_db)):
-    user_id = _require_user_id(req)
+    user_id = require_user_id(req)
     ha = hosted_agent_service.get_hosted_agent_by_user(db, user_id)
     if not ha:
         raise HTTPException(status_code=404, detail="No hosted agent found")
@@ -364,7 +354,7 @@ async def delete_my_hosted_agent(req: Request, db: Session = Depends(get_db)):
 
 @router.post("/me/byok-key", status_code=200)
 async def set_byok_key(body: ByokKeyRequest, req: Request, db: Session = Depends(get_db)):
-    user_id = _require_user_id(req)
+    user_id = require_user_id(req)
     ha = hosted_agent_service.get_hosted_agent_by_user(db, user_id)
     if not ha:
         raise HTTPException(status_code=404, detail="No hosted agent found")
@@ -377,7 +367,7 @@ async def set_byok_key(body: ByokKeyRequest, req: Request, db: Session = Depends
 
 @router.delete("/me/byok-key", status_code=200)
 async def remove_byok_key(req: Request, db: Session = Depends(get_db)):
-    user_id = _require_user_id(req)
+    user_id = require_user_id(req)
     ha = hosted_agent_service.get_hosted_agent_by_user(db, user_id)
     if not ha:
         raise HTTPException(status_code=404, detail="No hosted agent found")
@@ -389,7 +379,7 @@ async def remove_byok_key(req: Request, db: Session = Depends(get_db)):
 
 @router.get("/me/chat")
 async def get_chat(req: Request, db: Session = Depends(get_db)):
-    user_id = _require_user_id(req)
+    user_id = require_user_id(req)
     ha = hosted_agent_service.get_hosted_agent_by_user(db, user_id)
     if not ha:
         raise HTTPException(status_code=404, detail="No hosted agent found")
@@ -412,7 +402,7 @@ async def send_chat_message(
     req: Request,
     db: Session = Depends(get_db),
 ):
-    user_id = _require_user_id(req)
+    user_id = require_user_id(req)
     ha = hosted_agent_service.get_hosted_agent_by_user(db, user_id)
     if not ha:
         raise HTTPException(status_code=404, detail="No hosted agent found")
@@ -442,7 +432,7 @@ async def stream_chat_message(
     db: Session = Depends(get_db),
 ):
     """Stream a chat response as Server-Sent Events."""
-    user_id = _require_user_id(req)
+    user_id = require_user_id(req)
     ha = hosted_agent_service.get_hosted_agent_by_user(db, user_id)
     if not ha:
         raise HTTPException(status_code=404, detail="No hosted agent found")
@@ -506,7 +496,7 @@ async def stream_chat_message(
 
 @router.get("/me/profile")
 async def get_profile(req: Request, db: Session = Depends(get_db)):
-    user_id = _require_user_id(req)
+    user_id = require_user_id(req)
     ha = hosted_agent_service.get_hosted_agent_by_user(db, user_id)
     if not ha:
         raise HTTPException(status_code=404, detail="No hosted agent found")
@@ -518,7 +508,7 @@ async def get_profile(req: Request, db: Session = Depends(get_db)):
 
 @router.put("/me/profile")
 async def update_profile(body: ProfileUpdateRequest, req: Request, db: Session = Depends(get_db)):
-    user_id = _require_user_id(req)
+    user_id = require_user_id(req)
     ha = hosted_agent_service.get_hosted_agent_by_user(db, user_id)
     if not ha:
         raise HTTPException(status_code=404, detail="No hosted agent found")
@@ -536,7 +526,7 @@ async def update_profile(body: ProfileUpdateRequest, req: Request, db: Session =
 
 @router.get("/me/chat/history")
 async def list_chat_sessions(req: Request, db: Session = Depends(get_db)):
-    user_id = _require_user_id(req)
+    user_id = require_user_id(req)
     ha = hosted_agent_service.get_hosted_agent_by_user(db, user_id)
     if not ha:
         raise HTTPException(status_code=404, detail="No hosted agent found")
@@ -560,7 +550,7 @@ async def list_chat_sessions(req: Request, db: Session = Depends(get_db)):
 
 @router.get("/me/chat/{session_id}")
 async def get_chat_session(session_id: str, req: Request, db: Session = Depends(get_db)):
-    user_id = _require_user_id(req)
+    user_id = require_user_id(req)
     ha = hosted_agent_service.get_hosted_agent_by_user(db, user_id)
     if not ha:
         raise HTTPException(status_code=404, detail="No hosted agent found")
@@ -579,7 +569,7 @@ async def get_chat_session(session_id: str, req: Request, db: Session = Depends(
 
 @router.post("/me/heartbeat")
 async def manual_heartbeat(req: Request, db: Session = Depends(get_db)):
-    user_id = _require_user_id(req)
+    user_id = require_user_id(req)
     ha = hosted_agent_service.get_hosted_agent_by_user(db, user_id)
     if not ha:
         raise HTTPException(status_code=404, detail="No hosted agent found")
@@ -590,7 +580,7 @@ async def manual_heartbeat(req: Request, db: Session = Depends(get_db)):
 @router.post("/me/heartbeat/stream")
 async def manual_heartbeat_stream(req: Request, db: Session = Depends(get_db)):
     """Stream heartbeat results as Server-Sent Events."""
-    user_id = _require_user_id(req)
+    user_id = require_user_id(req)
     ha = hosted_agent_service.get_hosted_agent_by_user(db, user_id)
     if not ha:
         raise HTTPException(status_code=404, detail="No hosted agent found")
@@ -627,7 +617,7 @@ async def rerank_statements(
     db: Session = Depends(get_db),
 ):
     """Allow user to update their agent's rankings on a deliberation."""
-    user_id = _require_user_id(req)
+    user_id = require_user_id(req)
     ha = hosted_agent_service.get_hosted_agent_by_user(db, user_id)
     if not ha:
         raise HTTPException(status_code=404, detail="No hosted agent found")
@@ -679,7 +669,7 @@ Output ONLY the profile markdown. No preamble, no explanation, no wrapping code 
 @router.post("/me/profile/rebuild")
 async def rebuild_profile(body: RebuildProfileRequest, req: Request, db: Session = Depends(get_db)):
     """Use LLM to rebuild agent profile from chat transcripts + deliberation context."""
-    user_id = _require_user_id(req)
+    user_id = require_user_id(req)
     ha = hosted_agent_service.get_hosted_agent_by_user(db, user_id)
     if not ha:
         raise HTTPException(status_code=404, detail="No hosted agent found")
@@ -776,7 +766,7 @@ Output ONLY the profile markdown. No preamble, no explanation, no wrapping code 
 @router.post("/me/profile/import")
 async def import_memory(body: ImportMemoryRequest, req: Request, db: Session = Depends(get_db)):
     """Use LLM to merge imported AI provider memory into agent profile."""
-    user_id = _require_user_id(req)
+    user_id = require_user_id(req)
     ha = hosted_agent_service.get_hosted_agent_by_user(db, user_id)
     if not ha:
         raise HTTPException(status_code=404, detail="No hosted agent found")
@@ -814,7 +804,7 @@ async def import_memory(body: ImportMemoryRequest, req: Request, db: Session = D
 @router.get("/me/chat/{session_id}/download")
 async def download_session(session_id: str, req: Request, db: Session = Depends(get_db)):
     """Download a single chat session as markdown."""
-    user_id = _require_user_id(req)
+    user_id = require_user_id(req)
     ha = hosted_agent_service.get_hosted_agent_by_user(db, user_id)
     if not ha:
         raise HTTPException(status_code=404, detail="No hosted agent found")
@@ -836,7 +826,7 @@ async def download_session(session_id: str, req: Request, db: Session = Depends(
 @router.post("/me/chat/download")
 async def download_sessions(body: DownloadSessionsRequest, req: Request, db: Session = Depends(get_db)):
     """Download multiple chat sessions as a single markdown file."""
-    user_id = _require_user_id(req)
+    user_id = require_user_id(req)
     ha = hosted_agent_service.get_hosted_agent_by_user(db, user_id)
     if not ha:
         raise HTTPException(status_code=404, detail="No hosted agent found")

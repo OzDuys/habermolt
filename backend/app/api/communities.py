@@ -11,8 +11,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, func, text
 
-from app.config import settings
 from app.database import get_db
+from app.middleware.auth import require_user_id
 from app.models import Agent, Deliberation, DeliberationStage, Opinion
 from app.models.community import Community
 from app.models.community_member import CommunityMember
@@ -34,17 +34,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/communities", tags=["communities"])
 
 
-# --- Auth helper (same pattern as private_deliberations.py) ---
-
-def _require_user_id(req: Request) -> str:
-    if settings.INTERNAL_API_SECRET:
-        internal_secret = req.headers.get("X-Internal-Secret")
-        if internal_secret != settings.INTERNAL_API_SECRET:
-            raise HTTPException(status_code=401, detail="Authentication required.")
-    user_id = req.headers.get("X-User-Id")
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Authentication required.")
-    return user_id
 
 
 def _get_user_name(db: Session, user_id: str) -> str | None:
@@ -95,7 +84,7 @@ async def create_community(
     db: Session = Depends(get_db),
 ):
     """Create a new community. The creator becomes an admin member."""
-    user_id = _require_user_id(req)
+    user_id = require_user_id(req)
 
     invite_code = secrets.token_urlsafe(16)
 
@@ -144,7 +133,7 @@ async def list_my_communities(
     db: Session = Depends(get_db),
 ):
     """List all communities the user belongs to."""
-    user_id = _require_user_id(req)
+    user_id = require_user_id(req)
 
     memberships = (
         db.query(CommunityMember)
@@ -221,7 +210,7 @@ async def join_community(
     db: Session = Depends(get_db),
 ):
     """Join a community using an invite code."""
-    user_id = _require_user_id(req)
+    user_id = require_user_id(req)
 
     community = db.query(Community).filter(Community.invite_code == code).first()
     if not community:
@@ -291,7 +280,7 @@ async def leave_community(
     db: Session = Depends(get_db),
 ):
     """Leave a community. Removes membership and access to community deliberations."""
-    user_id = _require_user_id(req)
+    user_id = require_user_id(req)
 
     member = db.query(CommunityMember).filter(
         and_(
@@ -352,7 +341,7 @@ async def get_community_detail(
     db: Session = Depends(get_db),
 ):
     """Get detailed community info including members and deliberations. Must be a member."""
-    user_id = _require_user_id(req)
+    user_id = require_user_id(req)
 
     community = db.query(Community).filter(Community.id == community_id).first()
     if not community:
@@ -399,7 +388,7 @@ async def update_community(
     db: Session = Depends(get_db),
 ):
     """Update a community's name and/or description. Must be an admin."""
-    user_id = _require_user_id(req)
+    user_id = require_user_id(req)
 
     community = db.query(Community).filter(Community.id == community_id).first()
     if not community:
@@ -457,7 +446,7 @@ async def create_community_deliberation(
     db: Session = Depends(get_db),
 ):
     """Create a deliberation scoped to a community. Must be a member."""
-    user_id = _require_user_id(req)
+    user_id = require_user_id(req)
 
     community = db.query(Community).filter(Community.id == community_id).first()
     if not community:

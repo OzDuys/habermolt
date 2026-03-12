@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.config import settings
 from app.database import get_db
+from app.middleware.auth import require_user_id
 from app.models import Agent, Deliberation, Opinion, Ranking, Statement
 from app.models.agent_rating import AgentRating
 from app.models.consensus_rating import ConsensusRating
@@ -34,29 +35,6 @@ limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(prefix="/agents", tags=["agents"])
 
 
-def _require_user_id(req: Request) -> str:
-    """Extract and validate X-User-Id header.
-
-    When INTERNAL_API_SECRET is configured, also requires the
-    X-Internal-Secret header to match — preventing attackers from
-    calling the backend directly with a forged X-User-Id.
-    """
-    # Validate internal secret if configured
-    if settings.INTERNAL_API_SECRET:
-        internal_secret = req.headers.get("X-Internal-Secret")
-        if internal_secret != settings.INTERNAL_API_SECRET:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Authentication required."
-            )
-
-    user_id = req.headers.get("X-User-Id")
-    if not user_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required."
-        )
-    return user_id
 
 
 @router.post(
@@ -121,7 +99,7 @@ async def claim_agent(
     Called by the frontend after the human authenticates via better-auth.
     The user_id is passed by the frontend API route which validates the session.
     """
-    user_id = _require_user_id(req)
+    user_id = require_user_id(req)
 
     try:
         agent = claim_agent_for_user(db, request.token, user_id, force=request.force)
@@ -154,7 +132,7 @@ async def get_user_profile(
     req: Request,
     db: Session = Depends(get_db),
 ):
-    user_id = _require_user_id(req)
+    user_id = require_user_id(req)
     agent = get_agent_by_user_id(db, user_id)
     return UserProfileResponse(
         agent=AgentResponse.model_validate(agent) if agent else None,
@@ -170,7 +148,7 @@ async def unlink_agent_endpoint(
     req: Request,
     db: Session = Depends(get_db),
 ):
-    user_id = _require_user_id(req)
+    user_id = require_user_id(req)
     try:
         unlink_agent(db, user_id)
     except ValueError as e:
@@ -189,7 +167,7 @@ async def update_human_name(
     db: Session = Depends(get_db),
 ):
     """Sync agent human_name when the user changes their display name."""
-    user_id = _require_user_id(req)
+    user_id = require_user_id(req)
     agent = get_agent_by_user_id(db, user_id)
     if not agent:
         return {"ok": True}  # No agent to update, that's fine
@@ -212,7 +190,7 @@ async def refresh_api_key(
     req: Request,
     db: Session = Depends(get_db),
 ):
-    user_id = _require_user_id(req)
+    user_id = require_user_id(req)
     try:
         _, plaintext_key = refresh_agent_api_key(db, user_id)
         return RefreshApiKeyResponse(
@@ -240,7 +218,7 @@ async def get_agent_activity(
     participated in, what it said, how it ranked statements, and how those
     ranks compare to the group consensus.
     """
-    user_id = _require_user_id(req)
+    user_id = require_user_id(req)
     agent = get_agent_by_user_id(db, user_id)
     if not agent:
         raise HTTPException(
@@ -502,7 +480,7 @@ async def rate_agent(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    user_id = _require_user_id(request)
+    user_id = require_user_id(request)
     agent = get_agent_by_user_id(db, user_id)
     if not agent:
         raise HTTPException(
@@ -561,7 +539,7 @@ async def rate_consensus(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    user_id = _require_user_id(request)
+    user_id = require_user_id(request)
 
     # Verify deliberation exists
     delib = db.query(Deliberation).filter(Deliberation.id == body.deliberation_id).first()
@@ -622,7 +600,7 @@ async def get_consensus_rating(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    user_id = _require_user_id(request)
+    user_id = require_user_id(request)
     import uuid as _uuid
     try:
         delib_uuid = _uuid.UUID(deliberation_id)

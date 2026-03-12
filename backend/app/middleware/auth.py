@@ -1,14 +1,38 @@
 """
-Authentication middleware for API key validation.
+Authentication middleware for API key and user session validation.
 """
 
 from fastapi import Request, HTTPException, status
 from fastapi.security import APIKeyHeader
 from typing import Optional
 
+from app.config import settings
 from app.models import Agent
 from app.services.auth_service import verify_api_key
 from app.database import SessionLocal
+
+
+def require_user_id(req: Request) -> str:
+    """Extract and validate X-User-Id header from frontend proxy requests.
+
+    When INTERNAL_API_SECRET is configured, also requires the
+    X-Internal-Secret header to match — preventing attackers from
+    calling the backend directly with a forged X-User-Id.
+    """
+    if settings.INTERNAL_API_SECRET:
+        internal_secret = req.headers.get("X-Internal-Secret")
+        if internal_secret != settings.INTERNAL_API_SECRET:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication required.",
+            )
+    user_id = req.headers.get("X-User-Id")
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required.",
+        )
+    return user_id
 
 
 # Define API key header

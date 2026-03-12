@@ -13,8 +13,8 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.config import settings
 from app.database import get_db, SessionLocal
+from app.middleware.auth import require_user_id
 from app.models import Agent, Deliberation
 from app.models.hosted_agent import HostedAgent
 from app.models.agent_session import AgentSession
@@ -47,15 +47,6 @@ class SessionStatusResponse(BaseModel):
     setup_progress: dict | None = None
 
 
-def _require_user_id(req: Request) -> str:
-    if settings.INTERNAL_API_SECRET:
-        internal_secret = req.headers.get("X-Internal-Secret")
-        if internal_secret != settings.INTERNAL_API_SECRET:
-            raise HTTPException(status_code=401, detail="Authentication required.")
-    user_id = req.headers.get("X-User-Id")
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Authentication required.")
-    return user_id
 
 
 def _find_hosted_agent(db: Session, user_id: str) -> HostedAgent:
@@ -72,7 +63,7 @@ async def start_chat(
     db: Session = Depends(get_db),
 ):
     """Start or resume a deliberation chat session."""
-    user_id = _require_user_id(req)
+    user_id = require_user_id(req)
     hosted = _find_hosted_agent(db, user_id)
     agent = hosted.agent
     at_token_limit = not check_token_limit(hosted)
@@ -123,7 +114,7 @@ async def get_session_status(
     db: Session = Depends(get_db),
 ):
     """Get the current status of a chat session (used for polling during setup)."""
-    user_id = _require_user_id(req)
+    user_id = require_user_id(req)
     hosted = _find_hosted_agent(db, user_id)
 
     session = db.query(AgentSession).filter(
@@ -153,7 +144,7 @@ async def retry_setup(
     db: Session = Depends(get_db),
 ):
     """Retry a failed background setup."""
-    user_id = _require_user_id(req)
+    user_id = require_user_id(req)
     hosted = _find_hosted_agent(db, user_id)
 
     session = db.query(AgentSession).filter(
@@ -182,7 +173,7 @@ async def send_chat_message(
     db: Session = Depends(get_db),
 ):
     """Stream a deliberation chat response as Server-Sent Events."""
-    user_id = _require_user_id(req)
+    user_id = require_user_id(req)
     hosted = _find_hosted_agent(db, user_id)
 
     if not check_token_limit(hosted):
