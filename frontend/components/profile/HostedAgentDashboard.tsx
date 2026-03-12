@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import TokenUsageBar from "@/components/TokenUsageBar";
+import type { HostedAgent, SessionSummary } from "@/lib/types";
 import { timeAgo } from "@/lib/utils";
 
 const CONFIG_MODELS = [
@@ -19,29 +20,6 @@ const CONFIG_FREQUENCIES = [
   { value: "daily", label: "Once a day" },
   { value: "weekly", label: "Once a week" },
 ];
-
-interface HostedAgent {
-  id: string;
-  display_name: string;
-  model: string;
-  participation_frequency: string;
-  pricing_tier: string;
-  is_active: boolean;
-  paused_reason: string | null;
-  has_profile: boolean;
-  profile_version: number;
-  tokens_used_period: number;
-  token_limit: number | null;
-  last_heartbeat_at: string | null;
-  created_at: string;
-}
-
-interface SessionSummary {
-  id: string;
-  topic: string | null;
-  message_count: number;
-  created_at: string;
-}
 
 export default function HostedAgentDashboard() {
   const router = useRouter();

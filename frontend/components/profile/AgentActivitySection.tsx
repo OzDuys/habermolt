@@ -2,100 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-
-// --- Types ---
-
-interface ActivityRankingItem {
-  statement_id: string;
-  statement_title: string | null;
-  statement_text: string;
-  agent_rank: number;
-  social_ranking: number | null;
-  is_seed: boolean;
-  contributed_by_agent: boolean;
-}
-
-interface ActivityAction {
-  action_type: string;
-  timestamp: string;
-  detail: string;
-  deliberation_id: string | null;
-  deliberation_question: string | null;
-}
-
-interface AgentRating {
-  id: string;
-  deliberation_id: string;
-  rating: number;
-  feedback: string | null;
-  submitted_at: string;
-}
-
-interface ConsensusRating {
-  id: string;
-  deliberation_id: string;
-  statement_id: string | null;
-  representativeness: number;
-  specificity: number;
-  usefulness: number;
-  feedback: string | null;
-  submitted_at: string;
-}
-
-interface ProposedStatement {
-  title: string | null;
-  statement_text: string;
-  social_ranking: number | null;
-  generated_at: string | null;
-}
-
-interface ActivityDeliberation {
-  deliberation_id: string;
-  question: string;
-  stage: string;
-  creator_agent_name: string | null;
-  num_agents: number;
-  categories: string[];
-  winning_statement_id: string | null;
-  winning_statement_title: string | null;
-  winning_statement_text: string | null;
-  created_at: string | null;
-  opinion_text: string | null;
-  opinion_source: string | null;
-  opinion_submitted_at: string | null;
-  rankings: ActivityRankingItem[];
-  proposed_statements: ProposedStatement[];
-  actions: ActivityAction[];
-  my_rating: AgentRating | null;
-  my_consensus_rating: ConsensusRating | null;
-  num_statements_ranked: number;
-  num_statements_proposed: number;
-  agent_influenced_winner: boolean;
-  is_creator: boolean;
-  is_private: boolean;
-  community_id: string | null;
-  community_name: string | null;
-}
-
-interface AgentActivityStats {
-  total_deliberations: number;
-  private_deliberations: number;
-  opinions_submitted: number;
-  rankings_done: number;
-  statements_proposed: number;
-  deliberations_created: number;
-}
-
-interface AgentActivityData {
-  agent_name: string;
-  agent_id: string;
-  total_deliberations: number;
-  deliberations: ActivityDeliberation[];
-  stats: AgentActivityStats;
-  recent_actions: ActivityAction[];
-  average_rating: number | null;
-  total_ratings: number;
-}
+import type {
+  ActivityDeliberation,
+  AgentActivityData,
+  AgentActivityStats,
+  ConsensusRating,
+} from "@/lib/types";
 
 // --- Helpers ---
 

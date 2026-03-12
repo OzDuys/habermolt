@@ -2,17 +2,8 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
+import type { Notification } from "@/lib/types";
 import { timeAgo } from "@/lib/utils";
-
-interface Notification {
-  id: string;
-  type: string;
-  title: string;
-  body: string;
-  read: boolean;
-  metadata: Record<string, string> | null;
-  created_at: string;
-}
 
 export default function NotificationBell() {
   const [count, setCount] = useState(0);

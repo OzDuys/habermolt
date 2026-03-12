@@ -294,3 +294,136 @@ export interface OpinionClusterResponse {
   total: number;
   deliberation_id: string;
 }
+
+// Hosted agent types
+
+export interface HostedAgent {
+  id: string;
+  agent_id?: string;
+  display_name: string;
+  model: string;
+  participation_frequency: string;
+  pricing_tier: string;
+  is_active: boolean;
+  paused_reason: string | null;
+  has_profile: boolean;
+  onboarded?: boolean;
+  profile_version: number;
+  tokens_used_period: number;
+  token_limit: number | null;
+  last_heartbeat_at: string | null;
+  created_at: string;
+}
+
+export interface SessionSummary {
+  id: string;
+  topic: string | null;
+  message_count: number;
+  created_at: string;
+}
+
+// Notification types
+
+export interface Notification {
+  id: string;
+  type: string;
+  title: string;
+  body: string;
+  read: boolean;
+  metadata: Record<string, string> | null;
+  created_at: string;
+}
+
+// Agent activity types
+
+export interface ActivityRankingItem {
+  statement_id: string;
+  statement_title: string | null;
+  statement_text: string;
+  agent_rank: number;
+  social_ranking: number | null;
+  is_seed: boolean;
+  contributed_by_agent: boolean;
+}
+
+export interface ActivityAction {
+  action_type: string;
+  timestamp: string;
+  detail: string;
+  deliberation_id: string | null;
+  deliberation_question: string | null;
+}
+
+export interface AgentRating {
+  id: string;
+  deliberation_id: string;
+  rating: number;
+  feedback: string | null;
+  submitted_at: string;
+}
+
+export interface ConsensusRating {
+  id: string;
+  deliberation_id: string;
+  statement_id: string | null;
+  representativeness: number;
+  specificity: number;
+  usefulness: number;
+  feedback: string | null;
+  submitted_at: string;
+}
+
+export interface ProposedStatement {
+  title: string | null;
+  statement_text: string;
+  social_ranking: number | null;
+  generated_at: string | null;
+}
+
+export interface ActivityDeliberation {
+  deliberation_id: string;
+  question: string;
+  stage: string;
+  creator_agent_name: string | null;
+  num_agents: number;
+  categories: string[];
+  winning_statement_id: string | null;
+  winning_statement_title: string | null;
+  winning_statement_text: string | null;
+  created_at: string | null;
+  opinion_text: string | null;
+  opinion_source: string | null;
+  opinion_submitted_at: string | null;
+  rankings: ActivityRankingItem[];
+  proposed_statements: ProposedStatement[];
+  actions: ActivityAction[];
+  my_rating: AgentRating | null;
+  my_consensus_rating: ConsensusRating | null;
+  num_statements_ranked: number;
+  num_statements_proposed: number;
+  agent_influenced_winner: boolean;
+  is_creator: boolean;
+  is_private: boolean;
+  community_id: string | null;
+  community_name: string | null;
+}
+
+export interface AgentActivityStats {
+  total_deliberations: number;
+  private_deliberations: number;
+  opinions_submitted: number;
+  rankings_done: number;
+  statements_proposed: number;
+  deliberations_created: number;
+}
+
+export interface AgentActivityData {
+  agent_name: string;
+  agent_id: string;
+  total_deliberations: number;
+  deliberations: ActivityDeliberation[];
+  stats: AgentActivityStats;
+  recent_actions: ActivityAction[];
+  average_rating: number | null;
+  total_ratings: number;
+}
