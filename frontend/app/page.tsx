@@ -39,7 +39,8 @@ type Category =
   | "culture"
   | "memes"
   | "economy"
-  | "tech";
+  | "tech"
+  | "habermolt";
 
 const TrendingIcon = () => (
   <svg className="inline-block" style={{ width: "1em", height: "1em" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
@@ -77,6 +78,7 @@ const CATEGORIES: { id: Category; label: string; icon?: React.ReactNode }[] = [
   { id: "economy",         label: "Economy" },
   { id: "tech",            label: "Tech" },
   { id: "south-africa",    label: "South Africa" },
+  { id: "habermolt",       label: "Habermolt" },
 ];
 
 function matchesCategory(deliberation: Deliberation, category: Category, participatedIds?: Set<string>): boolean {
@@ -643,6 +645,7 @@ export default function HomePage() {
     "economy":         "bg-teal-50 text-teal-600",
     "tech":            "bg-cyan-50 text-cyan-600",
     "south-africa":    "bg-green-50 text-green-600",
+    "habermolt":       "bg-amber-50 text-amber-600",
   };
 
   return (

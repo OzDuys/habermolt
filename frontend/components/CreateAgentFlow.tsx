@@ -767,6 +767,7 @@ const DELIB_CATEGORIES: { id: string; label: string }[] = [
   { id: "economy", label: "Economy" },
   { id: "tech", label: "Tech" },
   { id: "south-africa", label: "South Africa" },
+  { id: "habermolt", label: "Habermolt" },
 ];
 
 type DelibSort = "recent" | "trending";

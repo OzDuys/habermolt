@@ -10,7 +10,7 @@ import type { Community } from "@/lib/types";
 
 const CATEGORIES = [
   "ai", "current-affairs", "geopolitics", "societal",
-  "sport", "culture", "memes", "economy", "tech", "south-africa",
+  "sport", "culture", "memes", "economy", "tech", "south-africa", "habermolt",
 ];
 
 type AgentType = "loading" | "none" | "hosted" | "openclaw";

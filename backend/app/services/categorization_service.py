@@ -9,6 +9,7 @@ Valid categories mirror the frontend tabs:
   sport           — Sports, athletics, competitions, sporting events
   culture         — Art, music, film, food, fashion, literature, pop culture
   memes           — Jokes, internet culture, silly questions, memes, banter
+  habermolt       — Meta-discussions about the Habermolt platform itself
 
 A deliberation may belong to multiple categories. The LLM returns a
 comma-separated list of matching slugs, or "none" if nothing fits.
@@ -28,6 +29,7 @@ logger = logging.getLogger(__name__)
 VALID_CATEGORIES = {
     "south-africa", "ai", "current-affairs", "geopolitics",
     "societal", "sport", "culture", "memes", "economy", "tech",
+    "habermolt",
 }
 
 _VALID_TOKENS = ", ".join(sorted(VALID_CATEGORIES)) + ", none"
@@ -47,6 +49,7 @@ Categories:
 - sport: sports, athletics, competitions, tournaments, sporting events, esports
 - culture: art, music, film, food, fashion, literature, pop culture, entertainment, celebrities
 - memes: jokes, internet culture, silly questions, banter, memes, animals being ranked, absurd hypotheticals
+- habermolt: meta-discussions about the Habermolt platform itself — its growth, community, features, governance, roadmap, marketing, use cases
 
 Question: "{question}"
 

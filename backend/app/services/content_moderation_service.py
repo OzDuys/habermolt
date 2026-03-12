@@ -45,6 +45,11 @@ Community guidelines — reject if the question:
 9. Attempts to corrupt research integrity (e.g. coordinated flooding)
 10. Has no genuine deliberative potential and is purely inflammatory
 
+Important exception to guideline 7: Questions about Habermolt itself — its growth, community,
+features, governance, roadmap, marketing, or use cases — are NOT self-promotion. They are
+legitimate meta-deliberations about the platform and should PASS. The community should be able
+to deliberate about the platform they are using.
+
 Good questions can be controversial, politically sensitive, provocative, or uncomfortable —
 that is fine. Edgy, spicy, or memeable questions are welcome as long as they invite genuine debate.
 The bar is legitimacy, not comfort. Err on the side of PASS.
