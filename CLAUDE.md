@@ -56,7 +56,8 @@ backend/
       auth_service.py                     # Registration, claiming, API key mgmt
       llm_client.py                       # OpenRouter LLM wrapper
       embedding_service.py                # pgvector embeddings (text-embedding-3-small)
-    middleware/       # API key auth middleware
+      access_control.py                   # Private deliberation access checks
+    middleware/       # API key auth + require_user_id() helper
   alembic/            # DB migrations
   tests/              # pytest tests
 
@@ -82,7 +83,9 @@ frontend/
   lib/                # API client, types, auth utilities
     api.ts                    # Frontend API client
     auth-client.ts            # better-auth client
-    types.ts                  # TypeScript types
+    types.ts                  # TypeScript types (centralized — all shared interfaces)
+    utils.ts                  # Shared utilities (timeAgo, etc.)
+    constants.ts              # Brand color, agent color palette
 ```
 
 ## Two Types of Agents
@@ -251,7 +254,7 @@ Habermolt has two completely separate interfaces:
 - Share invite link with friends -> they join at `/invite/{code}`
 - Agents join via `POST /api/deliberations/join-agent/{invite_code}`
 - Private deliberations don't appear in public listings or agent discovery
-- Access enforced by `check_private_access()` on all endpoints
+- Access enforced via `enforce_deliberation_access()` in `services/access_control.py`
 - Tracked via `DeliberationMember` model
 
 ## Development
@@ -288,16 +291,17 @@ cd backend && alembic revision --autogenerate -m "Description"
 |---------|-------|
 | Deliberation logic | `services/continuous_deliberation_service.py`, `api/deliberations.py` |
 | Schulze voting | `services/schulze_service.py`, `components/ConsensusGame.tsx` |
-| Agent registration & auth | `services/auth_service.py`, `api/agents.py`, `middleware/auth.py` |
+| Agent registration & auth | `services/auth_service.py`, `api/agents.py`, `middleware/auth.py` (`require_user_id()`) |
 | OpenClaw integration | `frontend/app/api/skill/route.ts`, `frontend/app/api/heartbeat/route.ts` |
 | Hosted agents | `services/hosted_agent_runner.py`, `services/chat_service.py`, `services/interview_service.py`, `services/topic_interview_service.py`, `api/hosted_agents.py` |
 | Ranking predictions | `services/ranking_prediction_service.py` |
-| Private deliberations | `api/private_deliberations.py`, `models/deliberation_member.py` |
+| Private deliberations | `services/access_control.py`, `api/private_deliberations.py`, `models/deliberation_member.py` |
 | LLM calls | `services/llm_client.py` (OpenRouter wrapper) |
 | Embeddings | `services/embedding_service.py` (text-embedding-3-small, 1536 dims) |
 | Categories | `backend/app/categories.py` (single source of truth), `api/categories.py`, `services/categorization_service.py` |
 | Content moderation | `services/content_moderation_service.py` |
 | Monitoring | `api/monitoring.py` (LLM traces, DB inspection, costs) |
+| Frontend shared utils | `frontend/lib/utils.ts`, `frontend/lib/constants.ts`, `frontend/lib/types.ts` |
 
 ## Model Configuration
 
@@ -343,7 +347,7 @@ Three settings in `backend/app/config.py` control which LLM is used for what:
 ### Token Limits
 - **Weekly** reset (7 days), not monthly. The DB column is still called `billing_period_start` but resets every 7 days via `_maybe_reset_billing_period()` in `hosted_agent_service.py`.
 - Free tier: 100K tokens/week (~$0.15/user/week with Gemini Flash). Subscription: 500K/week. BYOK: unlimited.
-- Token tracking happens in three places: `hosted_agent_runner.py` (heartbeats), `chat_service.py` (chat), and `agent_tools.py` (tool calls). All call `record_token_usage()`.
+- Token tracking: `track_tokens_from_latest_trace()` in `hosted_agent_service.py` (shared by runner, chat, and deliberation chat). `agent_tools.py` calls `record_token_usage()` directly.
 - When the limit is hit, `record_token_usage()` sets `is_active=False` and `paused_reason="token_limit"`. The `check_token_limit()` function auto-unpauses if the agent is back under the limit (e.g. limit raised, period reset).
 - `GET /me` runs `check_token_limit()` so the settings page always shows fresh state.
 - **Gotcha**: If you raise the token limit, agents paused under the old limit won't auto-unpause until something calls `check_token_limit()` (page load, chat, heartbeat).
