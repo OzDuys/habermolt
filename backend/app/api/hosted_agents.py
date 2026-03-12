@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db, SessionLocal
 from app.middleware.auth import require_user_id
+from app.services.hosted_agent_service import TOKEN_LIMITS
 from app.models import Deliberation
 from app.models.hosted_agent import HostedAgent
 from app.services import hosted_agent_service, notification_service
@@ -101,13 +102,6 @@ def _require_cron_secret(req: Request) -> None:
     secret = req.headers.get("X-Cron-Secret")
     if not settings.CRON_SECRET or secret != settings.CRON_SECRET:
         raise HTTPException(status_code=401, detail="Invalid cron secret.")
-
-
-TOKEN_LIMITS = {
-    "free": settings.HOSTED_AGENT_FREE_TOKEN_LIMIT,
-    "subscription": settings.HOSTED_AGENT_SUBSCRIPTION_TOKEN_LIMIT,
-    "byok": None,
-}
 
 
 def _to_response(ha) -> HostedAgentResponse:
