@@ -14,13 +14,13 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_
 
 from app.database import get_db
-from app.middleware.auth import require_user_id
+from app.middleware.auth import require_user_id, APIKeyAuth
 from app.models import Agent, Deliberation, DeliberationStage, Opinion
 from app.models.deliberation_member import DeliberationMember
 from app.models.hosted_agent import HostedAgent
 from app.models.community import Community
 from app.models.community_member import CommunityMember
-from app.middleware.auth import APIKeyAuth
+from app.services.access_control import find_user_agent, check_private_access
 from app.services.content_moderation_service import check_community_guidelines
 from app.schemas.deliberation import (
     CreateDeliberationHumanRequest,
@@ -37,60 +37,6 @@ router = APIRouter(prefix="/deliberations", tags=["private-deliberations"])
 
 
 
-
-def _find_user_agent(db: Session, user_id: str) -> Agent | None:
-    """Find the user's agent — either a HostedAgent's shadow agent or a claimed OpenClaw agent."""
-    # Check for hosted agent first
-    hosted = db.query(HostedAgent).filter(HostedAgent.user_id == user_id).first()
-    if hosted and hosted.agent:
-        return hosted.agent
-
-    # Fall back to directly claimed OpenClaw agent
-    agent = db.query(Agent).filter(Agent.user_id == user_id).first()
-    return agent
-
-
-def check_private_access(db: Session, deliberation: Deliberation, agent: Agent):
-    """Raise 403 if agent is not a member of a private deliberation.
-
-    For community deliberations, also checks CommunityMember so that
-    community members who joined after the deliberation was created
-    can still participate.
-    """
-    if not deliberation.is_private:
-        return
-    is_member = db.query(DeliberationMember).filter(
-        and_(
-            DeliberationMember.deliberation_id == deliberation.id,
-            DeliberationMember.agent_id == agent.id,
-        )
-    ).first()
-    if is_member:
-        return
-
-    # For community deliberations, check community membership as fallback
-    if deliberation.community_id and agent.user_id:
-        from app.models.community_member import CommunityMember
-        is_community_member = db.query(CommunityMember).filter(
-            and_(
-                CommunityMember.community_id == deliberation.community_id,
-                CommunityMember.user_id == agent.user_id,
-            )
-        ).first()
-        if is_community_member:
-            # Auto-add as deliberation member for future checks
-            db.add(DeliberationMember(
-                deliberation_id=deliberation.id,
-                agent_id=agent.id,
-                joined_by_user_id=agent.user_id,
-            ))
-            db.commit()
-            return
-
-    raise HTTPException(
-        status_code=status.HTTP_403_FORBIDDEN,
-        detail="You are not a member of this private deliberation",
-    )
 
 
 # --- Endpoints ---
@@ -116,7 +62,7 @@ async def create_deliberation_human(
     """
     user_id = require_user_id(req)
 
-    agent = _find_user_agent(db, user_id)
+    agent = find_user_agent(db, user_id)
     if not agent:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -249,7 +195,7 @@ async def join_deliberation(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invalid invite code")
 
     # Find the user's agent
-    agent = _find_user_agent(db, user_id)
+    agent = find_user_agent(db, user_id)
     if not agent:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -411,7 +357,7 @@ async def list_my_private_deliberations(
     """
     user_id = require_user_id(req)
 
-    agent = _find_user_agent(db, user_id)
+    agent = find_user_agent(db, user_id)
     if not agent:
         return PrivateDeliberationListResponse(deliberations=[])
 
@@ -491,7 +437,7 @@ async def list_my_participated_ids(
 ):
     """Return deliberation IDs where the user's agent has submitted an opinion."""
     user_id = require_user_id(req)
-    agent = _find_user_agent(db, user_id)
+    agent = find_user_agent(db, user_id)
     if not agent:
         return {"deliberation_ids": []}
 

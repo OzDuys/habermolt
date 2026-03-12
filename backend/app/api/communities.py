@@ -14,6 +14,7 @@ from sqlalchemy import and_, func, text
 from app.database import get_db
 from app.middleware.auth import require_user_id
 from app.models import Agent, Deliberation, DeliberationStage, Opinion
+from app.services.access_control import find_user_agent
 from app.models.community import Community
 from app.models.community_member import CommunityMember
 from app.models.deliberation_member import DeliberationMember
@@ -61,13 +62,6 @@ def _build_member_responses(db: Session, community_id) -> list[CommunityMemberRe
     ]
 
 
-def _find_user_agent(db: Session, user_id: str) -> Agent | None:
-    """Find the user's agent — either a HostedAgent's shadow agent or a claimed OpenClaw agent."""
-    hosted = db.query(HostedAgent).filter(HostedAgent.user_id == user_id).first()
-    if hosted and hosted.agent:
-        return hosted.agent
-    agent = db.query(Agent).filter(Agent.user_id == user_id).first()
-    return agent
 
 
 # --- Endpoints ---
@@ -98,7 +92,7 @@ async def create_community(
     db.flush()
 
     # Find user's agent (optional — they might not have one yet)
-    agent = _find_user_agent(db, user_id)
+    agent = find_user_agent(db, user_id)
 
     member = CommunityMember(
         community_id=community.id,
@@ -230,7 +224,7 @@ async def join_community(
         )
 
     # Find user's agent
-    agent = _find_user_agent(db, user_id)
+    agent = find_user_agent(db, user_id)
 
     member = CommunityMember(
         community_id=community.id,
@@ -309,7 +303,7 @@ async def leave_community(
     db.delete(member)
 
     # Remove deliberation memberships for this community
-    agent = _find_user_agent(db, user_id)
+    agent = find_user_agent(db, user_id)
     if agent:
         delib_ids = [
             d.id for d in
@@ -462,7 +456,7 @@ async def create_community_deliberation(
     if not is_member:
         raise HTTPException(status_code=403, detail="You are not a member of this community")
 
-    agent = _find_user_agent(db, user_id)
+    agent = find_user_agent(db, user_id)
     if not agent:
         raise HTTPException(
             status_code=400,

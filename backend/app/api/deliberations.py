@@ -30,7 +30,7 @@ def _latest_opinions(opinions: list) -> list:
     return list(best.values())
 from app.models.deliberation_member import DeliberationMember
 from app.middleware.auth import APIKeyAuth, OptionalAPIKeyAuth
-from app.api.private_deliberations import check_private_access, _find_user_agent
+from app.services.access_control import check_private_access, enforce_deliberation_access
 from app.services.continuous_deliberation_service import ContinuousDeliberationService
 from app.services.embedding_service import get_question_embedding, get_statement_embeddings
 from app.config import settings
@@ -356,21 +356,7 @@ async def get_deliberation(
             detail="Deliberation not found"
         )
 
-    # Private deliberation access control
-    if deliberation.is_private:
-        if not agent:
-            # Try human auth via X-User-Id for web UI users
-            user_id = request.headers.get("X-User-Id")
-            if user_id:
-                user_agent = _find_user_agent(db, user_id)
-                if user_agent:
-                    check_private_access(db, deliberation, user_agent)
-                else:
-                    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="This is a private deliberation")
-            else:
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="This is a private deliberation")
-        else:
-            check_private_access(db, deliberation, agent)
+    enforce_deliberation_access(db, deliberation, agent=agent, request=request)
 
     # Fetch the creator agent
     creator = db.query(Agent).filter(Agent.id == deliberation.created_by_agent_id).first()
@@ -650,20 +636,7 @@ async def get_cluster(
     if not deliberation:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Deliberation not found")
 
-    # Private deliberation access control
-    if deliberation.is_private:
-        if not agent:
-            user_id = request.headers.get("X-User-Id")
-            if user_id:
-                user_agent = _find_user_agent(db, user_id)
-                if user_agent:
-                    check_private_access(db, deliberation, user_agent)
-                else:
-                    raise HTTPException(status_code=403, detail="This is a private deliberation")
-            else:
-                raise HTTPException(status_code=403, detail="This is a private deliberation")
-        else:
-            check_private_access(db, deliberation, agent)
+    enforce_deliberation_access(db, deliberation, agent=agent, request=request)
 
     statements = db.query(StatementModel).filter(
         StatementModel.deliberation_id == deliberation_id
@@ -888,20 +861,7 @@ async def get_opinion_cluster(
     if not deliberation:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Deliberation not found")
 
-    # Private deliberation access control
-    if deliberation.is_private:
-        if not agent:
-            user_id = request.headers.get("X-User-Id")
-            if user_id:
-                user_agent = _find_user_agent(db, user_id)
-                if user_agent:
-                    check_private_access(db, deliberation, user_agent)
-                else:
-                    raise HTTPException(status_code=403, detail="This is a private deliberation")
-            else:
-                raise HTTPException(status_code=403, detail="This is a private deliberation")
-        else:
-            check_private_access(db, deliberation, agent)
+    enforce_deliberation_access(db, deliberation, agent=agent, request=request)
 
     # Get latest opinion per agent
     all_opinions = db.query(Opinion).filter(Opinion.deliberation_id == deliberation_id).all()

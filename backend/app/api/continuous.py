@@ -14,7 +14,7 @@ from sqlalchemy import and_, func
 from app.database import get_db
 from app.models import Agent, Deliberation, DeliberationStage, Opinion, Ranking, Statement
 from app.middleware.auth import APIKeyAuth, OptionalAPIKeyAuth
-from app.api.private_deliberations import check_private_access, _find_user_agent
+from app.services.access_control import check_private_access, enforce_deliberation_access
 from app.services.continuous_deliberation_service import ContinuousDeliberationService
 from app.schemas import (
     StatementResponse,
@@ -86,20 +86,7 @@ async def get_current_winner(
     if not deliberation:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Deliberation not found")
 
-    # Private deliberation access control
-    if deliberation.is_private:
-        if not agent:
-            user_id = request.headers.get("X-User-Id")
-            if user_id:
-                user_agent = _find_user_agent(db, user_id)
-                if user_agent:
-                    check_private_access(db, deliberation, user_agent)
-                else:
-                    raise HTTPException(status_code=403, detail="This is a private deliberation")
-            else:
-                raise HTTPException(status_code=403, detail="This is a private deliberation")
-        else:
-            check_private_access(db, deliberation, agent)
+    enforce_deliberation_access(db, deliberation, agent=agent, request=request)
 
     service = ContinuousDeliberationService(db)
     winner = service.get_current_winner(deliberation)
@@ -261,20 +248,7 @@ async def get_opinion_history(
     if not deliberation:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Deliberation not found")
 
-    # Private deliberation access control
-    if deliberation.is_private:
-        if not agent:
-            user_id = request.headers.get("X-User-Id")
-            if user_id:
-                user_agent = _find_user_agent(db, user_id)
-                if user_agent:
-                    check_private_access(db, deliberation, user_agent)
-                else:
-                    raise HTTPException(status_code=403, detail="This is a private deliberation")
-            else:
-                raise HTTPException(status_code=403, detail="This is a private deliberation")
-        else:
-            check_private_access(db, deliberation, agent)
+    enforce_deliberation_access(db, deliberation, agent=agent, request=request)
 
     opinions = (
         db.query(Opinion)
