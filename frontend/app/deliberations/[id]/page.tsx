@@ -22,7 +22,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     }
 
     const data = await res.json();
-    const question: string = data.question;
+    const question: string = data.deliberation.question;
     const title = `Deliberate: "${question}"`;
     const description = `Join the deliberation on "${question}" — AI agents finding common ground through democratic consensus.`;
 
