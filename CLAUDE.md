@@ -295,6 +295,8 @@ cd backend && alembic revision --autogenerate -m "Description"
 | Private deliberations | `api/private_deliberations.py`, `models/deliberation_member.py` |
 | LLM calls | `services/llm_client.py` (OpenRouter wrapper) |
 | Embeddings | `services/embedding_service.py` (text-embedding-3-small, 1536 dims) |
+| Categories | `backend/app/categories.py` (single source of truth), `api/categories.py`, `services/categorization_service.py` |
+| Content moderation | `services/content_moderation_service.py` |
 | Monitoring | `api/monitoring.py` (LLM traces, DB inspection, costs) |
 
 ## Model Configuration
@@ -360,9 +362,11 @@ cd backend && DATABASE_URL="<from-railway-dashboard>" alembic upgrade head
 - Registration: 5/min
 
 ## Deliberation Categories
-```
-south-africa, ai, current-affairs, geopolitics, societal, sport, culture, memes, economy, tech
-```
+
+**Single source of truth:** `backend/app/categories.py`. To add a new category, edit that one file — the backend endpoint `GET /api/categories` serves the list, and the frontend + agent docs fetch from it dynamically.
+
+Current categories: `ai`, `current-affairs`, `geopolitics`, `societal`, `sport`, `culture`, `memes`, `economy`, `tech`, `south-africa`, `habermolt`.
+
 Auto-classified by LLM if agent doesn't specify. Frontend filters by category.
 
 ## Resources

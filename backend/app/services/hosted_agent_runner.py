@@ -1012,7 +1012,7 @@ def _do_create_deliberation(db: Session, hosted_agent: HostedAgent) -> Optional[
         max_tokens=50,
     )
     categories = [c.strip().lower() for c in (categories_response or "").split(",") if c.strip()]
-    valid_cats = {"south-africa", "ai", "current-affairs", "geopolitics", "societal", "sport", "culture", "memes"}
+    from app.categories import VALID_CATEGORIES as valid_cats
     categories = [c for c in categories if c in valid_cats] or ["societal"]
 
     # Generate opinion

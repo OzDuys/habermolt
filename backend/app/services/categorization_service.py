@@ -1,15 +1,6 @@
 """Categorization service — assigns topic categories to deliberations using an LLM.
 
-Valid categories mirror the frontend tabs:
-  south-africa    — South African politics, economy, society
-  ai              — Artificial intelligence, LLMs, automation
-  current-affairs — Breaking news, elections, crises
-  geopolitics     — International relations, foreign policy, world leaders
-  societal        — Contemporary societal issues (work, environment, gender, identity)
-  sport           — Sports, athletics, competitions, sporting events
-  culture         — Art, music, film, food, fashion, literature, pop culture
-  memes           — Jokes, internet culture, silly questions, memes, banter
-  habermolt       — Meta-discussions about the Habermolt platform itself
+Categories are defined in app.categories (single source of truth).
 
 A deliberation may belong to multiple categories. The LLM returns a
 comma-separated list of matching slugs, or "none" if nothing fits.
@@ -21,37 +12,24 @@ supply categories) and on startup to back-fill any existing uncategorised rows.
 import logging
 from typing import List
 
+from app.categories import VALID_CATEGORIES, category_slugs_csv, category_descriptions_block
 from app.models import Deliberation
 from app.services.llm_client import LLMClient
 
 logger = logging.getLogger(__name__)
 
-VALID_CATEGORIES = {
-    "south-africa", "ai", "current-affairs", "geopolitics",
-    "societal", "sport", "culture", "memes", "economy", "tech",
-    "habermolt",
-}
-
-_VALID_TOKENS = ", ".join(sorted(VALID_CATEGORIES)) + ", none"
+_VALID_TOKENS = category_slugs_csv() + ", none"
 
 _SYSTEM_PROMPT = f"""\
 You are a topic classifier. Classify deliberation questions into one or more categories.
 Reply with ONLY a comma-separated list of matching slugs from: {_VALID_TOKENS}.
 Use "none" only if no category fits. No explanation, nothing else."""
 
-_USER_TEMPLATE = """\
+_USER_TEMPLATE = f"""\
 Categories:
-- south-africa: topics specific to South Africa (ANC, Eskom, rand, load-shedding, SA politics/economy/society)
-- ai: artificial intelligence, machine learning, LLMs, automation, robotics, AI ethics and policy, AI companies and products
-- current-affairs: breaking news, recent events, elections, crises, scandals, protests happening now
-- geopolitics: international relations, foreign policy, world leaders, wars, NATO, UN, global politics
-- societal: contemporary societal issues — remote work, environment, gender, housing, healthcare, inequality, lifestyle debates
-- sport: sports, athletics, competitions, tournaments, sporting events, esports
-- culture: art, music, film, food, fashion, literature, pop culture, entertainment, celebrities
-- memes: jokes, internet culture, silly questions, banter, memes, animals being ranked, absurd hypotheticals
-- habermolt: meta-discussions about the Habermolt platform itself — its growth, community, features, governance, roadmap, marketing, use cases
+{category_descriptions_block()}
 
-Question: "{question}"
+Question: "{{question}}"
 
 Reply with a comma-separated list of matching slugs (e.g. "ai, societal") or "none":"""
 

@@ -11,6 +11,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from app.categories import category_slugs_csv
 from app.models.hosted_agent import HostedAgent
 
 logger = logging.getLogger(__name__)
@@ -138,8 +139,7 @@ TOOL_SCHEMAS = [
                         "type": "array",
                         "items": {"type": "string"},
                         "description": (
-                            "Topic categories (1-3). Options: south-africa, ai, "
-                            "current-affairs, geopolitics, societal, sport, culture, memes."
+                            f"Topic categories (1-3). Options: {category_slugs_csv()}."
                         ),
                     },
                 },
@@ -445,7 +445,7 @@ def _exec_create_deliberation(
     from app.services.continuous_deliberation_service import ContinuousDeliberationService
 
     agent = hosted_agent.agent
-    valid_cats = {"south-africa", "ai", "current-affairs", "geopolitics", "societal", "sport", "culture", "memes"}
+    from app.categories import VALID_CATEGORIES as valid_cats
     if categories:
         categories = [c for c in categories if c in valid_cats] or None
 

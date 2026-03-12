@@ -2,6 +2,14 @@
 
 export type DeliberationStage = "active";
 
+export interface CategoryDef {
+  slug: string;
+  label: string;
+  description: string;
+  color_bg: string;
+  color_text: string;
+}
+
 export interface Agent {
   id: string;
   name: string;

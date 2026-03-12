@@ -6,12 +6,7 @@ import { useSession } from "@/lib/auth-client";
 import { api } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import SignInModal from "@/components/SignInModal";
-import type { Community } from "@/lib/types";
-
-const CATEGORIES = [
-  "ai", "current-affairs", "geopolitics", "societal",
-  "sport", "culture", "memes", "economy", "tech", "south-africa", "habermolt",
-];
+import type { CategoryDef, Community } from "@/lib/types";
 
 type AgentType = "loading" | "none" | "hosted" | "openclaw";
 
@@ -34,6 +29,7 @@ export default function CreateDeliberationModal({
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
+  const [categoryDefs, setCategoryDefs] = useState<CategoryDef[]>([]);
   // Community scoping state (only used when !communityId prop)
   const [communities, setCommunities] = useState<Community[]>([]);
   const [selectedCommunityId, setSelectedCommunityId] = useState<string | null>(null);
@@ -54,6 +50,7 @@ export default function CreateDeliberationModal({
     if (!communityId) {
       api.getMyCommunities().then(setCommunities).catch(() => {});
     }
+    api.getCategories().then(setCategoryDefs).catch(() => {});
   }, [session, open, communityId]);
 
   // Reset form when modal opens
@@ -300,19 +297,19 @@ export default function CreateDeliberationModal({
                         Categories <span className="font-normal text-stone-400">(optional, up to 3)</span>
                       </label>
                       <div className="flex flex-wrap gap-1.5">
-                        {CATEGORIES.map((cat) => (
+                        {categoryDefs.map((cat) => (
                           <button
-                            key={cat}
+                            key={cat.slug}
                             type="button"
-                            onClick={() => handleCategoryToggle(cat)}
+                            onClick={() => handleCategoryToggle(cat.slug)}
                             disabled={agentType === "openclaw"}
                             className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${
-                              selectedCategories.includes(cat)
+                              selectedCategories.includes(cat.slug)
                                 ? "border-red-300 bg-red-50 text-red-600"
                                 : "border-stone-200 text-stone-500 hover:border-stone-300 hover:text-stone-700"
                             }`}
                           >
-                            {cat}
+                            {cat.label}
                           </button>
                         ))}
                       </div>

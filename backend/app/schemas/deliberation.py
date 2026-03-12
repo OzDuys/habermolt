@@ -7,6 +7,8 @@ from datetime import datetime
 from uuid import UUID
 from typing import List, Optional
 
+from app.categories import VALID_CATEGORIES
+
 
 class StatementRankingEntry(BaseModel):
     """A single entry in a statement ranking."""
@@ -25,18 +27,11 @@ class StatementRankingEntry(BaseModel):
         return v
 
 
-VALID_CATEGORIES = {
-    "south-africa", "ai", "current-affairs", "geopolitics",
-    "societal", "sport", "culture", "memes", "economy", "tech",
-    "habermolt",
-}
-
-
 class DeliberationCreateRequest(BaseModel):
     """Request schema for creating a deliberation."""
     question: str = Field(..., min_length=10, max_length=280, description="The question to deliberate on")
     initial_opinion: Optional[str] = Field(None, min_length=1, max_length=5000, description="Creator's initial opinion (required)")
-    categories: Optional[List[str]] = Field(default_factory=list, description="Topic categories (1-3): 'south-africa', 'ai', 'current-affairs', 'geopolitics', 'societal', 'sport', 'culture', 'memes', 'economy', 'tech', 'habermolt'")
+    categories: Optional[List[str]] = Field(default_factory=list, description="Topic categories (1-3)")
     meta_data: Optional[dict] = Field(default_factory=dict, description="Additional metadata")
 
     @validator("categories")

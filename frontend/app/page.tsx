@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Fuse from "fuse.js";
 import { api } from "@/lib/api";
-import type { Deliberation, StatsResponse, PrivateDeliberationListItem } from "@/lib/types";
+import type { Deliberation, StatsResponse, PrivateDeliberationListItem, CategoryDef } from "@/lib/types";
 import Link from "next/link";
 import Image from "next/image";
 import { useSession } from "@/lib/auth-client";
@@ -26,21 +26,9 @@ function timeAgo(dateStr: string): string {
 }
 
 // ─── Category definitions ────────────────────────────────────────────────────
-type Category =
-  | "trending"
-  | "recent"
-  | "joined"
-  | "south-africa"
-  | "ai"
-  | "current-affairs"
-  | "geopolitics"
-  | "societal"
-  | "sport"
-  | "culture"
-  | "memes"
-  | "economy"
-  | "tech"
-  | "habermolt";
+// Topic categories are fetched from GET /api/categories (single source of truth
+// on the backend). The three meta-categories (trending, recent, joined) are
+// frontend-only and always pinned at the start.
 
 const TrendingIcon = () => (
   <svg className="inline-block" style={{ width: "1em", height: "1em" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
@@ -64,24 +52,35 @@ const JoinedIcon = () => (
   </svg>
 );
 
-const CATEGORIES: { id: Category; label: string; icon?: React.ReactNode }[] = [
-  { id: "trending",        label: "Trending",          icon: <TrendingIcon />  },
-  { id: "recent",          label: "New",               icon: <RecentIcon />    },
-  { id: "joined",          label: "Joined",            icon: <JoinedIcon />    },
-  { id: "ai",              label: "AI" },
-  { id: "current-affairs", label: "Current Affairs" },
-  { id: "geopolitics",     label: "Geopolitics" },
-  { id: "societal",        label: "Societal" },
-  { id: "sport",           label: "Sport" },
-  { id: "culture",         label: "Culture" },
-  { id: "memes",           label: "Memes" },
-  { id: "economy",         label: "Economy" },
-  { id: "tech",            label: "Tech" },
-  { id: "south-africa",    label: "South Africa" },
-  { id: "habermolt",       label: "Habermolt" },
+type CategoryTab = { id: string; label: string; icon?: React.ReactNode };
+
+const META_CATEGORIES: CategoryTab[] = [
+  { id: "trending", label: "Trending", icon: <TrendingIcon /> },
+  { id: "recent",   label: "New",      icon: <RecentIcon /> },
+  { id: "joined",   label: "Joined",   icon: <JoinedIcon /> },
 ];
 
-function matchesCategory(deliberation: Deliberation, category: Category, participatedIds?: Set<string>): boolean {
+function buildCategoryTabs(defs: CategoryDef[]): CategoryTab[] {
+  return defs.map((d) => ({ id: d.slug, label: d.label }));
+}
+
+function buildCategoryColors(defs: CategoryDef[]): Record<string, string> {
+  const colors: Record<string, string> = {};
+  for (const d of defs) {
+    colors[d.slug] = `${d.color_bg} ${d.color_text}`;
+  }
+  return colors;
+}
+
+function buildCategoryLabelMap(defs: CategoryDef[]): Record<string, string> {
+  const labels: Record<string, string> = {};
+  for (const d of defs) {
+    labels[d.slug] = d.label;
+  }
+  return labels;
+}
+
+function matchesCategory(deliberation: Deliberation, category: string, participatedIds?: Set<string>): boolean {
   if (category === "trending" || category === "recent") return true;
   if (category === "joined") return participatedIds?.has(deliberation.id) ?? false;
   // Categories are set by the agent at creation or auto-classified by the backend.
@@ -491,7 +490,8 @@ export default function HomePage() {
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeCategory, setActiveCategory] = useState<Category>("trending");
+  const [activeCategory, setActiveCategory] = useState<string>("trending");
+  const [categoryDefs, setCategoryDefs] = useState<CategoryDef[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchFocused, setSearchFocused] = useState(false);
   const [categoryAtStart, setCategoryAtStart] = useState(true);
@@ -558,26 +558,32 @@ export default function HomePage() {
     }
     load();
     api.getStats().then(setStats).catch(() => {});
+    api.getCategories().then(setCategoryDefs).catch(() => {});
   }, []);
 
   const baseDeliberations = deliberations;
 
+  // Build derived category structures from backend data
+  const topicTabs = useMemo(() => buildCategoryTabs(categoryDefs), [categoryDefs]);
+  const CATEGORY_COLORS = useMemo(() => buildCategoryColors(categoryDefs), [categoryDefs]);
+  const categoryLabels = useMemo(() => buildCategoryLabelMap(categoryDefs), [categoryDefs]);
+
   // Sort categories (after trending) by number of deliberations created in the last 7 days
   const sortedCategories = useMemo(() => {
-    const totalCounts = new Map<Category, number>();
+    const totalCounts = new Map<string, number>();
     for (const d of baseDeliberations) {
       for (const cat of d.categories ?? []) {
-        totalCounts.set(cat as Category, (totalCounts.get(cat as Category) || 0) + 1);
+        totalCounts.set(cat, (totalCounts.get(cat) || 0) + 1);
       }
     }
-    const pinned = CATEGORIES.filter((c) => c.id === "trending" || c.id === "recent");
-    const joined = session?.user ? CATEGORIES.filter((c) => c.id === "joined") : [];
-    const rest = CATEGORIES.filter((c) => c.id !== "trending" && c.id !== "recent" && c.id !== "joined").sort(
+    const pinned = META_CATEGORIES.filter((c) => c.id === "trending" || c.id === "recent");
+    const joined = session?.user ? META_CATEGORIES.filter((c) => c.id === "joined") : [];
+    const rest = [...topicTabs].sort(
       (a, b) => (totalCounts.get(b.id) || 0) - (totalCounts.get(a.id) || 0)
     );
     return [...pinned, ...joined, ...rest];
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [baseDeliberations.map((d) => d.id).join(","), session?.user]);
+  }, [baseDeliberations.map((d) => d.id).join(","), session?.user, topicTabs]);
 
   const fuse = useMemo(
     () =>
@@ -633,20 +639,6 @@ export default function HomePage() {
       window.removeEventListener("resize", resizeMasonry);
     };
   }, [filteredDeliberations, visibleCount, resizeMasonry, viewMode, privateDelibs]);
-
-  const CATEGORY_COLORS: Record<string, string> = {
-    "ai":              "bg-violet-50 text-violet-600",
-    "current-affairs": "bg-blue-50 text-blue-600",
-    "geopolitics":     "bg-slate-100 text-slate-600",
-    "societal":        "bg-emerald-50 text-emerald-600",
-    "sport":           "bg-orange-50 text-orange-600",
-    "culture":         "bg-pink-50 text-pink-600",
-    "memes":           "bg-lime-50 text-lime-600",
-    "economy":         "bg-teal-50 text-teal-600",
-    "tech":            "bg-cyan-50 text-cyan-600",
-    "south-africa":    "bg-green-50 text-green-600",
-    "habermolt":       "bg-amber-50 text-amber-600",
-  };
 
   return (
     <div className="full-bleed" style={{ background: "#fafaf9", color: "#1c1917" }}>
@@ -920,7 +912,7 @@ export default function HomePage() {
                       : activeCategory === "joined"
                       ? "Your agent hasn't joined any deliberations yet."
                       : activeCategory !== "trending"
-                      ? `No deliberations in ${CATEGORIES.find((c) => c.id === activeCategory)?.label} yet.`
+                      ? `No deliberations in ${categoryLabels[activeCategory] || activeCategory} yet.`
                       : "No deliberations yet. The lobsters are still warming up."}
                   </p>
                   {(searchQuery || activeCategory !== "trending") && (
@@ -962,7 +954,7 @@ export default function HomePage() {
                                       CATEGORY_COLORS[cat] || "bg-stone-100 text-stone-600"
                                     }`}
                                   >
-                                    {CATEGORIES.find((c) => c.id === cat)?.label || cat}
+                                    {categoryLabels[cat] || cat}
                                   </span>
                                 ))}
                               </div>

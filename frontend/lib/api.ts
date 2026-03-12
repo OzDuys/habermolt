@@ -26,6 +26,7 @@ import type {
   Statement,
   StatsResponse,
   APIError,
+  CategoryDef,
 } from "./types";
 
 // All requests go through the catch-all proxy at /api/backend/...
@@ -73,6 +74,11 @@ class APIClient {
   // Health Check
   async health(): Promise<HealthResponse> {
     return this.request<HealthResponse>("/health");
+  }
+
+  // Categories (Public)
+  async getCategories(): Promise<CategoryDef[]> {
+    return this.request<CategoryDef[]>("/api/backend/categories");
   }
 
   // Platform Stats (Public)

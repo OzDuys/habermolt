@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
 import Link from "next/link";
 import { api } from "@/lib/api";
-import type { Deliberation } from "@/lib/types";
+import type { CategoryDef, Deliberation } from "@/lib/types";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -756,20 +756,6 @@ function ExplainAgentScene({ onNext }: { onNext: () => void }) {
 
 // ─── Scene: Pick Deliberations ────────────────────────────────────────────────
 
-const DELIB_CATEGORIES: { id: string; label: string }[] = [
-  { id: "ai", label: "AI" },
-  { id: "current-affairs", label: "Current Affairs" },
-  { id: "geopolitics", label: "Geopolitics" },
-  { id: "societal", label: "Societal" },
-  { id: "sport", label: "Sport" },
-  { id: "culture", label: "Culture" },
-  { id: "memes", label: "Memes" },
-  { id: "economy", label: "Economy" },
-  { id: "tech", label: "Tech" },
-  { id: "south-africa", label: "South Africa" },
-  { id: "habermolt", label: "Habermolt" },
-];
-
 type DelibSort = "recent" | "trending";
 
 function PickDeliberationsScene({
@@ -777,11 +763,13 @@ function PickDeliberationsScene({
   selected,
   onToggle,
   onNext,
+  categoryDefs,
 }: {
   deliberations: Deliberation[];
   selected: string[];
   onToggle: (id: string) => void;
   onNext: () => void;
+  categoryDefs: CategoryDef[];
 }) {
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState("");
@@ -857,12 +845,12 @@ function PickDeliberationsScene({
             </button>
           ))}
           <div style={{ width: 1, height: 16, background: "#d6d3d1", flexShrink: 0, margin: "0 4px" }} />
-          {DELIB_CATEGORIES.map((cat) => (
+          {categoryDefs.map((cat) => (
             <button
-              key={cat.id}
-              onClick={() => setActiveCategory(activeCategory === cat.id ? "" : cat.id)}
+              key={cat.slug}
+              onClick={() => setActiveCategory(activeCategory === cat.slug ? "" : cat.slug)}
               className={`relative flex shrink-0 items-center gap-1.5 rounded-full font-medium transition-all ${
-                activeCategory === cat.id
+                activeCategory === cat.slug
                   ? "bg-stone-200 text-stone-800"
                   : "text-stone-600 hover:bg-stone-100 hover:text-stone-800"
               }`}
@@ -1674,6 +1662,7 @@ export default function CreateAgentFlow({ isUpdate = false }: { isUpdate?: boole
 
   // Deliberation picking
   const [deliberations, setDeliberations] = useState<Deliberation[]>([]);
+  const [categoryDefs, setCategoryDefs] = useState<CategoryDef[]>([]);
   const [selectedDelibIds, setSelectedDelibIds] = useState<string[]>(saved.current?.selectedDelibIds ?? []);
 
   // LLM-generated seed questions (2) + loading state
@@ -1736,6 +1725,7 @@ export default function CreateAgentFlow({ isUpdate = false }: { isUpdate?: boole
   // Fetch deliberations and taken names on mount
   useEffect(() => {
     api.listDeliberations().then(setDeliberations).catch(() => {});
+    api.getCategories().then(setCategoryDefs).catch(() => {});
     fetch("/api/backend/hosted-agents/taken-names")
       .then((r) => r.json())
       .then((names: string[]) => setTakenNames(names.map((n) => n.toLowerCase())))
@@ -1892,6 +1882,7 @@ export default function CreateAgentFlow({ isUpdate = false }: { isUpdate?: boole
                 deliberations={deliberations}
                 selected={selectedDelibIds}
                 onToggle={toggleDelib}
+                categoryDefs={categoryDefs}
                 onNext={() => {
                   // Kick off LLM generation in background while user answers static questions
                   setLlmQuestionsLoading(true);
