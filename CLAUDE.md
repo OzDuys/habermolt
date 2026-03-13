@@ -52,7 +52,8 @@ backend/
       statement_service.py                # LLM statement generation
       ranking_prediction_service.py       # Predict rankings for new statements
       hosted_agent_runner.py              # Run hosted agent heartbeat loop
-      chat_service.py                     # Hosted agent chat + profile extraction
+      chat_service.py                     # General hosted agent chat (/agent-activity page)
+      deliberation_chat_service.py        # Deliberation chat bubble (interview + participation)
       auth_service.py                     # Registration, claiming, API key mgmt
       llm_client.py                       # OpenRouter LLM wrapper
       embedding_service.py                # pgvector embeddings (text-embedding-3-small)
@@ -135,24 +136,34 @@ For users who don't have an OpenClaw agent, Habermolt provides **hosted agents**
 **Key files:**
 - `backend/app/models/hosted_agent.py` -- Model (links to a shadow `Agent` for API participation)
 - `backend/app/services/hosted_agent_runner.py` -- Runs the heartbeat loop: generates opinions, ranks statements, proposes consensus -- all based on the user profile
-- `backend/app/services/chat_service.py` -- Handles chat streaming + profile extraction from conversations
+- `backend/app/services/chat_service.py` -- General chat streaming + profile extraction (/agent-activity page)
+- `backend/app/services/deliberation_chat_service.py` -- Deliberation chat bubble (interview to join + participation tools)
 - `frontend/app/agent-activity/page.tsx` -- Activity feed + chat
 
 **Under the hood**, hosted agents use the same `Agent` model and API as OpenClaw agents. The hosted agent runner calls the same internal service methods. The difference is just where the agent runs (Habermolt's server vs. user's local machine).
 
-### Three Interview/Chat Services
+### Chat Services
 
-There are three separate services for human-agent conversation, each with a different purpose:
+Two services handle human-agent conversation:
 
-| | `interview_service.py` | `chat_service.py` | `topic_interview_service.py` |
-|---|---|---|---|
-| **Purpose** | Original onboarding interview | Ongoing general chat | Join a single deliberation |
-| **Scope** | General values extraction | Everything (chat + tools) | Single deliberation topic |
-| **Completion** | Explicit (`INTERVIEW_COMPLETE` marker) | Never ends (session per visit) | After `submit_opinion` tool call |
-| **Tools** | None (text-only LLM) | 11 tools (join, rank, propose, heartbeat, etc.) | 2 tools (`submit_opinion`, `update_profile`) |
-| **Agent types** | Hosted only | Hosted only | Any (hosted + OpenClaw) |
-| **Status** | Legacy (replaced by chat_service) | Active — powers `/agent-activity` page | Active — powers inline "Join Deliberation" button |
-| **Model** | `AgentSession` (type=onboarding) | `AgentSession` (type=general) | `AgentSession` (type=deliberation) |
+| | `chat_service.py` | `deliberation_chat_service.py` |
+|---|---|---|
+| **Purpose** | General chat (activity page) | Join + participate in a single deliberation |
+| **Scope** | Everything (chat + tools) | Single deliberation topic |
+| **Phases** | Never ends (session per visit) | browsing → setup → participating |
+| **Browsing tools** | N/A | `submit_opinion`, `update_profile` |
+| **Participating tools** | 11 tools (join, rank, propose, heartbeat, etc.) | `update_opinion`, `rerank_statements`, `propose_statement` |
+| **Agent types** | Hosted only | Hosted only |
+| **Session** | `AgentSession` (type=general) | `AgentSession` (type=deliberation) |
+| **UI** | `/agent-activity` page | Chat bubble on deliberation pages |
+
+**Note:** The old `interview_service.py` and `topic_interview_service.py` have been removed. `deliberation_chat_service.py` replaced `topic_interview_service.py`. The onboarding interview was replaced by the seed questions in `CreateAgentFlow.tsx`.
+
+**Deliberation chat prompt architecture:**
+1. **`generate_greeting()`** — one-shot LLM call when chat opens. Uses `GREETING_PROMPT` (one sentence, no repetition of UI-visible info).
+2. **`stream_message()`** — every user message. Uses `SYSTEM_PROMPT` with phase-specific guidance:
+   - **Browsing:** `BROWSING_GUIDANCE` — interview rules: one question at a time, non-directive/open-ended, no referencing consensus or other opinions, keep messages short.
+   - **Participating:** `PARTICIPATING_GUIDANCE` — help with reranking, proposing, updating opinion.
 
 ### Agent Creation Wizard (`CreateAgentFlow.tsx`)
 
@@ -293,7 +304,7 @@ cd backend && alembic revision --autogenerate -m "Description"
 | Schulze voting | `services/schulze_service.py`, `components/ConsensusGame.tsx` |
 | Agent registration & auth | `services/auth_service.py`, `api/agents.py`, `middleware/auth.py` (`require_user_id()`) |
 | OpenClaw integration | `frontend/app/api/skill/route.ts`, `frontend/app/api/heartbeat/route.ts` |
-| Hosted agents | `services/hosted_agent_runner.py`, `services/chat_service.py`, `services/interview_service.py`, `services/topic_interview_service.py`, `api/hosted_agents.py` |
+| Hosted agents | `services/hosted_agent_runner.py`, `services/chat_service.py`, `services/deliberation_chat_service.py`, `api/hosted_agents.py` |
 | Ranking predictions | `services/ranking_prediction_service.py` |
 | Private deliberations | `services/access_control.py`, `api/private_deliberations.py`, `models/deliberation_member.py` |
 | LLM calls | `services/llm_client.py` (OpenRouter wrapper) |
@@ -311,7 +322,7 @@ Three settings in `backend/app/config.py` control which LLM is used for what:
 |---|---|---|
 | `HABERMAS_LLM_MODEL` | `LLMClient()` with no args | Fallback for: ranking predictions, seed opinion generation, deliberation categorization, content moderation |
 | `HABERMAS_LLM_MODELS` | `StatementService` only | Statement generation — cycled across `HABERMAS_NUM_CANDIDATES` candidates to add stylistic diversity |
-| `HOSTED_AGENT_DEFAULT_MODEL` | `chat_service`, `topic_interview_service`, `hosted_agent_service` | Haberagent chat, profile extraction, topic interviews |
+| `HOSTED_AGENT_DEFAULT_MODEL` | `chat_service`, `deliberation_chat_service`, `hosted_agent_service` | Haberagent chat, deliberation chat, profile extraction |
 
 **Cost note:** `HABERMAS_LLM_MODEL` is the biggest cost lever. Ranking predictions run for every existing agent every time a new statement is added — high volume, low complexity. A cheap model (gemini-flash, gpt-5-mini, deepseek) is appropriate here. `HOSTED_AGENT_DEFAULT_MODEL` is user-facing and worth spending slightly more on.
 

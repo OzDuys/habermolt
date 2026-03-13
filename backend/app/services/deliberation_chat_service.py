@@ -1,11 +1,19 @@
 """
-Deliberation Chat Service — unified chat for deliberation participants.
+Deliberation Chat Service — powers the chat bubble on deliberation pages.
 
+Replaced the old interview_service.py and topic_interview_service.py.
 Single session per agent per deliberation, with phases:
-- browsing: asking questions about the deliberation
-- joining: LLM extracting opinion from user
-- setup: background work (ranking, proposing consensus)
-- participating: full participant with tools
+- browsing: user hasn't joined yet. Agent can answer questions about the deliberation,
+  or conduct a short interview to extract the user's opinion (submit_opinion tool).
+- setup: after submit_opinion, background thread ranks statements and proposes consensus.
+  No LLM calls during this phase — frontend polls status.
+- participating: user is a full participant. Agent can help update opinion, rerank
+  statements, or propose new consensus statements.
+
+Two separate LLM calls:
+1. generate_greeting() — one-shot call when chat opens. Uses GREETING_PROMPT.
+2. stream_message() — every user message. Uses SYSTEM_PROMPT (with phase-specific
+   BROWSING_GUIDANCE or PARTICIPATING_GUIDANCE injected as role_guidance).
 """
 
 import json
@@ -63,22 +71,33 @@ of preference, and the winner is the statement that beats every other in pairwis
 {role_guidance}
 
 Rules:
-- Keep messages SHORT. Be concise and direct.
+- Keep messages SHORT (1-3 sentences). Never send walls of text.
+- One question per message. Never ask multiple questions at once.
 - Stay focused on this specific deliberation topic.
 - When the user wants to take an action, confirm what you'll do before calling the tool.
 - When reranking, show the user the proposed new order and get confirmation before submitting.
 """
 
 BROWSING_GUIDANCE = """\
-The user is browsing this deliberation and hasn't joined yet. You can:
-- Answer questions about the deliberation, the consensus process, and what participants think
-- Explain what joining means: submitting an opinion, then your agent ranks statements on your behalf using the Schulze method
+The user is browsing this deliberation and hasn't joined yet.
 
-If the user wants to join or share their views, interview them briefly about their position, \
-then call submit_opinion. Only call it when you have enough to represent their view (2-4 sentences).
+If the user asks questions about the deliberation, answer briefly. If they want to join or \
+share their views, conduct a short interview to understand their position.
+
+## Interview Rules (CRITICAL — follow these exactly)
+1. **One question at a time.** Never ask multiple questions in one message.
+2. **Ask open-ended, non-directive questions.** You are extracting their existing views, not \
+shaping them. Ask like a psychologist: "What do you think about X?" not "Don't you think X?". \
+Don't suggest positions or frame questions around existing consensus statements.
+3. **Do NOT reference consensus statements, the current winner, or other participants' opinions.** \
+The interview is about discovering what THIS person thinks, from scratch. The deliberation context \
+in your system prompt is for your background knowledge only — do not surface it during the interview.
+4. **Keep messages short.** 1-3 sentences max. Don't over-explain or be verbose.
+5. **2-4 exchanges is enough.** You don't need to cover everything. Once you have a clear sense of \
+their position (enough for 2-4 sentences), call submit_opinion.
 
 Tools:
-- **submit_opinion**: Submit the human's synthesized opinion for this deliberation.
+- **submit_opinion**: Submit the human's synthesized opinion. Call when you have enough for 2-4 sentences.
 - **update_profile**: Save what you learned about this person's values (optional)."""
 
 PARTICIPATING_GUIDANCE = """\
@@ -100,10 +119,11 @@ You're greeting a user who opened the chat on a Habermolt deliberation page.
 
 {profile_context}
 
-Give a brief, friendly greeting (1-2 sentences). Mention something specific about \
-the current state — like the consensus winner or participant count. \
+Write a SHORT greeting — one sentence max. The user can already see the deliberation \
+topic, participant count, and consensus in the UI, so do NOT repeat any of that. \
+You do NOT need to summarize the deliberation or explain how Habermolt. \
 {greeting_cta}
-No long introductions."""
+Just be warm and brief."""
 
 
 # --- Tool Definitions ---
@@ -384,7 +404,7 @@ def generate_greeting(db: Session, agent: Agent, deliberation: Deliberation, pha
     greeting_cta = (
         "Ask how you can help (update opinion, rerank, propose)."
         if is_participating else
-        "Let them know they can ask questions or say 'join' when ready."
+        "Invite them to share their thoughts or say 'join' — keep it casual."
     )
 
     client = _get_llm_client(db, agent)
@@ -411,7 +431,7 @@ def generate_greeting(db: Session, agent: Agent, deliberation: Deliberation, pha
         if is_participating:
             greeting = f"Hey! I'm here to help you with the deliberation on \"{deliberation.question}\". What would you like to do?"
         else:
-            greeting = f"Hi! This deliberation is about: \"{deliberation.question}\". Feel free to ask questions or let me know when you'd like to join!"
+            greeting = f"Hey! Let me know when you'd like to share your thoughts on this deliberation."
 
     return greeting
 
