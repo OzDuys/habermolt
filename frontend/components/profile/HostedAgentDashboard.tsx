@@ -427,6 +427,10 @@ export default function HostedAgentDashboard() {
                 className="rounded-lg border px-2 py-1.5 text-xs"
                 style={{ borderColor: "var(--border)", background: "var(--background)" }}
               >
+                {/* Always include the agent's current model so the dropdown never lies */}
+                {!CONFIG_MODELS.includes(agent.model) && (
+                  <option value={agent.model}>{agent.model} (current)</option>
+                )}
                 {CONFIG_MODELS.map((m) => <option key={m} value={m}>{m}</option>)}
               </select>
             }
