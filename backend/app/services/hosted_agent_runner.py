@@ -236,7 +236,14 @@ the profile gives you clear signal. Skip the rest.
 
 ### Step 3: Process pending actions
 Handle actions on deliberations you've ALREADY joined (rank_statements, \
-propose_statement). These are safe — you already committed to these.
+propose_statement, update_opinion). These are safe — you already committed to these.
+
+**For update_opinion actions:** The action includes your `current_opinion` and \
+`new_statements_summary` showing what's changed since. **Read these carefully.** \
+Only call update_opinion if the new statements genuinely reveal something that \
+would change your human's position. If their original opinion still holds, \
+SKIP the update — don't change it just because time passed. Never fabricate \
+a new position from the profile alone — the current opinion IS their stated view.
 
 ### Step 4: Join new deliberations (only if explicitly supported by profile)
 Be conservative. Only join a deliberation if the profile contains a **clear, explicit position** \
@@ -518,7 +525,7 @@ def _create_action_notifications(db: Session, hosted_agent: HostedAgent, actions
 
         if action_type == "join_deliberation":
             title = f"Joined '{truncated_q}'"
-            body = action.get("opinion_text", "")[:300] or "Submitted an opinion."
+            body = "Submitted an opinion on your behalf. Expand to review."
             metadata = {
                 "action_type": action_type,
                 "deliberation_id": str(delib_id) if delib_id else None,
@@ -538,7 +545,7 @@ def _create_action_notifications(db: Session, hosted_agent: HostedAgent, actions
         elif action_type in ("propose_statement", "add_statement"):
             stmt_title = action.get("statement_title", "Untitled")
             title = f"Proposed: {stmt_title}"
-            body = action.get("statement_text", "")[:300] or "Proposed a consensus statement."
+            body = "Proposed a consensus statement. Expand to review."
             metadata = {
                 "action_type": "propose_statement",
                 "deliberation_id": str(delib_id) if delib_id else None,
@@ -557,27 +564,39 @@ def _create_action_notifications(db: Session, hosted_agent: HostedAgent, actions
                 "categories": action.get("categories", []),
             }
 
-        elif action_type == "suggest_deliberation":
-            title = f"Suggested: '{truncated_q}'"
-            body = action.get("reason", "Thought you might be interested.")
-            metadata = {
-                "action_type": action_type,
-                "deliberation_id": str(delib_id) if delib_id else None,
-            }
-
         elif action_type in ("update_opinion", "revisit_opinion"):
             title = f"Updated opinion on '{truncated_q}'"
+            body = "Updated the opinion on your behalf. Expand to review."
             opinion_text = action.get("opinion_text", "")
-            body = opinion_text[:300] if opinion_text else action.get("description", "Updated opinion.")
+            # Fetch the old opinion so human can compare
+            old_opinion_text = ""
+            if delib_id:
+                from app.models import Opinion
+                old_opinion = (
+                    db.query(Opinion)
+                    .filter(
+                        and_(
+                            Opinion.deliberation_id == delib_id,
+                            Opinion.agent_id == hosted_agent.agent_id,
+                        )
+                    )
+                    .order_by(Opinion.version.desc())
+                    .offset(1)  # skip the latest (which is the new one)
+                    .first()
+                )
+                if old_opinion:
+                    old_opinion_text = old_opinion.opinion_text
             metadata = {
                 "action_type": "update_opinion",
                 "deliberation_id": str(delib_id) if delib_id else None,
                 "reviewable": True,
                 "opinion_text": opinion_text,
+                "old_opinion_text": old_opinion_text,
             }
 
         else:
-            # Skip non-notifiable actions (get_agent_status, update_profile, etc.)
+            # Skip non-notifiable actions (get_agent_status, update_profile, suggest_deliberation, etc.)
+            # Note: suggest_deliberation creates its own notification in the tool execution
             continue
 
         notification_service.create_notification(
@@ -763,14 +782,25 @@ def _compute_agent_actions(db: Session, agent: Agent) -> tuple[list[dict], list[
                     age_days = (datetime.utcnow() - latest_opinion.submitted_at).days
                     if age_days >= STALE_OPINION_DAYS:
                         # Check if new statements were added after opinion
-                        new_since_opinion = db.query(Statement).filter(
+                        new_statements = db.query(Statement).filter(
                             and_(
                                 Statement.deliberation_id == delib.id,
                                 Statement.generated_at > latest_opinion.submitted_at,
                             )
-                        ).count()
-                        if new_since_opinion > 0 and revisit_count < 2:
-                            actions.append({"deliberation_id": delib.id, "question": delib.question, "action": "update_opinion"})
+                        ).all()
+                        if new_statements and revisit_count < 2:
+                            new_stmt_summaries = [
+                                f"- {s.title or 'Untitled'}: {s.statement_text[:100]}"
+                                for s in new_statements[:5]
+                            ]
+                            actions.append({
+                                "deliberation_id": delib.id,
+                                "question": delib.question,
+                                "action": "update_opinion",
+                                "current_opinion": latest_opinion.opinion_text,
+                                "new_statements_summary": "\n".join(new_stmt_summaries),
+                                "opinion_age_days": age_days,
+                            })
                             revisit_count += 1
 
     return actions, discovered

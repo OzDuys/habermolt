@@ -380,10 +380,17 @@ class APIClient {
     });
   }
 
-  async disapproveNotification(id: string, reason: string): Promise<{ status: string; id: string }> {
+  async disapproveNotification(id: string, reason: string): Promise<{ status: string; id: string; correction?: { status: string } }> {
     return this.request(`/api/backend/notifications/${id}/disapprove`, {
       method: "POST",
       body: JSON.stringify({ reason }),
+    });
+  }
+
+  async revertOpinion(deliberationId: string, opinionText: string): Promise<{ message: string }> {
+    return this.request(`/api/backend/notifications/revert-opinion`, {
+      method: "POST",
+      body: JSON.stringify({ deliberation_id: deliberationId, opinion_text: opinionText }),
     });
   }
 

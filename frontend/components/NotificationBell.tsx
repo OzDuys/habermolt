@@ -15,6 +15,7 @@ export default function NotificationBell() {
   const [disapprovalReason, setDisapprovalReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [reverting, setReverting] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
@@ -101,12 +102,20 @@ export default function NotificationBell() {
     if (!disapprovalReason.trim()) return;
     setSubmitting(true);
     try {
-      await api.disapproveNotification(id, disapprovalReason.trim());
+      const result = await api.disapproveNotification(id, disapprovalReason.trim());
       markReadAndUpdate(id);
+      // If correction ran successfully, mark as corrected immediately
+      const corrected = result?.correction?.status === "corrected";
       setNotifications((prev) =>
         prev.map((n) =>
           n.id === id
-            ? { ...n, approval_status: "disapproved" as const, disapproval_reason: disapprovalReason.trim(), read: true }
+            ? {
+                ...n,
+                approval_status: "disapproved" as const,
+                disapproval_reason: disapprovalReason.trim(),
+                corrected_at: corrected ? new Date().toISOString() : null,
+                read: true,
+              }
             : n
         )
       );
@@ -114,6 +123,27 @@ export default function NotificationBell() {
       setDisapprovalReason("");
     } catch {}
     finally { setSubmitting(false); }
+  };
+
+  const handleRevert = async (e: React.MouseEvent, n: Notification) => {
+    e.stopPropagation();
+    const meta = n.metadata;
+    if (!meta?.deliberation_id || !meta?.old_opinion_text) return;
+    setReverting(n.id);
+    try {
+      await api.revertOpinion(meta.deliberation_id, meta.old_opinion_text);
+      // Mark as disapproved with automatic reason
+      await api.disapproveNotification(n.id, "Reverted to previous opinion.");
+      setNotifications((prev) =>
+        prev.map((x) =>
+          x.id === n.id
+            ? { ...x, approval_status: "disapproved" as const, disapproval_reason: "Reverted to previous opinion.", corrected_at: new Date().toISOString(), read: true }
+            : x
+        )
+      );
+      markReadAndUpdate(n.id);
+    } catch {}
+    finally { setReverting(null); }
   };
 
   const isReviewable = (n: Notification) =>
@@ -199,7 +229,6 @@ export default function NotificationBell() {
                   }}
                   onClick={(e) => {
                     if (!n.read) markRead(n.id);
-                    // Toggle expand if this notification has detail
                     if (hasExpandableDetail(n)) {
                       toggleExpand(e, n.id);
                       return;
@@ -236,7 +265,11 @@ export default function NotificationBell() {
 
                   {/* Expanded detail */}
                   {expandedId === n.id && (
-                    <ExpandedDetail notification={n} />
+                    <ExpandedDetail
+                      notification={n}
+                      onRevert={handleRevert}
+                      reverting={reverting === n.id}
+                    />
                   )}
 
                   {/* Approval status badges */}
@@ -255,7 +288,7 @@ export default function NotificationBell() {
                         <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="#ef4444" strokeWidth={2.5}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                         </svg>
-                        <span className="text-[11px] font-medium" style={{ color: "#ef4444" }}>
+                        <span className="text-[11px] font-medium" style={{ color: n.corrected_at ? "#22c55e" : "#ef4444" }}>
                           {n.corrected_at ? "Corrected" : "Disapproved — correcting..."}
                         </span>
                       </div>
@@ -344,11 +377,20 @@ export default function NotificationBell() {
 }
 
 
-function ExpandedDetail({ notification: n }: { notification: Notification }) {
+function ExpandedDetail({
+  notification: n,
+  onRevert,
+  reverting,
+}: {
+  notification: Notification;
+  onRevert: (e: React.MouseEvent, n: Notification) => void;
+  reverting: boolean;
+}) {
   const meta = n.metadata;
   if (!meta) return null;
 
   const actionType = meta.action_type;
+  const hasOldOpinion = !!meta.old_opinion_text;
 
   return (
     <div
@@ -368,15 +410,45 @@ function ExpandedDetail({ notification: n }: { notification: Notification }) {
         </div>
       )}
 
-      {/* Update opinion — show the new opinion */}
+      {/* Update opinion — show old → new comparison */}
       {actionType === "update_opinion" && meta.opinion_text && (
         <div>
+          {hasOldOpinion && (
+            <>
+              <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--muted)" }}>
+                Previous opinion
+              </div>
+              <p className="text-xs leading-relaxed line-through opacity-60" style={{ color: "var(--foreground)" }}>
+                {meta.old_opinion_text}
+              </p>
+              <div className="my-1.5 flex items-center gap-1" style={{ color: "var(--muted)" }}>
+                <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                </svg>
+                <span className="text-[10px]">changed to</span>
+              </div>
+            </>
+          )}
           <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--muted)" }}>
-            Updated opinion
+            {hasOldOpinion ? "New opinion" : "Updated opinion"}
           </div>
           <p className="text-xs leading-relaxed" style={{ color: "var(--foreground)" }}>
             {meta.opinion_text}
           </p>
+          {/* Revert button */}
+          {hasOldOpinion && n.approval_status === null && (
+            <button
+              onClick={(e) => onRevert(e, n)}
+              disabled={reverting}
+              className="mt-2 flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-medium transition-colors hover:border-orange-400 hover:text-orange-500 disabled:opacity-40"
+              style={{ borderColor: "var(--border)", color: "var(--muted)" }}
+            >
+              <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+              </svg>
+              {reverting ? "Reverting..." : "Revert to previous"}
+            </button>
+          )}
         </div>
       )}
 
@@ -399,7 +471,7 @@ function ExpandedDetail({ notification: n }: { notification: Notification }) {
         </div>
       )}
 
-      {/* Create deliberation — show the question + categories */}
+      {/* Create deliberation — show categories */}
       {actionType === "create_deliberation" && (
         <div>
           <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--muted)" }}>

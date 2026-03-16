@@ -301,7 +301,15 @@ def _exec_get_agent_status(db: Session, hosted_agent: HostedAgent) -> dict:
 
     return {
         "actions": [
-            {"deliberation_id": str(a["deliberation_id"]), "question": a["question"], "action": a["action"]}
+            {
+                "deliberation_id": str(a["deliberation_id"]),
+                "question": a["question"],
+                "action": a["action"],
+                # Include context for update_opinion actions so LLM knows what to work with
+                **({"current_opinion": a["current_opinion"]} if "current_opinion" in a else {}),
+                **({"new_statements_summary": a["new_statements_summary"]} if "new_statements_summary" in a else {}),
+                **({"opinion_age_days": a["opinion_age_days"]} if "opinion_age_days" in a else {}),
+            }
             for a in actions
         ],
         "discovered": [

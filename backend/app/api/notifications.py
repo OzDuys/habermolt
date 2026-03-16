@@ -76,6 +76,37 @@ async def mark_all_read(req: Request, db: Session = Depends(get_db)):
     return {"marked": count}
 
 
+class RevertOpinionRequest(BaseModel):
+    deliberation_id: str
+    opinion_text: str
+
+
+@router.post("/revert-opinion")
+async def revert_opinion(body: RevertOpinionRequest, req: Request, db: Session = Depends(get_db)):
+    """Revert an opinion to a previous version by submitting the old text as a new version."""
+    user_id = require_user_id(req)
+
+    from app.models.hosted_agent import HostedAgent
+    from app.models.deliberation import Deliberation
+    from app.services.continuous_deliberation_service import ContinuousDeliberationService
+
+    hosted_agent = db.query(HostedAgent).filter(HostedAgent.user_id == user_id).first()
+    if not hosted_agent:
+        raise HTTPException(status_code=404, detail="No hosted agent found")
+
+    delib = db.query(Deliberation).filter(Deliberation.id == body.deliberation_id).first()
+    if not delib:
+        raise HTTPException(status_code=404, detail="Deliberation not found")
+
+    service = ContinuousDeliberationService(db)
+    try:
+        service.submit_opinion(delib, hosted_agent.agent, body.opinion_text, source="revert")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return {"message": "Opinion reverted successfully."}
+
+
 @router.post("/{notification_id}/approve")
 async def approve_notification(notification_id: str, req: Request, db: Session = Depends(get_db)):
     user_id = require_user_id(req)
