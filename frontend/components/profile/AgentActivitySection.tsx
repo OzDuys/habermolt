@@ -50,44 +50,6 @@ function formatDate(dateStr: string): string {
 
 // --- Helper components ---
 
-function StarRating({
-  rating,
-  onRate,
-  interactive = false,
-}: {
-  rating: number;
-  onRate?: (r: number) => void;
-  interactive?: boolean;
-}) {
-  const [hover, setHover] = useState(0);
-  const Tag = interactive ? "button" : "span";
-
-  return (
-    <div className="flex gap-0.5">
-      {[1, 2, 3, 4, 5].map((star) => (
-        <Tag
-          key={star}
-          {...(interactive ? { type: "button" as const } : {})}
-          className={`text-xl transition-colors ${interactive ? "cursor-pointer hover:scale-110" : "cursor-default"}`}
-          style={{
-            color: star <= (hover || rating) ? "var(--accent)" : "var(--border)",
-          }}
-          onClick={(e: React.MouseEvent) => {
-            if (interactive) {
-              e.stopPropagation();
-              onRate?.(star);
-            }
-          }}
-          onMouseEnter={() => interactive && setHover(star)}
-          onMouseLeave={() => interactive && setHover(0)}
-        >
-          &#x2605;
-        </Tag>
-      ))}
-    </div>
-  );
-}
-
 function RankBadge({ rank, label }: { rank: number | null; label: string }) {
   if (rank === null) return null;
   return (
@@ -215,22 +177,17 @@ function StatsBar({ stats }: { stats: AgentActivityStats }) {
 
 function DeliberationCard({
   delib,
-  onRate,
   onRateConsensus,
   ratingLoading,
   autoShowRating,
 }: {
   delib: ActivityDeliberation;
-  onRate: (deliberationId: string, rating: number, feedback?: string) => void;
   onRateConsensus: (deliberationId: string, ratings: { representativeness: number; specificity: number; usefulness: number }, feedback?: string) => void;
   ratingLoading: string | null;
   autoShowRating?: boolean;
 }) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState(false);
-  const [showRating, setShowRating] = useState(autoShowRating && !delib.my_rating);
-  const [pendingRating, setPendingRating] = useState(delib.my_rating?.rating || 0);
-  const [feedback, setFeedback] = useState(delib.my_rating?.feedback || "");
 
   useEffect(() => {
     if (autoShowRating && cardRef.current) {
@@ -350,46 +307,6 @@ function DeliberationCard({
             </p>
           )}
         </div>
-
-        {/* Rate button — surfaced for unrated deliberations */}
-        {!delib.my_rating && !showRating && (
-          <button
-            onClick={() => setShowRating(true)}
-            className="mt-3 flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-all hover:opacity-80"
-            style={{ background: "var(--accent-light)", color: "var(--accent)" }}
-          >
-            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
-            </svg>
-            Rate your agent
-          </button>
-        )}
-
-        {/* Inline rating form — shown when surfaced button is clicked or autoShowRating */}
-        {showRating && !expanded && (
-          <div className="mt-3 rounded-lg border p-3" style={{ borderColor: "var(--border)", background: "var(--surface-dim)" }}>
-            <p className="mb-2 text-sm font-semibold" style={{ color: "var(--foreground)" }}>
-              How well did your agent represent your views?
-            </p>
-            <StarRating rating={pendingRating} onRate={(r) => setPendingRating(r)} interactive />
-            <textarea
-              className="mt-2 w-full rounded-lg border p-2 text-sm"
-              style={{ borderColor: "var(--border)", background: "var(--surface)", color: "var(--foreground)", resize: "vertical" }}
-              rows={2}
-              placeholder="Optional: Did your agent miss any of your views or misrepresent something?"
-              value={feedback}
-              onChange={(e) => setFeedback(e.target.value)}
-            />
-            <button
-              onClick={() => onRate(delib.deliberation_id, pendingRating, feedback || undefined)}
-              disabled={pendingRating === 0 || ratingLoading === delib.deliberation_id}
-              className="mt-2 rounded-lg px-4 py-2 text-sm font-medium text-white transition-opacity disabled:opacity-50"
-              style={{ background: "var(--accent)" }}
-            >
-              {ratingLoading === delib.deliberation_id ? "Saving..." : "Submit rating"}
-            </button>
-          </div>
-        )}
 
         {/* Expand toggle */}
         <button
@@ -562,42 +479,6 @@ function DeliberationCard({
             </div>
           )}
 
-          {/* Rating section */}
-          <div className="mt-5 border-t pt-4" style={{ borderColor: "var(--border)" }}>
-            {!showRating && !delib.my_rating ? (
-              <button
-                onClick={() => setShowRating(true)}
-                className="text-sm font-medium transition-opacity hover:opacity-80"
-                style={{ color: "var(--accent)" }}
-              >
-                Rate how well your agent represented your views
-              </button>
-            ) : (
-              <div>
-                <p className="mb-2 text-sm font-semibold" style={{ color: "var(--foreground)" }}>
-                  {delib.my_rating ? "Your rating" : "How well did your agent represent your views?"}
-                </p>
-                <StarRating rating={pendingRating} onRate={(r) => setPendingRating(r)} interactive />
-                <textarea
-                  className="mt-2 w-full rounded-lg border p-2 text-sm"
-                  style={{ borderColor: "var(--border)", background: "var(--surface-dim)", color: "var(--foreground)", resize: "vertical" }}
-                  rows={2}
-                  placeholder="Optional: Did your agent miss any of your views or misrepresent something?"
-                  value={feedback}
-                  onChange={(e) => setFeedback(e.target.value)}
-                />
-                <button
-                  onClick={() => onRate(delib.deliberation_id, pendingRating, feedback || undefined)}
-                  disabled={pendingRating === 0 || ratingLoading === delib.deliberation_id}
-                  className="mt-2 rounded-lg px-4 py-2 text-sm font-medium text-white transition-opacity disabled:opacity-50"
-                  style={{ background: "var(--accent)" }}
-                >
-                  {ratingLoading === delib.deliberation_id ? "Saving..." : delib.my_rating ? "Update rating" : "Submit rating"}
-                </button>
-              </div>
-            )}
-          </div>
-
         </div>
       )}
     </div>
@@ -625,31 +506,6 @@ export default function AgentActivitySection({ rateDeliberationId }: { rateDelib
       .catch(() => setError("Failed to load agent activity."))
       .finally(() => setLoading(false));
   }, []);
-
-  const handleRate = async (deliberationId: string, rating: number, feedback?: string) => {
-    setRatingLoading(deliberationId);
-    try {
-      const res = await fetch("/api/backend/agents/me/rate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ deliberation_id: deliberationId, rating, feedback: feedback || null }),
-      });
-      if (res.ok) {
-        const ratingData = await res.json();
-        setActivity((prev) => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            deliberations: prev.deliberations.map((d) =>
-              d.deliberation_id === deliberationId ? { ...d, my_rating: ratingData } : d
-            ),
-          };
-        });
-      }
-    } catch {} finally {
-      setRatingLoading(null);
-    }
-  };
 
   const handleRateConsensus = async (
     deliberationId: string,
@@ -750,7 +606,6 @@ export default function AgentActivitySection({ rateDeliberationId }: { rateDelib
             <DeliberationCard
               key={delib.deliberation_id}
               delib={delib}
-              onRate={handleRate}
               onRateConsensus={handleRateConsensus}
               ratingLoading={ratingLoading}
               autoShowRating={rateDeliberationId === delib.deliberation_id}

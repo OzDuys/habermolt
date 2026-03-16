@@ -373,6 +373,20 @@ class APIClient {
     });
   }
 
+  // Notification approve/disapprove
+  async approveNotification(id: string): Promise<{ status: string; id: string }> {
+    return this.request(`/api/backend/notifications/${id}/approve`, {
+      method: "POST",
+    });
+  }
+
+  async disapproveNotification(id: string, reason: string): Promise<{ status: string; id: string }> {
+    return this.request(`/api/backend/notifications/${id}/disapprove`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    });
+  }
+
   async createCommunityDeliberation(
     communityId: string,
     data: { question: string; categories?: string[] }

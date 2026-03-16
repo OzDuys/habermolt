@@ -209,7 +209,8 @@ a democratic deliberation platform.
 - **create_deliberation**: Start a new deliberation on a topic your human cares about.
 - **update_opinion**: Update your human's opinion when their stance has changed.
 - **revisit_opinion**: Re-evaluate your opinion on a deliberation that has evolved.
-- **acknowledge_feedback**: Mark human feedback as processed after learning from it.
+- **process_disapproval**: Mark a disapproved action as corrected after fixing it.
+- **acknowledge_feedback**: Mark legacy star-rating feedback as processed after learning from it.
 - **submit_feedback**: Report bugs or suggestions about the platform.
 
 ## Instructions
@@ -239,10 +240,21 @@ Your human can always chat with you to direct you to join specific deliberations
 Don't join more than 2 new deliberations per heartbeat. \
 If you skip deliberations, briefly explain why (too little profile signal on that topic).
 
-### Step 5: Process feedback
+### Step 5: Process disapprovals (PRIORITY — do this before new work)
+If pending_disapprovals is non-empty, your human disapproved specific actions. For each one:
+1. Read the disapproval reason carefully — what did you get wrong?
+2. Correct the specific action:
+   - For join_deliberation/update_opinion: call update_opinion with a revised opinion.
+   - For rank_statements: call rank_statements to re-rank.
+   - For propose_statement: acknowledge the feedback (can't retract, but learn from it).
+3. If the reason reveals something new about your human's values, call update_profile \
+with the lesson learned so you don't repeat the mistake.
+4. Call process_disapproval with the notification_id and a brief correction_summary.
+
+### Step 5b: Process legacy feedback (old star ratings)
 If pending_feedback includes ratings of 3 or below:
 1. Read the feedback carefully — what did you get wrong?
-2. If the feedback reveals something new about your human's values, call update_profile. Skip this if the feedback is just about ranking or opinion quality.
+2. If the feedback reveals something new about your human's values, call update_profile.
 3. Call update_opinion on that deliberation with a corrected opinion.
 4. Call rank_statements on that deliberation to re-rank with your updated understanding.
 5. Call acknowledge_feedback with the rating IDs.
@@ -359,7 +371,7 @@ def run_single_hosted_agent(db: Session, hosted_agent: HostedAgent) -> dict:
     hosted_agent.last_heartbeat_at = datetime.utcnow()
     db.commit()
 
-    _create_heartbeat_notification(db, hosted_agent, structured_actions)
+    _create_action_notifications(db, hosted_agent, structured_actions)
 
     return {
         "status": "ok",
@@ -504,46 +516,97 @@ def run_single_hosted_agent_stream(db: Session, hosted_agent: HostedAgent):
     hosted_agent.last_heartbeat_at = datetime.utcnow()
     db.commit()
 
-    _create_heartbeat_notification(db, hosted_agent, structured_actions)
+    _create_action_notifications(db, hosted_agent, structured_actions)
 
     yield {"type": "done"}
 
 
-def _create_heartbeat_notification(db: Session, hosted_agent: HostedAgent, actions: list[dict]) -> None:
-    """Create a single notification summarising a heartbeat run."""
+def _create_action_notifications(db: Session, hosted_agent: HostedAgent, actions: list[dict]) -> None:
+    """Create one notification per action so the human can approve/disapprove each."""
     if not actions:
         return
 
-    # Count action types
-    joined = sum(1 for a in actions if a.get("action") == "join_deliberation")
-    ranked = sum(1 for a in actions if a.get("action") in ("rank_statements", "update_rankings", "review_predicted_rankings"))
-    proposed = sum(1 for a in actions if a.get("action") in ("propose_statement", "add_statement"))
-    suggested = sum(1 for a in actions if a.get("action") == "suggest_deliberation")
-    created = sum(1 for a in actions if a.get("action") == "create_deliberation")
+    for action in actions:
+        action_type = action.get("action", "")
+        question = action.get("question", "")
+        delib_id = action.get("deliberation_id")
+        truncated_q = question[:80] if question else "Unknown"
 
-    parts = []
-    if joined:
-        parts.append(f"joined {joined} deliberation{'s' if joined != 1 else ''}")
-    if ranked:
-        parts.append(f"ranked statements in {ranked}")
-    if proposed:
-        parts.append(f"proposed {proposed} consensus statement{'s' if proposed != 1 else ''}")
-    if created:
-        parts.append(f"created {created} deliberation{'s' if created != 1 else ''}")
-    if suggested:
-        parts.append(f"suggested {suggested} deliberation{'s' if suggested != 1 else ''} for you")
+        if action_type == "join_deliberation":
+            title = f"Joined '{truncated_q}'"
+            body = action.get("opinion_text", "")[:300] or "Submitted an opinion."
+            metadata = {
+                "action_type": action_type,
+                "deliberation_id": str(delib_id) if delib_id else None,
+                "opinion_text": action.get("opinion_text", ""),
+            }
 
-    if not parts:
-        return
+        elif action_type in ("rank_statements", "update_rankings", "review_predicted_rankings"):
+            title = f"Ranked statements in '{truncated_q}'"
+            ranking_data = action.get("ranking_data") or []
+            body = f"Ranked {len(ranking_data)} statements."
+            metadata = {
+                "action_type": "rank_statements",
+                "deliberation_id": str(delib_id) if delib_id else None,
+                "ranking_data": ranking_data,
+            }
 
-    body = "Your agent " + ", ".join(parts) + "."
+        elif action_type in ("propose_statement", "add_statement"):
+            stmt_title = action.get("statement_title", "Untitled")
+            title = f"Proposed: {stmt_title}"
+            body = action.get("statement_text", "")[:300] or "Proposed a consensus statement."
+            metadata = {
+                "action_type": "propose_statement",
+                "deliberation_id": str(delib_id) if delib_id else None,
+                "statement_title": stmt_title,
+                "statement_text": action.get("statement_text", ""),
+            }
 
-    notification_service.create_notification(
-        db, hosted_agent.user_id,
-        type="agent_action",
-        title="Heartbeat complete",
-        body=body,
-    )
+        elif action_type == "create_deliberation":
+            title = f"Created '{truncated_q}'"
+            body = f"Started a new deliberation: \"{question}\""
+            metadata = {
+                "action_type": action_type,
+                "deliberation_id": str(delib_id) if delib_id else None,
+                "categories": action.get("categories", []),
+            }
+
+        elif action_type == "suggest_deliberation":
+            title = f"Suggested: '{truncated_q}'"
+            body = action.get("reason", "Thought you might be interested.")
+            metadata = {
+                "action_type": action_type,
+                "deliberation_id": str(delib_id) if delib_id else None,
+            }
+
+        elif action_type == "revisit_opinion":
+            title = f"Updated opinion on '{truncated_q}'"
+            body = action.get("opinion_text", "")[:300] or "Revised opinion."
+            metadata = {
+                "action_type": action_type,
+                "deliberation_id": str(delib_id) if delib_id else None,
+                "opinion_text": action.get("opinion_text", ""),
+            }
+
+        elif action_type == "update_opinion":
+            title = f"Updated opinion on '{truncated_q}'"
+            body = action.get("description", "Updated opinion.")
+            metadata = {
+                "action_type": action_type,
+                "deliberation_id": str(delib_id) if delib_id else None,
+            }
+
+        else:
+            # Skip non-reviewable actions (get_agent_status, update_profile, acknowledge_feedback, etc.)
+            continue
+
+        notification_service.create_notification(
+            db, hosted_agent.user_id,
+            type="agent_action",
+            title=title,
+            body=body,
+            metadata=metadata,
+        )
 
 
 def _should_run_now(hosted_agent: HostedAgent) -> bool:
@@ -724,15 +787,6 @@ def _join_deliberation(db: Session, hosted_agent: HostedAgent, delib_id: UUID) -
 
     # Propose consensus
     _do_add_statement(db, hosted_agent, delib.id)
-
-    # Prompt user to rate how well the agent represented them
-    notification_service.create_notification(
-        db, hosted_agent.user_id,
-        type="rate_agent",
-        title="How did your agent do?",
-        body=f'Your agent joined "{delib.question[:80]}" — rate how well it represented you.',
-        metadata={"deliberation_id": str(delib.id)},
-    )
 
     return {
         "action": "join_deliberation",

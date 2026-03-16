@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     # Hosted Agents
     HOSTED_AGENT_ENCRYPTION_KEY: str = ""  # Fernet key for BYOK API key encryption
     CRON_SECRET: str = ""  # Secret for /hosted-agents/heartbeat-all endpoint
+    HEARTBEAT_LOOP_ENABLED: bool = True  # Automatic heartbeat loop; disable to stop background heartbeats
     HOSTED_AGENT_FREE_TOKEN_LIMIT: int = 100_000  # Weekly token limit for free tier
     HOSTED_AGENT_SUBSCRIPTION_TOKEN_LIMIT: int = 500_000  # Weekly token limit for subscription tier
     HOSTED_AGENT_DEFAULT_MODEL: str = "google/gemini-3-flash-preview"

@@ -252,6 +252,31 @@ TOOL_SCHEMAS = [
     {
         "type": "function",
         "function": {
+            "name": "process_disapproval",
+            "description": (
+                "Process a human's disapproval of an action you took. Call this AFTER you have "
+                "corrected the action (e.g. update_opinion, rank_statements) and updated the profile "
+                "with the lesson learned."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "notification_id": {
+                        "type": "string",
+                        "description": "The notification ID of the disapproved action.",
+                    },
+                    "correction_summary": {
+                        "type": "string",
+                        "description": "Brief description of what you changed to address the feedback.",
+                    },
+                },
+                "required": ["notification_id", "correction_summary"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "suggest_deliberation",
             "description": (
                 "Suggest a deliberation to your human. Use this instead of just mentioning "
@@ -327,6 +352,8 @@ def execute_tool(
             return _exec_acknowledge_feedback(db, hosted_agent, arguments["rating_ids"])
         elif tool_name == "submit_feedback":
             return _exec_submit_feedback(db, hosted_agent, arguments["feedback_text"], arguments["category"])
+        elif tool_name == "process_disapproval":
+            return _exec_process_disapproval(db, hosted_agent, arguments["notification_id"], arguments["correction_summary"])
         elif tool_name == "run_heartbeat":
             return _exec_run_heartbeat(db, hosted_agent)
         elif tool_name == "suggest_deliberation":
@@ -342,11 +369,12 @@ def _exec_get_agent_status(db: Session, hosted_agent: HostedAgent) -> dict:
     from app.services.hosted_agent_runner import _compute_agent_actions
     from app.models.agent_rating import AgentRating
     from app.models.deliberation import Deliberation
+    from app.models.notification import Notification
 
     agent = hosted_agent.agent
     actions, discovered = _compute_agent_actions(db, agent)
 
-    # Query unacknowledged human feedback
+    # Query unacknowledged human feedback (legacy star ratings)
     pending_ratings = (
         db.query(AgentRating, Deliberation.question)
         .join(Deliberation, Deliberation.id == AgentRating.deliberation_id)
@@ -355,6 +383,18 @@ def _exec_get_agent_status(db: Session, hosted_agent: HostedAgent) -> dict:
             AgentRating.acknowledged_at.is_(None),
         )
         .order_by(AgentRating.submitted_at.desc())
+        .all()
+    )
+
+    # Query pending disapprovals (new action-level feedback)
+    disapprovals = (
+        db.query(Notification)
+        .filter(
+            Notification.user_id == hosted_agent.user_id,
+            Notification.approval_status == "disapproved",
+            Notification.corrected_at.is_(None),
+        )
+        .order_by(Notification.created_at.desc())
         .all()
     )
 
@@ -376,6 +416,17 @@ def _exec_get_agent_status(db: Session, hosted_agent: HostedAgent) -> dict:
                 "feedback": ar.feedback,
             }
             for ar, q in pending_ratings
+        ],
+        "pending_disapprovals": [
+            {
+                "notification_id": str(n.id),
+                "action_type": (n.metadata_ or {}).get("action_type"),
+                "deliberation_id": (n.metadata_ or {}).get("deliberation_id"),
+                "title": n.title,
+                "reason": n.disapproval_reason,
+                "action_details": n.metadata_,
+            }
+            for n in disapprovals
         ],
     }
 
@@ -616,6 +667,48 @@ def _exec_run_heartbeat(db: Session, hosted_agent: HostedAgent) -> dict:
         "action": "run_heartbeat",
         "description": f"Heartbeat complete: {len(results)} actions taken.",
         "results": results,
+    }
+
+
+def _exec_process_disapproval(db: Session, hosted_agent: HostedAgent, notification_id: str, correction_summary: str) -> dict:
+    """Mark a disapproved action as corrected and notify the human."""
+    from datetime import datetime
+    from app.models.notification import Notification
+    from app.services import notification_service
+
+    notification = (
+        db.query(Notification)
+        .filter(
+            Notification.id == UUID(notification_id),
+            Notification.user_id == hosted_agent.user_id,
+            Notification.approval_status == "disapproved",
+            Notification.corrected_at.is_(None),
+        )
+        .first()
+    )
+    if not notification:
+        return {"error": f"Disapproval notification {notification_id} not found or already corrected."}
+
+    notification.corrected_at = datetime.utcnow()
+    db.commit()
+
+    # Create follow-up notification for the human
+    notification_service.create_notification(
+        db, hosted_agent.user_id,
+        type="agent_action",
+        title=f"Corrected: {notification.title}",
+        body=correction_summary,
+        metadata={
+            "action_type": "correction",
+            "original_notification_id": str(notification.id),
+            "deliberation_id": (notification.metadata_ or {}).get("deliberation_id"),
+        },
+    )
+
+    return {
+        "action": "process_disapproval",
+        "notification_id": notification_id,
+        "description": f"Processed disapproval and corrected: {correction_summary[:80]}",
     }
 
 

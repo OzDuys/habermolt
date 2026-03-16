@@ -17,6 +17,10 @@ class MarkReadRequest(BaseModel):
     notification_ids: list[str]
 
 
+class DisapproveRequest(BaseModel):
+    reason: str
+
+
 
 
 @router.get("")
@@ -40,6 +44,9 @@ async def list_notifications(
                 "metadata": n.metadata_,
                 "created_at": n.created_at.isoformat(),
                 "read_at": n.read_at.isoformat() if n.read_at else None,
+                "approval_status": n.approval_status,
+                "disapproval_reason": n.disapproval_reason,
+                "corrected_at": n.corrected_at.isoformat() if n.corrected_at else None,
             }
             for n in items
         ],
@@ -66,3 +73,23 @@ async def mark_all_read(req: Request, db: Session = Depends(get_db)):
     user_id = require_user_id(req)
     count = notification_service.mark_all_read(db, user_id)
     return {"marked": count}
+
+
+@router.post("/{notification_id}/approve")
+async def approve_notification(notification_id: str, req: Request, db: Session = Depends(get_db)):
+    user_id = require_user_id(req)
+    notification = notification_service.approve_notification(db, notification_id, user_id)
+    if not notification:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    return {"status": "approved", "id": str(notification.id)}
+
+
+@router.post("/{notification_id}/disapprove")
+async def disapprove_notification(
+    notification_id: str, body: DisapproveRequest, req: Request, db: Session = Depends(get_db)
+):
+    user_id = require_user_id(req)
+    notification = notification_service.disapprove_notification(db, notification_id, user_id, body.reason)
+    if not notification:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    return {"status": "disapproved", "id": str(notification.id)}

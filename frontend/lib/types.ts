@@ -330,8 +330,11 @@ export interface Notification {
   title: string;
   body: string;
   read: boolean;
-  metadata: Record<string, string> | null;
+  metadata: Record<string, any> | null;
   created_at: string;
+  approval_status: "approved" | "disapproved" | null;
+  disapproval_reason: string | null;
+  corrected_at: string | null;
 }
 
 // Agent activity types

@@ -5,7 +5,7 @@ Notification model — in-app notifications for users about their hosted agent's
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Column, String, Boolean, DateTime
+from sqlalchemy import Column, String, Boolean, DateTime, Text
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 
 from app.database import Base
@@ -22,6 +22,10 @@ class Notification(Base):
     body = Column(String, nullable=False)
     read = Column(Boolean, default=False, nullable=False, index=True)
     metadata_ = Column("metadata", JSONB, nullable=True)  # deliberation_id, action details, etc.
+
+    approval_status = Column(String(20), nullable=True, index=True)  # null, "approved", "disapproved"
+    disapproval_reason = Column(Text, nullable=True)
+    corrected_at = Column(DateTime, nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
     read_at = Column(DateTime, nullable=True)

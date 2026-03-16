@@ -4,12 +4,16 @@ import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import type { Notification } from "@/lib/types";
 import { timeAgo } from "@/lib/utils";
+import { api } from "@/lib/api";
 
 export default function NotificationBell() {
   const [count, setCount] = useState(0);
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(false);
+  const [disapprovingId, setDisapprovingId] = useState<string | null>(null);
+  const [disapprovalReason, setDisapprovalReason] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
@@ -67,6 +71,45 @@ export default function NotificationBell() {
     setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, read: true } : n));
     setCount((c) => Math.max(0, c - 1));
   };
+
+  const handleApprove = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    try {
+      await api.approveNotification(id);
+      setNotifications((prev) =>
+        prev.map((n) => n.id === id ? { ...n, approval_status: "approved" as const } : n)
+      );
+    } catch {}
+  };
+
+  const handleStartDisapprove = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    setDisapprovingId(id);
+    setDisapprovalReason("");
+  };
+
+  const handleSubmitDisapproval = async (e: React.FormEvent, id: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!disapprovalReason.trim()) return;
+    setSubmitting(true);
+    try {
+      await api.disapproveNotification(id, disapprovalReason.trim());
+      setNotifications((prev) =>
+        prev.map((n) =>
+          n.id === id
+            ? { ...n, approval_status: "disapproved" as const, disapproval_reason: disapprovalReason.trim() }
+            : n
+        )
+      );
+      setDisapprovingId(null);
+      setDisapprovalReason("");
+    } catch {}
+    finally { setSubmitting(false); }
+  };
+
+  const isReviewable = (n: Notification) =>
+    n.type === "agent_action" && n.approval_status === null && n.metadata?.action_type;
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
@@ -156,6 +199,101 @@ export default function NotificationBell() {
                     </span>
                   </div>
                   <p className="text-xs" style={{ color: "var(--muted)" }}>{n.body}</p>
+
+                  {/* Approval status badges */}
+                  {n.approval_status === "approved" && (
+                    <div className="mt-1.5 flex items-center gap-1">
+                      <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="#22c55e" strokeWidth={2.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span className="text-[11px] font-medium" style={{ color: "#22c55e" }}>Approved</span>
+                    </div>
+                  )}
+
+                  {n.approval_status === "disapproved" && (
+                    <div className="mt-1.5">
+                      <div className="flex items-center gap-1">
+                        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="#ef4444" strokeWidth={2.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                        <span className="text-[11px] font-medium" style={{ color: "#ef4444" }}>
+                          {n.corrected_at ? "Corrected" : "Disapproved"}
+                        </span>
+                      </div>
+                      {n.disapproval_reason && (
+                        <p className="mt-0.5 text-[11px] italic" style={{ color: "var(--muted)" }}>
+                          &ldquo;{n.disapproval_reason}&rdquo;
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Approve/Disapprove buttons for reviewable actions */}
+                  {isReviewable(n) && (
+                    <div className="mt-2 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        onClick={(e) => handleApprove(e, n.id)}
+                        className="flex items-center gap-1 rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors hover:border-green-400 hover:text-green-500"
+                        style={{ borderColor: "var(--border)", color: "var(--muted)" }}
+                      >
+                        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                        Approve
+                      </button>
+                      <button
+                        onClick={(e) => handleStartDisapprove(e, n.id)}
+                        className="flex items-center gap-1 rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors hover:border-red-400 hover:text-red-500"
+                        style={{ borderColor: "var(--border)", color: "var(--muted)" }}
+                      >
+                        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                        Disapprove
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Disapproval reason input */}
+                  {disapprovingId === n.id && (
+                    <form
+                      className="mt-2"
+                      onSubmit={(e) => handleSubmitDisapproval(e, n.id)}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <textarea
+                        value={disapprovalReason}
+                        onChange={(e) => setDisapprovalReason(e.target.value)}
+                        placeholder="What did your agent get wrong?"
+                        className="w-full rounded-md border px-2.5 py-1.5 text-xs outline-none focus:ring-1"
+                        style={{
+                          borderColor: "var(--border)",
+                          background: "var(--background)",
+                          color: "var(--foreground)",
+                        }}
+                        rows={2}
+                        autoFocus
+                      />
+                      <div className="mt-1.5 flex items-center gap-2">
+                        <button
+                          type="submit"
+                          disabled={!disapprovalReason.trim() || submitting}
+                          className="rounded-md px-2.5 py-1 text-[11px] font-medium text-white transition-opacity disabled:opacity-40"
+                          style={{ background: "#ef4444" }}
+                        >
+                          {submitting ? "Sending..." : "Submit"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDisapprovingId(null)}
+                          className="text-[11px] font-medium"
+                          style={{ color: "var(--muted)" }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </form>
+                  )}
                 </div>
               ))}
             </div>
@@ -178,4 +316,3 @@ function TypeIcon({ type }: { type: string }) {
     </svg>
   );
 }
-
