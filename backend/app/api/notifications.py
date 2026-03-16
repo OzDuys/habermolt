@@ -2,6 +2,8 @@
 API routes for in-app notifications.
 """
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Request, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -10,6 +12,7 @@ from app.database import get_db
 from app.middleware.auth import require_user_id
 from app.services import notification_service
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
 
@@ -19,8 +22,6 @@ class MarkReadRequest(BaseModel):
 
 class DisapproveRequest(BaseModel):
     reason: str
-
-
 
 
 @router.get("")
@@ -92,4 +93,22 @@ async def disapprove_notification(
     notification = notification_service.disapprove_notification(db, notification_id, user_id, body.reason)
     if not notification:
         raise HTTPException(status_code=404, detail="Notification not found")
+
+    # Trigger immediate correction cycle if user has a hosted agent
+    try:
+        from app.models.hosted_agent import HostedAgent
+        from app.services.hosted_agent_runner import run_correction_cycle
+
+        hosted_agent = db.query(HostedAgent).filter(HostedAgent.user_id == user_id).first()
+        if hosted_agent and hosted_agent.is_active:
+            correction_result = run_correction_cycle(db, hosted_agent, notification)
+            return {
+                "status": "disapproved",
+                "id": str(notification.id),
+                "correction": correction_result,
+            }
+    except Exception as e:
+        # Correction failed but disapproval was saved — agent will retry on next heartbeat
+        logger.error(f"Immediate correction failed for notification {notification_id}: {e}", exc_info=True)
+
     return {"status": "disapproved", "id": str(notification.id)}

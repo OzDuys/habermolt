@@ -14,6 +14,7 @@ export default function NotificationBell() {
   const [disapprovingId, setDisapprovingId] = useState<string | null>(null);
   const [disapprovalReason, setDisapprovalReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
@@ -72,12 +73,18 @@ export default function NotificationBell() {
     setCount((c) => Math.max(0, c - 1));
   };
 
+  const markReadAndUpdate = (id: string) => {
+    const n = notifications.find((x) => x.id === id);
+    if (n && !n.read) markRead(id);
+  };
+
   const handleApprove = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     try {
       await api.approveNotification(id);
+      markReadAndUpdate(id);
       setNotifications((prev) =>
-        prev.map((n) => n.id === id ? { ...n, approval_status: "approved" as const } : n)
+        prev.map((n) => n.id === id ? { ...n, approval_status: "approved" as const, read: true } : n)
       );
     } catch {}
   };
@@ -95,10 +102,11 @@ export default function NotificationBell() {
     setSubmitting(true);
     try {
       await api.disapproveNotification(id, disapprovalReason.trim());
+      markReadAndUpdate(id);
       setNotifications((prev) =>
         prev.map((n) =>
           n.id === id
-            ? { ...n, approval_status: "disapproved" as const, disapproval_reason: disapprovalReason.trim() }
+            ? { ...n, approval_status: "disapproved" as const, disapproval_reason: disapprovalReason.trim(), read: true }
             : n
         )
       );
@@ -109,7 +117,18 @@ export default function NotificationBell() {
   };
 
   const isReviewable = (n: Notification) =>
-    n.type === "agent_action" && n.approval_status === null && n.metadata?.action_type;
+    n.type === "agent_action" && n.approval_status === null && n.metadata?.reviewable;
+
+  const hasExpandableDetail = (n: Notification) =>
+    n.type === "agent_action" && n.metadata && (
+      n.metadata.opinion_text ||
+      n.metadata.statement_text
+    );
+
+  const toggleExpand = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    setExpandedId((prev) => prev === id ? null : id);
+  };
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
@@ -160,7 +179,7 @@ export default function NotificationBell() {
         </div>
 
         {/* Body */}
-        <div className="max-h-80 overflow-y-auto">
+        <div className="max-h-96 overflow-y-auto">
           {loading ? (
             <div className="py-8 text-center text-sm" style={{ color: "var(--muted)" }}>Loading...</div>
           ) : notifications.length === 0 ? (
@@ -172,33 +191,53 @@ export default function NotificationBell() {
               {notifications.map((n) => (
                 <div
                   key={n.id}
-                  className={`border-b px-4 py-3 transition-colors last:border-b-0 ${(!n.read || n.metadata?.deliberation_id) ? "cursor-pointer hover:opacity-80" : ""}`}
+                  className={`border-b px-4 py-3 transition-colors last:border-b-0 ${(!n.read || n.metadata?.deliberation_id || hasExpandableDetail(n)) ? "cursor-pointer hover:opacity-90" : ""}`}
                   style={{
                     borderColor: "var(--border)",
                     background: !n.read ? "var(--surface)" : "transparent",
                     borderLeft: !n.read ? "3px solid var(--accent)" : "3px solid transparent",
                   }}
-                  onClick={() => {
+                  onClick={(e) => {
                     if (!n.read) markRead(n.id);
+                    // Toggle expand if this notification has detail
+                    if (hasExpandableDetail(n)) {
+                      toggleExpand(e, n.id);
+                      return;
+                    }
                     const delibId = n.metadata?.deliberation_id;
                     if (delibId) {
                       setOpen(false);
-                      if (n.type === "rate_agent") {
-                        router.push(`/agent-activity?rate=${delibId}`);
-                      } else {
-                        router.push(`/deliberations/${delibId}`);
-                      }
+                      router.push(`/deliberations/${delibId}`);
                     }
                   }}
                 >
                   <div className="mb-0.5 flex items-center gap-2">
                     <TypeIcon type={n.type} />
                     <span className="text-sm font-medium" style={{ color: "var(--foreground)" }}>{n.title}</span>
-                    <span className="ml-auto shrink-0 text-xs" style={{ color: "var(--muted)" }}>
-                      {timeAgo(n.created_at)}
+                    <span className="ml-auto flex shrink-0 items-center gap-1.5">
+                      {hasExpandableDetail(n) && (
+                        <svg
+                          className="h-3 w-3 transition-transform"
+                          style={{
+                            color: "var(--muted)",
+                            transform: expandedId === n.id ? "rotate(180deg)" : "rotate(0deg)",
+                          }}
+                          fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                        </svg>
+                      )}
+                      <span className="text-xs" style={{ color: "var(--muted)" }}>
+                        {timeAgo(n.created_at)}
+                      </span>
                     </span>
                   </div>
                   <p className="text-xs" style={{ color: "var(--muted)" }}>{n.body}</p>
+
+                  {/* Expanded detail */}
+                  {expandedId === n.id && (
+                    <ExpandedDetail notification={n} />
+                  )}
 
                   {/* Approval status badges */}
                   {n.approval_status === "approved" && (
@@ -217,7 +256,7 @@ export default function NotificationBell() {
                           <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                         </svg>
                         <span className="text-[11px] font-medium" style={{ color: "#ef4444" }}>
-                          {n.corrected_at ? "Corrected" : "Disapproved"}
+                          {n.corrected_at ? "Corrected" : "Disapproved — correcting..."}
                         </span>
                       </div>
                       {n.disapproval_reason && (
@@ -281,7 +320,7 @@ export default function NotificationBell() {
                           className="rounded-md px-2.5 py-1 text-[11px] font-medium text-white transition-opacity disabled:opacity-40"
                           style={{ background: "#ef4444" }}
                         >
-                          {submitting ? "Sending..." : "Submit"}
+                          {submitting ? "Correcting..." : "Submit"}
                         </button>
                         <button
                           type="button"
@@ -303,6 +342,109 @@ export default function NotificationBell() {
     </div>
   );
 }
+
+
+function ExpandedDetail({ notification: n }: { notification: Notification }) {
+  const meta = n.metadata;
+  if (!meta) return null;
+
+  const actionType = meta.action_type;
+
+  return (
+    <div
+      className="mt-2 rounded-lg border px-3 py-2.5"
+      style={{ borderColor: "var(--border)", background: "var(--background)" }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      {/* Join deliberation — show the opinion submitted */}
+      {actionType === "join_deliberation" && meta.opinion_text && (
+        <div>
+          <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--muted)" }}>
+            Opinion submitted
+          </div>
+          <p className="text-xs leading-relaxed" style={{ color: "var(--foreground)" }}>
+            {meta.opinion_text}
+          </p>
+        </div>
+      )}
+
+      {/* Update opinion — show the new opinion */}
+      {actionType === "update_opinion" && meta.opinion_text && (
+        <div>
+          <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--muted)" }}>
+            Updated opinion
+          </div>
+          <p className="text-xs leading-relaxed" style={{ color: "var(--foreground)" }}>
+            {meta.opinion_text}
+          </p>
+        </div>
+      )}
+
+      {/* Propose statement — show title + text */}
+      {actionType === "propose_statement" && (
+        <div>
+          <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--muted)" }}>
+            Consensus statement proposed
+          </div>
+          {meta.statement_title && (
+            <p className="mb-0.5 text-xs font-semibold" style={{ color: "var(--foreground)" }}>
+              {meta.statement_title}
+            </p>
+          )}
+          {meta.statement_text && (
+            <p className="text-xs leading-relaxed" style={{ color: "var(--foreground)" }}>
+              {meta.statement_text}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Create deliberation — show the question + categories */}
+      {actionType === "create_deliberation" && (
+        <div>
+          <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--muted)" }}>
+            New deliberation created
+          </div>
+          {meta.categories && meta.categories.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {meta.categories.map((cat: string) => (
+                <span
+                  key={cat}
+                  className="rounded-full px-2 py-0.5 text-[10px] font-medium"
+                  style={{ background: "var(--surface)", color: "var(--muted)" }}
+                >
+                  {cat}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Correction — show what was fixed */}
+      {actionType === "correction" && (
+        <div>
+          <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider" style={{ color: "#22c55e" }}>
+            Correction applied
+          </div>
+        </div>
+      )}
+
+      {/* Link to deliberation */}
+      {meta.deliberation_id && (
+        <a
+          href={`/deliberations/${meta.deliberation_id}`}
+          className="mt-2 inline-block text-[11px] font-medium transition-opacity hover:opacity-80"
+          style={{ color: "var(--accent)" }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          View deliberation &rarr;
+        </a>
+      )}
+    </div>
+  );
+}
+
 
 function TypeIcon({ type }: { type: string }) {
   const color = type === "interview_needed" ? "var(--accent)" : type === "rate_agent" ? "var(--accent)" : type === "limit_approaching" ? "#ef4444" : "var(--muted)";

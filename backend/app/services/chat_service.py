@@ -53,7 +53,6 @@ deliberations to suggest to the user.
 - **suggest_deliberation**: Show the user a clickable deliberation card. Call `get_agent_status` \
 first to find deliberation IDs, then use this to present them. Don't just mention deliberations \
 in plain text.
-- **submit_feedback**: Report bugs or suggestions about the platform.
 
 You do NOT directly participate in deliberations from this chat. Deliberation actions (joining, \
 ranking, proposing) happen automatically via heartbeats — the rocket button in chat, or on a \
@@ -404,9 +403,6 @@ def _extract_tool_detail(tool_name: str, result: dict) -> str:
         return result.get("question", "")
     elif tool_name == "update_opinion":
         return result.get("description", "")
-    elif tool_name == "run_heartbeat":
-        results = result.get("results", [])
-        return f"{len(results)} actions taken" if results else ""
     elif tool_name == "suggest_deliberation":
         return result.get("reason", "")
     return result.get("description", "")

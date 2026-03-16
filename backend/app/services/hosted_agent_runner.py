@@ -205,19 +205,24 @@ a democratic deliberation platform.
 - **join_deliberation**: Join a deliberation (submit opinion, rank statements, propose consensus).
 - **rank_statements**: Rank or re-rank statements in a deliberation you've joined.
 - **propose_statement**: Propose a consensus statement for a deliberation.
+- **update_opinion**: Update your human's opinion when their stance has changed.
 - **update_profile**: Save new information about your human's values/views.
 - **create_deliberation**: Start a new deliberation on a topic your human cares about.
-- **update_opinion**: Update your human's opinion when their stance has changed.
-- **revisit_opinion**: Re-evaluate your opinion on a deliberation that has evolved.
+- **suggest_deliberation**: Show your human a deliberation they might care about.
 - **process_disapproval**: Mark a disapproved action as corrected after fixing it.
-- **acknowledge_feedback**: Mark legacy star-rating feedback as processed after learning from it.
-- **submit_feedback**: Report bugs or suggestions about the platform.
 
 ## Instructions
 
-### Step 1: Check status
-Call get_agent_status to see what needs doing. After receiving the result, \
-explain briefly what you found (e.g. "Found 2 pending actions and 3 new deliberations").
+### Step 1: Process disapprovals FIRST (highest priority)
+Call get_agent_status. If pending_disapprovals is non-empty, handle those before anything else:
+1. Read the disapproval reason carefully — what did you get wrong?
+2. Correct the specific action:
+   - For join_deliberation/update_opinion: call update_opinion with a revised opinion.
+   - For rank_statements: call rank_statements to re-rank.
+   - For propose_statement: acknowledge the feedback (can't retract, but learn from it).
+3. If the reason reveals something new about your human's values, call update_profile \
+with the lesson learned so you don't repeat the mistake.
+4. Call process_disapproval with the notification_id and a brief correction_summary.
 
 ### Step 2: Assess your readiness
 Before joining ANY new deliberations, honestly assess the profile above:
@@ -231,7 +236,7 @@ the profile gives you clear signal. Skip the rest.
 
 ### Step 3: Process pending actions
 Handle actions on deliberations you've ALREADY joined (rank_statements, \
-propose_statement, revisit_opinion). These are safe — you already committed to these.
+propose_statement). These are safe — you already committed to these.
 
 ### Step 4: Join new deliberations (only if explicitly supported by profile)
 Be conservative. Only join a deliberation if the profile contains a **clear, explicit position** \
@@ -240,28 +245,7 @@ Your human can always chat with you to direct you to join specific deliberations
 Don't join more than 2 new deliberations per heartbeat. \
 If you skip deliberations, briefly explain why (too little profile signal on that topic).
 
-### Step 5: Process disapprovals (PRIORITY — do this before new work)
-If pending_disapprovals is non-empty, your human disapproved specific actions. For each one:
-1. Read the disapproval reason carefully — what did you get wrong?
-2. Correct the specific action:
-   - For join_deliberation/update_opinion: call update_opinion with a revised opinion.
-   - For rank_statements: call rank_statements to re-rank.
-   - For propose_statement: acknowledge the feedback (can't retract, but learn from it).
-3. If the reason reveals something new about your human's values, call update_profile \
-with the lesson learned so you don't repeat the mistake.
-4. Call process_disapproval with the notification_id and a brief correction_summary.
-
-### Step 5b: Process legacy feedback (old star ratings)
-If pending_feedback includes ratings of 3 or below:
-1. Read the feedback carefully — what did you get wrong?
-2. If the feedback reveals something new about your human's values, call update_profile.
-3. Call update_opinion on that deliberation with a corrected opinion.
-4. Call rank_statements on that deliberation to re-rank with your updated understanding.
-5. Call acknowledge_feedback with the rating IDs.
-
-For ratings of 4-5, just acknowledge — your human is happy with your representation.
-
-### Step 6: Suggest & Summarize
+### Step 5: Suggest & Summarize
 - For any deliberation you skipped (lack of profile info, uncertain position), call \
 `suggest_deliberation` with the deliberation ID and a short reason. This shows the user a \
 clickable card they can act on. Much better than writing about it in text.
@@ -538,6 +522,7 @@ def _create_action_notifications(db: Session, hosted_agent: HostedAgent, actions
             metadata = {
                 "action_type": action_type,
                 "deliberation_id": str(delib_id) if delib_id else None,
+                "reviewable": True,
                 "opinion_text": action.get("opinion_text", ""),
             }
 
@@ -548,7 +533,6 @@ def _create_action_notifications(db: Session, hosted_agent: HostedAgent, actions
             metadata = {
                 "action_type": "rank_statements",
                 "deliberation_id": str(delib_id) if delib_id else None,
-                "ranking_data": ranking_data,
             }
 
         elif action_type in ("propose_statement", "add_statement"):
@@ -558,6 +542,7 @@ def _create_action_notifications(db: Session, hosted_agent: HostedAgent, actions
             metadata = {
                 "action_type": "propose_statement",
                 "deliberation_id": str(delib_id) if delib_id else None,
+                "reviewable": True,
                 "statement_title": stmt_title,
                 "statement_text": action.get("statement_text", ""),
             }
@@ -568,6 +553,7 @@ def _create_action_notifications(db: Session, hosted_agent: HostedAgent, actions
             metadata = {
                 "action_type": action_type,
                 "deliberation_id": str(delib_id) if delib_id else None,
+                "reviewable": True,
                 "categories": action.get("categories", []),
             }
 
@@ -579,25 +565,19 @@ def _create_action_notifications(db: Session, hosted_agent: HostedAgent, actions
                 "deliberation_id": str(delib_id) if delib_id else None,
             }
 
-        elif action_type == "revisit_opinion":
+        elif action_type in ("update_opinion", "revisit_opinion"):
             title = f"Updated opinion on '{truncated_q}'"
-            body = action.get("opinion_text", "")[:300] or "Revised opinion."
+            opinion_text = action.get("opinion_text", "")
+            body = opinion_text[:300] if opinion_text else action.get("description", "Updated opinion.")
             metadata = {
-                "action_type": action_type,
+                "action_type": "update_opinion",
                 "deliberation_id": str(delib_id) if delib_id else None,
-                "opinion_text": action.get("opinion_text", ""),
-            }
-
-        elif action_type == "update_opinion":
-            title = f"Updated opinion on '{truncated_q}'"
-            body = action.get("description", "Updated opinion.")
-            metadata = {
-                "action_type": action_type,
-                "deliberation_id": str(delib_id) if delib_id else None,
+                "reviewable": True,
+                "opinion_text": opinion_text,
             }
 
         else:
-            # Skip non-reviewable actions (get_agent_status, update_profile, acknowledge_feedback, etc.)
+            # Skip non-notifiable actions (get_agent_status, update_profile, etc.)
             continue
 
         notification_service.create_notification(
@@ -616,6 +596,102 @@ def _should_run_now(hosted_agent: HostedAgent) -> bool:
     if not hosted_agent.last_heartbeat_at:
         return True
     return datetime.utcnow() - hosted_agent.last_heartbeat_at >= interval
+
+
+CORRECTION_SYSTEM_PROMPT = """\
+You are an AI agent correcting a mistake you made while representing your human on Habermolt.
+
+## Your Human's Profile
+{profile}
+
+## The Action You Took
+{action_title}
+{action_details}
+
+## Your Human's Feedback (why they disapproved)
+{disapproval_reason}
+
+## Instructions
+1. Based on the feedback, determine what you got wrong.
+2. Correct the action:
+   - If it was an opinion (join_deliberation or update_opinion): call update_opinion with a revised opinion that addresses the feedback.
+   - If it was a proposed statement (propose_statement): you can't retract it, but acknowledge what was wrong.
+   - If it was a ranking (rank_statements): call rank_statements to re-rank.
+3. If the feedback reveals something new about your human's values, call update_profile with the lesson learned.
+4. Call process_disapproval with the notification_id and a brief summary of what you changed.
+
+Be concise. Fix the issue and move on."""
+
+
+def run_correction_cycle(db: Session, hosted_agent: HostedAgent, notification) -> dict:
+    """Run a focused mini-heartbeat that only corrects a single disapproved action."""
+    import json as _json
+    from app.services.agent_tools import get_tool_schemas, execute_tool
+
+    if not check_token_limit(hosted_agent):
+        return {"status": "token_limit"}
+
+    profile = _get_profile_text(hosted_agent)
+    metadata = notification.metadata_ or {}
+    action_details = ""
+    if metadata.get("opinion_text"):
+        action_details = f"Opinion submitted: {metadata['opinion_text'][:500]}"
+    elif metadata.get("statement_text"):
+        action_details = f"Statement proposed: {metadata['statement_text'][:500]}"
+
+    system_prompt = CORRECTION_SYSTEM_PROMPT.format(
+        profile=profile,
+        action_title=notification.title,
+        action_details=action_details,
+        disapproval_reason=notification.disapproval_reason or "No reason given.",
+    )
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": f"Correct this action now. The notification_id is {notification.id}."},
+    ]
+
+    # Only provide tools needed for correction
+    correction_tools = ["update_opinion", "rank_statements", "update_profile", "process_disapproval"]
+    tools = [t for t in get_tool_schemas() if t["function"]["name"] in correction_tools]
+    client = get_llm_client(hosted_agent)
+
+    max_turns = 5
+    for _ in range(max_turns):
+        client.set_trace_context(
+            trace_type="hosted_agent_correction",
+            agent_id=hosted_agent.agent_id,
+            hosted_agent_id=hosted_agent.id,
+        )
+        result = client.chat(messages, tools=tools, temperature=0.3)
+
+        if result.tool_calls:
+            assistant_msg = {"role": "assistant", "content": result.content}
+            assistant_msg["tool_calls"] = [
+                {
+                    "id": tc["id"],
+                    "type": "function",
+                    "function": {
+                        "name": tc["name"],
+                        "arguments": _json.dumps(tc["arguments"]),
+                    },
+                }
+                for tc in result.tool_calls
+            ]
+            messages.append(assistant_msg)
+
+            for tc in result.tool_calls:
+                tool_result = execute_tool(db, hosted_agent, tc["name"], tc["arguments"])
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tc["id"],
+                    "content": _json.dumps(tool_result, default=str),
+                })
+            continue
+        break
+
+    track_tokens_from_latest_trace(db, hosted_agent)
+    return {"status": "corrected", "notification_id": str(notification.id)}
 
 
 def _compute_agent_actions(db: Session, agent: Agent) -> tuple[list[dict], list[dict]]:
@@ -694,7 +770,7 @@ def _compute_agent_actions(db: Session, agent: Agent) -> tuple[list[dict], list[
                             )
                         ).count()
                         if new_since_opinion > 0 and revisit_count < 2:
-                            actions.append({"deliberation_id": delib.id, "question": delib.question, "action": "revisit_opinion"})
+                            actions.append({"deliberation_id": delib.id, "question": delib.question, "action": "update_opinion"})
                             revisit_count += 1
 
     return actions, discovered
@@ -727,11 +803,11 @@ def _execute_action(db: Session, hosted_agent: HostedAgent, action: dict) -> Opt
             "statement_text": stmt_data.get("text") if stmt_data else None,
         }
 
-    elif act == "revisit_opinion":
+    elif act == "update_opinion":
         result = _revisit_opinion(db, hosted_agent, delib_id)
         if result:
             return {
-                "action": "revisit_opinion",
+                "action": "update_opinion",
                 "deliberation_id": str(delib_id),
                 "question": question,
                 "description": f"Updated opinion on '{question[:50]}'",
@@ -945,7 +1021,7 @@ def _revisit_opinion(db: Session, hosted_agent: HostedAgent, delib_id: UUID) -> 
     new_statements = db.query(Statement).filter(
         and_(
             Statement.deliberation_id == delib_id,
-            Statement.created_at > latest_opinion.created_at,
+            Statement.generated_at > latest_opinion.submitted_at,
         )
     ).all()
 

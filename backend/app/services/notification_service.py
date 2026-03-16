@@ -91,6 +91,9 @@ def approve_notification(db: Session, notification_id: str, user_id: str) -> Not
     if not notification:
         return None
     notification.approval_status = "approved"
+    if not notification.read:
+        notification.read = True
+        notification.read_at = datetime.utcnow()
     db.commit()
     db.refresh(notification)
     return notification
@@ -106,6 +109,9 @@ def disapprove_notification(db: Session, notification_id: str, user_id: str, rea
         return None
     notification.approval_status = "disapproved"
     notification.disapproval_reason = reason
+    if not notification.read:
+        notification.read = True
+        notification.read_at = datetime.utcnow()
     db.commit()
     db.refresh(notification)
     return notification

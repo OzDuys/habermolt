@@ -35,6 +35,7 @@ from app.schemas.agent_status import (
     AgentActionItem,
     DiscoveredDeliberation,
     PendingFeedback,
+    PendingDisapproval,
 )
 from app.services.agent_request_log_service import log_agent_request
 
@@ -253,11 +254,38 @@ async def get_agent_status(
         for ar, q in pending_ratings
     ]
 
+    # Query pending disapprovals (action-level feedback from notification system)
+    from app.models.notification import Notification
+    pending_disapproval_items = []
+    if agent.user_id:
+        disapprovals = (
+            db.query(Notification)
+            .filter(
+                Notification.user_id == agent.user_id,
+                Notification.approval_status == "disapproved",
+                Notification.corrected_at.is_(None),
+            )
+            .order_by(Notification.created_at.desc())
+            .all()
+        )
+        pending_disapproval_items = [
+            PendingDisapproval(
+                notification_id=n.id,
+                action_type=(n.metadata_ or {}).get("action_type"),
+                deliberation_id=(n.metadata_ or {}).get("deliberation_id"),
+                title=n.title,
+                reason=n.disapproval_reason,
+                action_details=n.metadata_,
+            )
+            for n in disapprovals
+        ]
+
     response = AgentHeartbeatResponse(
         is_claimed=is_claimed,
         actions=actions,
         discovered=discovered,
         pending_feedback=pending_feedback,
+        pending_disapprovals=pending_disapproval_items,
     )
     background_tasks.add_task(
         log_agent_request,
@@ -316,3 +344,60 @@ async def acknowledge_feedback(
 
     db.commit()
     return {"acknowledged": updated}
+
+
+class CorrectionRequest(BaseModel):
+    """Request body for marking a disapproved action as corrected."""
+    correction_summary: str
+
+
+@router.post(
+    "/notifications/{notification_id}/corrected",
+    summary="Mark a disapproved action as corrected",
+    status_code=status.HTTP_200_OK,
+)
+async def mark_corrected(
+    notification_id: UUID,
+    body: CorrectionRequest,
+    agent: Agent = Depends(APIKeyAuth()),
+    db: Session = Depends(get_db),
+):
+    """
+    Called by the agent after correcting a disapproved action.
+    Marks the notification as corrected and creates a follow-up notification for the human.
+    """
+    from app.models.notification import Notification
+    from app.services import notification_service
+
+    if not agent.user_id:
+        raise HTTPException(status_code=400, detail="Agent is not claimed — no notifications to process.")
+
+    notification = (
+        db.query(Notification)
+        .filter(
+            Notification.id == notification_id,
+            Notification.user_id == agent.user_id,
+            Notification.approval_status == "disapproved",
+            Notification.corrected_at.is_(None),
+        )
+        .first()
+    )
+    if not notification:
+        raise HTTPException(status_code=404, detail="Disapproval not found or already corrected.")
+
+    notification.corrected_at = datetime.utcnow()
+    db.commit()
+
+    notification_service.create_notification(
+        db, agent.user_id,
+        type="agent_action",
+        title=f"Corrected: {notification.title}",
+        body=body.correction_summary,
+        metadata={
+            "action_type": "correction",
+            "original_notification_id": str(notification.id),
+            "deliberation_id": (notification.metadata_ or {}).get("deliberation_id"),
+        },
+    )
+
+    return {"status": "corrected", "notification_id": str(notification_id)}

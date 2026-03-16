@@ -26,7 +26,7 @@ TOOL_SCHEMAS = [
             "description": (
                 "Check what actions are needed. Returns discovered deliberations "
                 "(ones you haven't joined yet), pending actions on deliberations you've "
-                "already joined, and deliberations where you previously asked the user for input."
+                "already joined, and any disapproved actions that need correction."
             ),
             "parameters": {"type": "object", "properties": {}, "required": []},
         },
@@ -153,7 +153,8 @@ TOOL_SCHEMAS = [
             "name": "update_opinion",
             "description": (
                 "Update your human's opinion on a deliberation you've already joined. "
-                "Use when their stance has changed or you have better information."
+                "Use when their stance has changed, you have better information, "
+                "or you need to correct a disapproved opinion."
             ),
             "parameters": {
                 "type": "object",
@@ -169,84 +170,6 @@ TOOL_SCHEMAS = [
                 },
                 "required": ["deliberation_id", "opinion_text"],
             },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "revisit_opinion",
-            "description": (
-                "Re-evaluate and update your opinion on a deliberation that has evolved. "
-                "The LLM will generate an updated opinion based on new statements and context."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "deliberation_id": {
-                        "type": "string",
-                        "description": "The deliberation ID.",
-                    },
-                },
-                "required": ["deliberation_id"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "acknowledge_feedback",
-            "description": (
-                "Mark human feedback ratings as processed. Call this after reading "
-                "and learning from your human's feedback on your representation."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "rating_ids": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "List of rating IDs to acknowledge.",
-                    },
-                },
-                "required": ["rating_ids"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "submit_feedback",
-            "description": (
-                "Submit feedback about the Habermolt platform — bugs, feature requests, "
-                "UX issues, or general suggestions."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "feedback_text": {
-                        "type": "string",
-                        "description": "Description of the issue, idea, or suggestion.",
-                    },
-                    "category": {
-                        "type": "string",
-                        "enum": ["bug", "feature_request", "ux", "general"],
-                        "description": "Feedback category.",
-                    },
-                },
-                "required": ["feedback_text", "category"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "run_heartbeat",
-            "description": (
-                "Run a full heartbeat cycle: check status, process all pending actions, "
-                "and join discovered deliberations. This is the 'do everything' tool — "
-                "use it when the user asks you to participate or catch up."
-            ),
-            "parameters": {"type": "object", "properties": {}, "required": []},
         },
     },
     {
@@ -313,7 +236,7 @@ def get_tool_schemas() -> list[dict]:
 
 
 # Tools available in chat mode — conversation-focused only
-CHAT_TOOLS = {"update_profile", "suggest_deliberation", "submit_feedback", "get_agent_status"}
+CHAT_TOOLS = {"update_profile", "suggest_deliberation", "get_agent_status"}
 
 
 def get_chat_tool_schemas() -> list[dict]:
@@ -346,16 +269,8 @@ def execute_tool(
             )
         elif tool_name == "update_opinion":
             return _exec_update_opinion(db, hosted_agent, arguments["deliberation_id"], arguments["opinion_text"])
-        elif tool_name == "revisit_opinion":
-            return _exec_revisit_opinion(db, hosted_agent, arguments["deliberation_id"])
-        elif tool_name == "acknowledge_feedback":
-            return _exec_acknowledge_feedback(db, hosted_agent, arguments["rating_ids"])
-        elif tool_name == "submit_feedback":
-            return _exec_submit_feedback(db, hosted_agent, arguments["feedback_text"], arguments["category"])
         elif tool_name == "process_disapproval":
             return _exec_process_disapproval(db, hosted_agent, arguments["notification_id"], arguments["correction_summary"])
-        elif tool_name == "run_heartbeat":
-            return _exec_run_heartbeat(db, hosted_agent)
         elif tool_name == "suggest_deliberation":
             return _exec_suggest_deliberation(db, hosted_agent, arguments["deliberation_id"], arguments["reason"])
         else:
@@ -367,26 +282,12 @@ def execute_tool(
 
 def _exec_get_agent_status(db: Session, hosted_agent: HostedAgent) -> dict:
     from app.services.hosted_agent_runner import _compute_agent_actions
-    from app.models.agent_rating import AgentRating
-    from app.models.deliberation import Deliberation
     from app.models.notification import Notification
 
     agent = hosted_agent.agent
     actions, discovered = _compute_agent_actions(db, agent)
 
-    # Query unacknowledged human feedback (legacy star ratings)
-    pending_ratings = (
-        db.query(AgentRating, Deliberation.question)
-        .join(Deliberation, Deliberation.id == AgentRating.deliberation_id)
-        .filter(
-            AgentRating.agent_id == agent.id,
-            AgentRating.acknowledged_at.is_(None),
-        )
-        .order_by(AgentRating.submitted_at.desc())
-        .all()
-    )
-
-    # Query pending disapprovals (new action-level feedback)
+    # Query pending disapprovals (action-level feedback)
     disapprovals = (
         db.query(Notification)
         .filter(
@@ -406,16 +307,6 @@ def _exec_get_agent_status(db: Session, hosted_agent: HostedAgent) -> dict:
         "discovered": [
             {"deliberation_id": str(d["deliberation_id"]), "question": d["question"]}
             for d in discovered
-        ],
-        "pending_feedback": [
-            {
-                "rating_id": str(ar.id),
-                "deliberation_id": str(ar.deliberation_id),
-                "question": q,
-                "rating": ar.rating,
-                "feedback": ar.feedback,
-            }
-            for ar, q in pending_ratings
         ],
         "pending_disapprovals": [
             {
@@ -528,145 +419,10 @@ def _exec_update_opinion(db: Session, hosted_agent: HostedAgent, deliberation_id
     return {
         "action": "update_opinion",
         "deliberation_id": deliberation_id,
+        "question": delib.question,
+        "opinion_text": opinion_text,
         "version": opinion.version,
         "description": f"Opinion updated (version {opinion.version}).",
-    }
-
-
-def _exec_revisit_opinion(db: Session, hosted_agent: HostedAgent, deliberation_id: str) -> dict:
-    """Re-evaluate opinion on a deliberation that has evolved."""
-    from app.services.hosted_agent_runner import _revisit_opinion
-
-    opinion = _revisit_opinion(db, hosted_agent, UUID(deliberation_id))
-    if opinion:
-        return {
-            "action": "revisit_opinion",
-            "deliberation_id": deliberation_id,
-            "description": "Revisited and updated opinion.",
-        }
-    return {"error": "Failed to revisit opinion."}
-
-
-def _exec_acknowledge_feedback(db: Session, hosted_agent: HostedAgent, rating_ids: list) -> dict:
-    """Mark human feedback ratings as acknowledged."""
-    from datetime import datetime
-    from app.models.agent_rating import AgentRating
-
-    agent = hosted_agent.agent
-    now = datetime.utcnow()
-    acknowledged = 0
-    for rid in rating_ids:
-        rating = (
-            db.query(AgentRating)
-            .filter(
-                AgentRating.id == UUID(rid),
-                AgentRating.agent_id == agent.id,
-                AgentRating.acknowledged_at.is_(None),
-            )
-            .first()
-        )
-        if rating:
-            rating.acknowledged_at = now
-            acknowledged += 1
-
-    db.commit()
-
-    # If any acknowledged ratings were negative, prompt user to re-rate
-    from app.models.deliberation import Deliberation
-    from app.services import notification_service
-
-    for rid in rating_ids:
-        rating = db.query(AgentRating).filter(AgentRating.id == UUID(rid)).first()
-        if rating and rating.rating <= 3:
-            delib = db.query(Deliberation).filter(Deliberation.id == rating.deliberation_id).first()
-            if delib:
-                notification_service.create_notification(
-                    db, hosted_agent.user_id,
-                    type="rate_agent",
-                    title="Your agent updated its stance",
-                    body=f'Based on your feedback, your agent revised its position on "{delib.question[:80]}" — re-rate?',
-                    metadata={"deliberation_id": str(delib.id)},
-                )
-
-    return {
-        "action": "acknowledge_feedback",
-        "acknowledged": acknowledged,
-        "description": f"Acknowledged {acknowledged} feedback rating(s).",
-    }
-
-
-def _exec_submit_feedback(db: Session, hosted_agent: HostedAgent, feedback_text: str, category: str) -> dict:
-    """Submit platform feedback."""
-    from app.models.platform_feedback import PlatformFeedback
-
-    agent = hosted_agent.agent
-    feedback = PlatformFeedback(
-        agent_id=agent.id,
-        user_id=agent.user_id,
-        feedback_text=feedback_text,
-        category=category,
-    )
-    db.add(feedback)
-    db.commit()
-    db.refresh(feedback)
-    return {
-        "action": "submit_feedback",
-        "feedback_id": str(feedback.id),
-        "description": f"Feedback submitted ({category}).",
-    }
-
-
-def _exec_run_heartbeat(db: Session, hosted_agent: HostedAgent) -> dict:
-    """Run a full heartbeat cycle using tool execution (not the old hardcoded logic)."""
-    from app.services.hosted_agent_service import check_token_limit
-
-    if not check_token_limit(hosted_agent):
-        return {"error": "Token limit reached for this week."}
-
-    # Get status
-    status = _exec_get_agent_status(db, hosted_agent)
-    results = []
-
-    # Execute pending actions
-    for action in status.get("actions", []):
-        delib_id = str(action["deliberation_id"])
-        act = action["action"]
-        try:
-            if act in ("rank_statements", "update_rankings", "review_predicted_rankings"):
-                result = _exec_rank_statements(db, hosted_agent, delib_id)
-            elif act == "add_statement":
-                result = _exec_propose_statement(db, hosted_agent, delib_id)
-            elif act == "revisit_opinion":
-                from app.services.hosted_agent_runner import _revisit_opinion
-                opinion = _revisit_opinion(db, hosted_agent, UUID(delib_id))
-                result = {"action": "revisit_opinion", "deliberation_id": delib_id, "description": f"Revisited opinion"} if opinion else {"error": "Failed to revisit opinion"}
-            else:
-                continue
-            results.append(result)
-        except Exception as e:
-            results.append({"error": f"Action {act} failed: {e}"})
-
-    # Join discovered deliberations (up to 3)
-    for disc in status.get("discovered", [])[:3]:
-        try:
-            result = _exec_join_deliberation(db, hosted_agent, disc["deliberation_id"])
-            results.append(result)
-        except Exception as e:
-            results.append({"error": f"Join failed: {e}"})
-
-    # Try to create a new deliberation on a topic the user cares about
-    try:
-        from app.services.hosted_agent_runner import _do_create_deliberation
-        create_result = _do_create_deliberation(db, hosted_agent)
-        if create_result:
-            results.append(create_result)
-    except Exception as e:
-        results.append({"error": f"Create deliberation failed: {e}"})
-
-    return {
-        "action": "run_heartbeat",
-        "description": f"Heartbeat complete: {len(results)} actions taken.",
-        "results": results,
     }
 
 
