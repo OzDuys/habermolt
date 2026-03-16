@@ -16,6 +16,42 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
 
+def _update_profile_from_approval(db: Session, hosted_agent, question: str, opinion_text: str) -> None:
+    """Extract the confirmed position from an approved opinion and append it to the profile."""
+    from app.services.hosted_agent_service import get_llm_client
+
+    client = get_llm_client(hosted_agent)
+    client.set_trace_context(
+        trace_type="profile_update_from_approval",
+        hosted_agent_id=hosted_agent.id,
+        agent_id=hosted_agent.agent_id,
+    )
+
+    prompt = f"""The human approved the following opinion their agent submitted on their behalf.
+
+Topic: {question}
+Opinion: {opinion_text}
+
+Extract a concise value statement (1-2 sentences) that captures this confirmed position.
+Write it as a bullet point starting with "- On [topic]: ..."
+Respond with ONLY the bullet point, nothing else."""
+
+    value_statement = client.sample_text(prompt=prompt, temperature=0.2, max_tokens=150)
+    if not value_statement or not value_statement.strip():
+        return
+
+    # Append to profile under a confirmed positions section
+    profile = hosted_agent.user_profile or ""
+    section_header = "\n\n## Confirmed Positions (approved by human)"
+    if section_header.strip() not in profile:
+        profile += section_header
+    profile += "\n" + value_statement.strip()
+
+    hosted_agent.user_profile = profile
+    hosted_agent.profile_version += 1
+    db.commit()
+
+
 class MarkReadRequest(BaseModel):
     notification_ids: list[str]
 
@@ -113,6 +149,23 @@ async def approve_notification(notification_id: str, req: Request, db: Session =
     notification = notification_service.approve_notification(db, notification_id, user_id)
     if not notification:
         raise HTTPException(status_code=404, detail="Notification not found")
+
+    # If this is an opinion-based action, extract the position and update the profile
+    meta = notification.metadata_ or {}
+    action_type = meta.get("action_type")
+    opinion_text = meta.get("opinion_text")
+    question = notification.title  # e.g. "Joined 'Should we go out drinking...'"
+
+    if opinion_text and action_type in ("join_deliberation", "update_opinion"):
+        try:
+            from app.models.hosted_agent import HostedAgent
+            hosted_agent = db.query(HostedAgent).filter(HostedAgent.user_id == user_id).first()
+            if hosted_agent:
+                _update_profile_from_approval(db, hosted_agent, question, opinion_text)
+        except Exception as e:
+            # Profile update failed but approval was saved — not critical
+            logger.error(f"Profile update from approval failed: {e}", exc_info=True)
+
     return {"status": "approved", "id": str(notification.id)}
 
 
