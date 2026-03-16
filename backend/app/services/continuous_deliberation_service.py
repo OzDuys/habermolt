@@ -292,6 +292,10 @@ class ContinuousDeliberationService:
             )
         ).order_by(Opinion.version.desc()).first()
 
+        # Reject identical opinions — no point creating a new version with the same text
+        if existing and existing.opinion_text.strip() == opinion_text.strip():
+            return existing
+
         new_version = (existing.version + 1) if existing else 1
 
         opinion = Opinion(

@@ -165,9 +165,6 @@ Question: {question}
 
 Respond with ONLY a comma-separated list of categories, nothing else."""
 
-STALE_OPINION_DAYS = 7
-
-
 def run_all_hosted_agents(db: Session) -> dict:
     """Run heartbeat for all eligible hosted agents. Called by the cron endpoint."""
     agents = (
@@ -236,14 +233,7 @@ the profile gives you clear signal. Skip the rest.
 
 ### Step 3: Process pending actions
 Handle actions on deliberations you've ALREADY joined (rank_statements, \
-propose_statement, update_opinion). These are safe — you already committed to these.
-
-**For update_opinion actions:** The action includes your `current_opinion` and \
-`new_statements_summary` showing what's changed since. **Read these carefully.** \
-Only call update_opinion if the new statements genuinely reveal something that \
-would change your human's position. If their original opinion still holds, \
-SKIP the update — don't change it just because time passed. Never fabricate \
-a new position from the profile alone — the current opinion IS their stated view.
+propose_statement). These are safe — you already committed to these.
 
 ### Step 4: Join new deliberations (only if explicitly supported by profile)
 Be conservative. Only join a deliberation if the profile contains a **clear, explicit position** \
@@ -724,7 +714,6 @@ def _compute_agent_actions(db: Session, agent: Agent) -> tuple[list[dict], list[
 
     actions = []
     discovered = []
-    revisit_count = 0
 
     for delib in deliberations:
         # Skip private deliberations the agent hasn't joined
@@ -773,35 +762,8 @@ def _compute_agent_actions(db: Session, agent: Agent) -> tuple[list[dict], list[
             ).count()
             if agent_stmt_count == 0 and agent_stmt_count < settings.CONTINUOUS_MAX_STATEMENTS_PER_AGENT and current_count < settings.CONTINUOUS_MAX_STATEMENTS:
                 actions.append({"deliberation_id": delib.id, "question": delib.question, "action": "add_statement"})
-            else:
-                # Check if opinion is stale and deliberation has evolved
-                latest_opinion = db.query(Opinion).filter(
-                    and_(Opinion.deliberation_id == delib.id, Opinion.agent_id == agent.id)
-                ).order_by(Opinion.version.desc()).first()
-                if latest_opinion and latest_opinion.submitted_at:
-                    age_days = (datetime.utcnow() - latest_opinion.submitted_at).days
-                    if age_days >= STALE_OPINION_DAYS:
-                        # Check if new statements were added after opinion
-                        new_statements = db.query(Statement).filter(
-                            and_(
-                                Statement.deliberation_id == delib.id,
-                                Statement.generated_at > latest_opinion.submitted_at,
-                            )
-                        ).all()
-                        if new_statements and revisit_count < 2:
-                            new_stmt_summaries = [
-                                f"- {s.title or 'Untitled'}: {s.statement_text[:100]}"
-                                for s in new_statements[:5]
-                            ]
-                            actions.append({
-                                "deliberation_id": delib.id,
-                                "question": delib.question,
-                                "action": "update_opinion",
-                                "current_opinion": latest_opinion.opinion_text,
-                                "new_statements_summary": "\n".join(new_stmt_summaries),
-                                "opinion_age_days": age_days,
-                            })
-                            revisit_count += 1
+            # No more actions needed — opinion updates only happen via
+            # human disapproval, explicit chat request, or manual heartbeat.
 
     return actions, discovered
 
