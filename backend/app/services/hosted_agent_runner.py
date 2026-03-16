@@ -690,7 +690,7 @@ def _compute_agent_actions(db: Session, agent: Agent) -> tuple[list[dict], list[
                         new_since_opinion = db.query(Statement).filter(
                             and_(
                                 Statement.deliberation_id == delib.id,
-                                Statement.created_at > latest_opinion.submitted_at,
+                                Statement.generated_at > latest_opinion.submitted_at,
                             )
                         ).count()
                         if new_since_opinion > 0 and revisit_count < 2:
