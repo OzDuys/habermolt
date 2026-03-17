@@ -776,8 +776,6 @@ function LobsterCloud({ agents, onSelect, userAgentId }: { agents: AgentInfo[]; 
     return () => ro.disconnect();
   }, []);
 
-  if (count === 0) return null;
-
   // Scale lobster size based on count AND viewport width
   const isMobile = measuredWidth > 0 && measuredWidth < 400;
   const baseLobsterSize =
@@ -802,6 +800,8 @@ function LobsterCloud({ agents, onSelect, userAgentId }: { agents: AgentInfo[]; 
 
   // Show names only when few agents and enough space
   const showNames = count <= 32 && !isMobile;
+
+  if (count === 0) return null;
 
   return (
     <motion.div
