@@ -477,9 +477,6 @@ def _exec_suggest_deliberation(db: Session, hosted_agent: HostedAgent, deliberat
     if not delib:
         return {"error": f"Deliberation {deliberation_id} not found."}
 
-    if delib.is_private:
-        return {"error": "Cannot suggest private deliberations."}
-
     notification_service.create_notification(
         db, hosted_agent.user_id,
         type="agent_action",
