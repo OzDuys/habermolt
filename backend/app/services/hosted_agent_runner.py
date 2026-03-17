@@ -524,13 +524,8 @@ def _create_action_notifications(db: Session, hosted_agent: HostedAgent, actions
             }
 
         elif action_type in ("rank_statements", "update_rankings", "review_predicted_rankings"):
-            title = f"Ranked statements in '{truncated_q}'"
-            ranking_data = action.get("ranking_data") or []
-            body = f"Ranked {len(ranking_data)} statements."
-            metadata = {
-                "action_type": "rank_statements",
-                "deliberation_id": str(delib_id) if delib_id else None,
-            }
+            # Rankings are mechanical — no notification needed
+            continue
 
         elif action_type in ("propose_statement", "add_statement"):
             stmt_title = action.get("statement_title", "Untitled")
