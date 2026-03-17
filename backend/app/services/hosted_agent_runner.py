@@ -511,7 +511,7 @@ def _create_action_notifications(db: Session, hosted_agent: HostedAgent, actions
         action_type = action.get("action", "")
         question = action.get("question", "")
         delib_id = action.get("deliberation_id")
-        truncated_q = question[:80] if question else "Unknown"
+        truncated_q = question if question else "Unknown"
 
         if action_type == "join_deliberation":
             title = f"Joined '{truncated_q}'"

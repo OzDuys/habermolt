@@ -240,10 +240,10 @@ export default function NotificationBell() {
                     }
                   }}
                 >
-                  <div className="mb-0.5 flex items-center gap-2">
+                  <div className="mb-0.5 flex items-start gap-2">
                     <TypeIcon type={n.type} />
-                    <span className="text-sm font-medium" style={{ color: "var(--foreground)" }}>{n.title}</span>
-                    <span className="ml-auto flex shrink-0 items-center gap-1.5">
+                    <span className="min-w-0 flex-1 text-sm font-medium leading-snug" style={{ color: "var(--foreground)" }}>{n.title}</span>
+                    <span className="flex shrink-0 items-center gap-1.5 pt-0.5">
                       {hasExpandableDetail(n) && (
                         <svg
                           className="h-3 w-3 transition-transform"
