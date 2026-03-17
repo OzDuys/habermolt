@@ -146,6 +146,15 @@ async def revert_opinion(body: RevertOpinionRequest, req: Request, db: Session =
 @router.post("/{notification_id}/approve")
 async def approve_notification(notification_id: str, req: Request, db: Session = Depends(get_db)):
     user_id = require_user_id(req)
+
+    # Check if already approved — prevent duplicate profile updates from double-clicks
+    from app.models.notification import Notification as NotificationModel
+    existing = db.query(NotificationModel).filter(
+        NotificationModel.id == notification_id, NotificationModel.user_id == user_id
+    ).first()
+    if existing and existing.approval_status == "approved":
+        return {"status": "approved", "id": str(existing.id)}
+
     notification = notification_service.approve_notification(db, notification_id, user_id)
     if not notification:
         raise HTTPException(status_code=404, detail="Notification not found")
