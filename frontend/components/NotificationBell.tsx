@@ -185,12 +185,13 @@ export default function NotificationBell() {
 
       {/* Dropdown */}
       <div
-        className="absolute right-0 top-full z-[200] mt-2 w-80 origin-top-right overflow-hidden rounded-xl border shadow-xl transition-all duration-200 sm:w-96"
+        className="absolute right-0 top-full z-[200] mt-2 w-80 overflow-hidden rounded-xl border shadow-xl sm:w-96"
         style={{
           background: "var(--surface)",
           borderColor: "var(--border)",
           opacity: open ? 1 : 0,
-          transform: open ? "scale(1) translateY(0)" : "scale(0.95) translateY(-4px)",
+          transform: open ? "translateY(0)" : "translateY(-4px)",
+          transition: "opacity 150ms ease-out, transform 150ms ease-out",
           pointerEvents: open ? "auto" : "none",
         }}
       >
