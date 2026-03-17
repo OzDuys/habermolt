@@ -721,6 +721,198 @@ function ConsensusRatingWidget({
   );
 }
 
+// ─── Lobster Cloud (packed bubble crowd) ─────────────────────────────────────
+
+/** Deterministic pseudo-random from seed — avoids layout shift between renders */
+function seededRandom(seed: number) {
+  let s = seed;
+  return () => {
+    s = (s * 16807 + 0) % 2147483647;
+    return (s - 1) / 2147483646;
+  };
+}
+
+function placeLobsters(count: number, w: number, h: number, size: number) {
+  const rng = seededRandom(42);
+  const placed: { x: number; y: number }[] = [];
+  const pad = size * 0.55;
+  const minDist = size * 0.7; // allow slight overlap for packed feel
+
+  for (let i = 0; i < count; i++) {
+    let bestX = 0, bestY = 0, bestMinDist = -1;
+    const attempts = Math.min(60, 15 + count);
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      const x = pad + rng() * Math.max(1, w - pad * 2);
+      const y = pad + rng() * Math.max(1, h - pad * 2);
+      let closest = Infinity;
+      for (const p of placed) {
+        const dx = p.x - x, dy = p.y - y;
+        closest = Math.min(closest, Math.sqrt(dx * dx + dy * dy));
+      }
+      if (closest > bestMinDist) {
+        bestMinDist = closest;
+        bestX = x;
+        bestY = y;
+      }
+      if (closest >= minDist) break;
+    }
+    placed.push({ x: bestX, y: bestY });
+  }
+  return placed;
+}
+
+function LobsterCloud({ agents, onSelect, userAgentId }: { agents: AgentInfo[]; onSelect: (a: AgentInfo) => void; userAgentId?: string | null }) {
+  const count = agents.length;
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [measuredWidth, setMeasuredWidth] = useState(0);
+
+  // Measure actual rendered width (respects maxWidth / viewport)
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => setMeasuredWidth(entry.contentRect.width));
+    ro.observe(el);
+    setMeasuredWidth(el.offsetWidth);
+    return () => ro.disconnect();
+  }, []);
+
+  if (count === 0) return null;
+
+  // Scale lobster size based on count AND viewport width
+  const isMobile = measuredWidth > 0 && measuredWidth < 400;
+  const baseLobsterSize =
+    count <= 6 ? 58 :
+    count <= 15 ? 48 :
+    count <= 30 ? 40 :
+    count <= 60 ? 32 :
+    count <= 120 ? 24 : 18;
+  const lobsterSize = isMobile ? Math.round(baseLobsterSize * 0.8) : baseLobsterSize;
+
+  // Cloud height scales with how many rows we need at the effective width
+  const effectiveWidth = measuredWidth || 320;
+  const cols = Math.max(1, Math.floor(effectiveWidth / (lobsterSize * 1.1)));
+  const rows = Math.ceil(count / cols);
+  const cloudHeight = Math.min(420, Math.max(120, rows * (lobsterSize * 1.2) + 30));
+
+  // Compute positions against the actual measured width
+  const positions = useMemo(
+    () => measuredWidth > 0 ? placeLobsters(count, measuredWidth, cloudHeight, lobsterSize) : [],
+    [count, measuredWidth, cloudHeight, lobsterSize],
+  );
+
+  // Show names only when few agents and enough space
+  const showNames = count <= 32 && !isMobile;
+
+  return (
+    <motion.div
+      ref={containerRef}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ delay: 0.6 }}
+      style={{
+        position: "relative",
+        width: "100%",
+        maxWidth: 800,
+        height: measuredWidth > 0 ? cloudHeight : 80,
+        marginTop: isMobile ? 32 : 48,
+        flexShrink: 0,
+      }}
+    >
+      {positions.length > 0 && agents.map((a, i) => {
+        const pos = positions[i];
+        if (!pos) return null;
+        const isMe = userAgentId != null && a.agent_id === userAgentId;
+        const prng = seededRandom(i * 137 + 7);
+        const driftX = (prng() - 0.5) * (isMobile ? 5 : 8);
+        const driftY = (prng() - 0.5) * (isMobile ? 4 : 6);
+        const driftDuration = 2.5 + prng() * 2;
+        const rotation = (prng() - 0.5) * 8;
+
+        return (
+          <motion.button
+            key={a.agent_id}
+            initial={{ opacity: 0, scale: 0.3 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.7 + i * 0.02, type: "spring", damping: 20, stiffness: 200 }}
+            whileHover={{ scale: 1.3, zIndex: 100 }}
+            whileTap={{ scale: 0.9 }}
+            onClick={() => onSelect(a)}
+            title={a.agent_name}
+            style={{
+              position: "absolute",
+              left: pos.x - lobsterSize / 2,
+              top: pos.y - lobsterSize / 2,
+              border: "none",
+              background: "transparent",
+              cursor: "pointer",
+              padding: 0,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              zIndex: isMe ? 90 : i,
+            }}
+          >
+            <motion.div
+              animate={{
+                x: [0, driftX, 0],
+                y: [0, driftY, 0],
+                rotate: [0, rotation, 0],
+              }}
+              transition={{
+                duration: driftDuration,
+                repeat: Infinity,
+                ease: "easeInOut",
+                delay: i * 0.08,
+              }}
+              style={undefined}
+            >
+              <Lobster color={a.color} size={lobsterSize} variant={i} />
+            </motion.div>
+            {isMe ? (
+              <span style={{
+                fontSize: 8, fontWeight: 700, color: "#fff",
+                background: a.color, borderRadius: 4,
+                padding: "1px 5px", marginTop: 1,
+              }}>You</span>
+            ) : showNames ? (
+              <span style={{
+                fontSize: 8,
+                color: a.color,
+                fontWeight: 600,
+                maxWidth: lobsterSize + 10,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                textAlign: "center",
+                marginTop: 1,
+              }}>{a.agent_name}</span>
+            ) : null}
+          </motion.button>
+        );
+      })}
+
+      {/* Agent count badge */}
+      {count > 6 && (
+        <div style={{
+          position: "absolute",
+          bottom: -8,
+          right: 0,
+          fontSize: 10,
+          fontWeight: 700,
+          color: "#999",
+          background: "rgba(250,247,240,0.9)",
+          padding: "2px 8px",
+          borderRadius: 999,
+          border: "1px solid rgba(0,0,0,0.06)",
+          pointerEvents: "none",
+        }}>
+          {count} agents
+        </div>
+      )}
+    </motion.div>
+  );
+}
+
 // ─── Main Page ───────────────────────────────────────────────────────────────
 
 export default function DeliberationPageClient() {
@@ -1085,6 +1277,14 @@ export default function DeliberationPageClient() {
                   <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, color: "#c84a20", textTransform: "uppercase" }}>
                     {winner.social_ranking === 1 ? "Consensus Reached" : "Leading Statement"}
                   </span>
+                  {userAgentId && winner.contributed_by_agent_id === userAgentId && (
+                    <span style={{
+                      fontSize: 9, fontWeight: 700, color: "#1a8a50",
+                      background: "#1a8a5010", border: "1px solid #1a8a5025",
+                      padding: "2px 8px", borderRadius: 999,
+                      letterSpacing: 0.5, textTransform: "uppercase",
+                    }}>Your agent proposed this</span>
+                  )}
                   {isLive && (
                     <span style={{
                       display: "inline-flex", alignItems: "center", gap: 4,
@@ -1194,31 +1394,8 @@ export default function DeliberationPageClient() {
               ) : null}
             </motion.div>
 
-            {/* Agent lobsters */}
-            <motion.div
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }}
-              style={{ display: "flex", gap: 4, marginTop: 48, overflowX: "auto", padding: "0 8px", maxWidth: "min(90vw, 640px)", flexShrink: 0, scrollbarWidth: "none" }}
-            >
-              {agents.map((a, i) => (
-                <motion.button key={a.agent_id}
-                  initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.7 + i * 0.04, type: "spring", damping: 18 }}
-                  whileHover={{ scale: 1.15, y: -6 }} whileTap={{ scale: 0.92 }}
-                  onClick={() => setSelectedAgent(a)}
-                  style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "6px 4px", border: "none", background: "transparent", cursor: "pointer" }}
-                >
-                  <motion.div animate={{ y: [0, -3, 0], rotate: [0, i % 2 === 0 ? 3 : -3, 0] }}
-                    transition={{ duration: 2.5 + i * 0.2, repeat: Infinity, delay: i * 0.1 }}>
-                    <Lobster color={a.color} size={agents.length > 12 ? 42 : agents.length > 6 ? 50 : 58} variant={i} />
-                  </motion.div>
-                  <span style={{
-                    fontSize: agents.length > 12 ? 7 : 9, color: a.color, fontWeight: 600,
-                    maxWidth: agents.length > 12 ? 36 : 54, overflow: "hidden", textOverflow: "ellipsis",
-                    whiteSpace: "nowrap", textAlign: "center",
-                  }}>{a.agent_name}</span>
-                </motion.button>
-              ))}
-            </motion.div>
+            {/* Agent lobster cloud */}
+            <LobsterCloud agents={agents} onSelect={setSelectedAgent} userAgentId={userAgentId} />
           </div>
 
           {/* ═══ STATEMENTS ═══ */}
@@ -1251,14 +1428,15 @@ export default function DeliberationPageClient() {
                     .sort((a, b) => (a.social_ranking || 99) - (b.social_ranking || 99))
                     .map((s, i) => {
                       const isWinner = s.social_ranking === 1;
+                      const isMine = userAgentId != null && s.contributed_by_agent_id === userAgentId;
                       return (
                         <motion.div key={s.id}
                           initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }}
                           viewport={{ once: true }} transition={{ delay: i * 0.03 }}
                           style={{
                             padding: "18px 20px", borderRadius: 16,
-                            background: isWinner ? "rgba(200,74,32,0.04)" : "rgba(255,255,255,0.6)",
-                            border: `1.5px solid ${isWinner ? "rgba(200,74,32,0.15)" : "rgba(0,0,0,0.04)"}`,
+                            background: isMine ? "rgba(26,138,80,0.04)" : isWinner ? "rgba(200,74,32,0.04)" : "rgba(255,255,255,0.6)",
+                            border: `1.5px solid ${isMine ? "rgba(26,138,80,0.18)" : isWinner ? "rgba(200,74,32,0.15)" : "rgba(0,0,0,0.04)"}`,
                             boxShadow: isWinner ? "0 4px 16px rgba(200,74,32,0.06)" : "none",
                           }}
                         >
@@ -1271,6 +1449,13 @@ export default function DeliberationPageClient() {
                                 fontWeight: 700,
                               }}>#{s.social_ranking}</span>
                             )}
+                            {isMine && (
+                              <span style={{
+                                fontSize: 9, padding: "2px 7px", borderRadius: 4,
+                                background: "#1a8a5010", color: "#1a8a50", fontWeight: 700,
+                                letterSpacing: 0.5, textTransform: "uppercase",
+                              }}>your agent</span>
+                            )}
                             {s.is_seed && (
                               <span style={{
                                 fontSize: 9, padding: "2px 7px", borderRadius: 4,
@@ -1279,7 +1464,7 @@ export default function DeliberationPageClient() {
                               }}>seed</span>
                             )}
                             {s.contributed_by_agent_id && agentNameMap[s.contributed_by_agent_id] && (
-                              <span style={{ fontSize: 10, color: "#888", marginLeft: "auto" }}>
+                              <span style={{ fontSize: 10, color: isMine ? "#1a8a50" : "#888", marginLeft: "auto" }}>
                                 by {agentNameMap[s.contributed_by_agent_id]}
                               </span>
                             )}
@@ -1379,7 +1564,15 @@ export default function DeliberationPageClient() {
                 columnGap: 14,
                 width: "100%",
               }}>
-                {agents.map((a, i) => (
+                {[...agents].sort((x, y) => {
+                  if (userAgentId) {
+                    if (x.agent_id === userAgentId) return -1;
+                    if (y.agent_id === userAgentId) return 1;
+                  }
+                  return 0;
+                }).map((a, i) => {
+                  const isMe = userAgentId != null && a.agent_id === userAgentId;
+                  return (
                   <motion.div key={a.agent_id}
                     initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
                     viewport={{ once: true, margin: "-30px" }} transition={{ delay: i * 0.03 }}
@@ -1387,7 +1580,8 @@ export default function DeliberationPageClient() {
                     onClick={() => setSelectedAgent(a)}
                     style={{
                       padding: "16px", borderRadius: 16,
-                      background: "rgba(255,255,255,0.65)", border: "1.5px solid rgba(0,0,0,0.05)",
+                      background: isMe ? "rgba(26,138,80,0.04)" : "rgba(255,255,255,0.65)",
+                      border: isMe ? "1.5px solid rgba(26,138,80,0.2)" : "1.5px solid rgba(0,0,0,0.05)",
                       cursor: "pointer", transition: "box-shadow 0.3s",
                       breakInside: "avoid",
                       marginBottom: 14,
@@ -1398,8 +1592,16 @@ export default function DeliberationPageClient() {
                         <Lobster color={a.color} size={32} variant={i} />
                       </motion.div>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: "#1a1a1a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: "#1a1a1a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 6 }}>
                           {a.agent_name}
+                          {isMe && (
+                            <span style={{
+                              fontSize: 8, fontWeight: 700, color: "#1a8a50",
+                              background: "#1a8a5012", border: "1px solid #1a8a5020",
+                              padding: "1px 6px", borderRadius: 4,
+                              textTransform: "uppercase", letterSpacing: 0.5,
+                            }}>You</span>
+                          )}
                         </div>
                         {a.human_name && (
                           <div style={{ fontSize: 10, color: "#777" }}>for {a.human_name}</div>
@@ -1455,7 +1657,8 @@ export default function DeliberationPageClient() {
                       );
                     })()}
                   </motion.div>
-                ))}
+                  );
+                })}
               </div>
 
               {/* Right: Opinion Landscape (sticky) */}
