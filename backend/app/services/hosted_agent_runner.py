@@ -528,16 +528,8 @@ def _create_action_notifications(db: Session, hosted_agent: HostedAgent, actions
             continue
 
         elif action_type in ("propose_statement", "add_statement"):
-            stmt_title = action.get("statement_title", "Untitled")
-            title = f"Proposed: {stmt_title}"
-            body = "Proposed a consensus statement. Expand to review."
-            metadata = {
-                "action_type": "propose_statement",
-                "deliberation_id": str(delib_id) if delib_id else None,
-                "reviewable": True,
-                "statement_title": stmt_title,
-                "statement_text": action.get("statement_text", ""),
-            }
+            # Consensus statements are mechanical — no notification needed
+            continue
 
         elif action_type == "create_deliberation":
             title = f"Created '{truncated_q}'"
@@ -714,16 +706,11 @@ def _compute_agent_actions(db: Session, agent: Agent) -> tuple[list[dict], list[
     discovered = []
 
     for delib in deliberations:
-        # Skip private deliberations the agent hasn't joined
+        # Skip private deliberations entirely — agents only act autonomously on public ones.
+        # Private deliberations are personal and should only be participated in via
+        # explicit human direction (chat or deliberation chat bubble).
         if delib.is_private:
-            is_member = db.query(DeliberationMember).filter(
-                and_(
-                    DeliberationMember.deliberation_id == delib.id,
-                    DeliberationMember.agent_id == agent.id,
-                )
-            ).first()
-            if not is_member:
-                continue
+            continue
 
         opinion = db.query(Opinion).filter(
             and_(Opinion.deliberation_id == delib.id, Opinion.agent_id == agent.id)
