@@ -6,6 +6,8 @@ import type { Notification } from "@/lib/types";
 import { timeAgo } from "@/lib/utils";
 import { api } from "@/lib/api";
 
+type Tab = "unread" | "all";
+
 export default function NotificationBell() {
   const [count, setCount] = useState(0);
   const [open, setOpen] = useState(false);
@@ -16,6 +18,7 @@ export default function NotificationBell() {
   const [submitting, setSubmitting] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [reverting, setReverting] = useState<string | null>(null);
+  const [tab, setTab] = useState<Tab>("unread");
   const ref = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
@@ -45,9 +48,13 @@ export default function NotificationBell() {
   const fetchNotifications = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/backend/notifications?limit=20");
+      const res = await fetch("/api/backend/notifications?limit=30");
       const data = await res.json();
-      setNotifications(data.notifications || []);
+      const items = data.notifications || [];
+      setNotifications(items);
+      // Default to "all" if nothing is unread
+      const hasUnread = items.some((n: Notification) => !n.read);
+      setTab(hasUnread ? "unread" : "all");
     } catch {}
     finally { setLoading(false); }
   };
@@ -62,6 +69,7 @@ export default function NotificationBell() {
     await fetch("/api/backend/notifications/mark-all-read", { method: "POST" });
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
     setCount(0);
+    setTab("all");
   };
 
   const markRead = async (id: string) => {
@@ -104,7 +112,6 @@ export default function NotificationBell() {
     try {
       const result = await api.disapproveNotification(id, disapprovalReason.trim());
       markReadAndUpdate(id);
-      // If correction ran successfully, mark as corrected immediately
       const corrected = result?.correction?.status === "corrected";
       setNotifications((prev) =>
         prev.map((n) =>
@@ -132,7 +139,6 @@ export default function NotificationBell() {
     setReverting(n.id);
     try {
       await api.revertOpinion(meta.deliberation_id, meta.old_opinion_text);
-      // Mark as disapproved with automatic reason
       await api.disapproveNotification(n.id, "Reverted to previous opinion.");
       setNotifications((prev) =>
         prev.map((x) =>
@@ -160,7 +166,8 @@ export default function NotificationBell() {
     setExpandedId((prev) => prev === id ? null : id);
   };
 
-  const unreadCount = notifications.filter((n) => !n.read).length;
+  const unreadNotifications = notifications.filter((n) => !n.read);
+  const filtered = tab === "unread" ? unreadNotifications : notifications;
 
   return (
     <div className="relative" ref={ref}>
@@ -183,14 +190,20 @@ export default function NotificationBell() {
         )}
       </button>
 
-      {/* Dropdown */}
+      {/* Dropdown — full-screen on mobile, positioned on desktop */}
+      {open && (
+        <div
+          className="fixed inset-0 z-[199] bg-black/30 sm:hidden"
+          onClick={() => setOpen(false)}
+        />
+      )}
       <div
-        className="absolute right-0 top-full z-[200] mt-2 w-80 overflow-hidden rounded-xl border shadow-xl sm:w-96"
+        className="fixed inset-x-0 bottom-0 top-auto z-[200] max-h-[85vh] overflow-hidden rounded-t-2xl border-t shadow-xl sm:absolute sm:inset-auto sm:right-0 sm:top-full sm:mt-2 sm:w-96 sm:rounded-xl sm:border sm:shadow-xl"
         style={{
           background: "var(--surface)",
           borderColor: "var(--border)",
           opacity: open ? 1 : 0,
-          transform: open ? "translateY(0)" : "translateY(-4px)",
+          transform: open ? "translateY(0)" : "translateY(8px)",
           transition: "opacity 150ms ease-out, transform 150ms ease-out",
           pointerEvents: open ? "auto" : "none",
         }}
@@ -198,35 +211,66 @@ export default function NotificationBell() {
         {/* Header */}
         <div className="flex items-center justify-between border-b px-4 py-3" style={{ borderColor: "var(--border)" }}>
           <span className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>Notifications</span>
-          {unreadCount > 0 && (
+          <div className="flex items-center gap-3">
+            {unreadNotifications.length > 0 && tab === "unread" && (
+              <button
+                onClick={markAllRead}
+                className="text-xs font-medium transition-opacity hover:opacity-80"
+                style={{ color: "var(--accent)" }}
+              >
+                Mark all read
+              </button>
+            )}
+            {/* Mobile close button */}
             <button
-              onClick={markAllRead}
-              className="text-xs font-medium transition-opacity hover:opacity-80"
-              style={{ color: "var(--accent)" }}
+              onClick={() => setOpen(false)}
+              className="flex h-6 w-6 items-center justify-center rounded-md sm:hidden"
+              style={{ color: "var(--muted)" }}
             >
-              Mark all read
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
             </button>
-          )}
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex border-b px-4" style={{ borderColor: "var(--border)" }}>
+          {(["unread", "all"] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className="relative px-3 py-2 text-xs font-medium transition-colors"
+              style={{ color: tab === t ? "var(--foreground)" : "var(--muted)" }}
+            >
+              {t === "unread" ? `Unread${unreadNotifications.length > 0 ? ` (${unreadNotifications.length})` : ""}` : "All"}
+              {tab === t && (
+                <span
+                  className="absolute bottom-0 left-3 right-3 h-0.5 rounded-full"
+                  style={{ background: "var(--accent)" }}
+                />
+              )}
+            </button>
+          ))}
         </div>
 
         {/* Body */}
-        <div className="max-h-96 overflow-y-auto">
+        <div className="max-h-[calc(85vh-7rem)] overflow-y-auto sm:max-h-96">
           {loading ? (
             <div className="py-8 text-center text-sm" style={{ color: "var(--muted)" }}>Loading...</div>
-          ) : notifications.length === 0 ? (
+          ) : filtered.length === 0 ? (
             <div className="py-8 text-center text-sm" style={{ color: "var(--muted)" }}>
-              No notifications yet.
+              {tab === "unread" ? "All caught up." : "No notifications yet."}
             </div>
           ) : (
             <div>
-              {notifications.map((n) => (
+              {filtered.map((n) => (
                 <div
                   key={n.id}
-                  className={`border-b px-4 py-3 transition-colors last:border-b-0 ${(!n.read || n.metadata?.deliberation_id || hasExpandableDetail(n)) ? "cursor-pointer hover:opacity-90" : ""}`}
+                  className={`border-b px-4 py-3 transition-colors last:border-b-0 ${(!n.read || n.metadata?.deliberation_id || hasExpandableDetail(n)) ? "cursor-pointer active:opacity-80 hover:opacity-90" : ""}`}
                   style={{
                     borderColor: "var(--border)",
-                    background: !n.read ? "var(--surface)" : "transparent",
-                    borderLeft: !n.read ? "3px solid var(--accent)" : "3px solid transparent",
+                    opacity: n.read && tab === "all" ? 0.6 : 1,
                   }}
                   onClick={(e) => {
                     if (!n.read) markRead(n.id);
@@ -306,20 +350,20 @@ export default function NotificationBell() {
                     <div className="mt-2 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                       <button
                         onClick={(e) => handleApprove(e, n.id)}
-                        className="flex items-center gap-1 rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors hover:border-green-400 hover:text-green-500"
+                        className="flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors hover:border-green-400 hover:text-green-500 active:opacity-80 sm:px-2.5 sm:py-1 sm:text-[11px]"
                         style={{ borderColor: "var(--border)", color: "var(--muted)" }}
                       >
-                        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                        <svg className="h-3.5 w-3.5 sm:h-3 sm:w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                         </svg>
                         Approve
                       </button>
                       <button
                         onClick={(e) => handleStartDisapprove(e, n.id)}
-                        className="flex items-center gap-1 rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors hover:border-red-400 hover:text-red-500"
+                        className="flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors hover:border-red-400 hover:text-red-500 active:opacity-80 sm:px-2.5 sm:py-1 sm:text-[11px]"
                         style={{ borderColor: "var(--border)", color: "var(--muted)" }}
                       >
-                        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                        <svg className="h-3.5 w-3.5 sm:h-3 sm:w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                         </svg>
                         Disapprove
@@ -338,7 +382,7 @@ export default function NotificationBell() {
                         value={disapprovalReason}
                         onChange={(e) => setDisapprovalReason(e.target.value)}
                         placeholder="What did your agent get wrong?"
-                        className="w-full rounded-md border px-2.5 py-1.5 text-xs outline-none focus:ring-1"
+                        className="w-full rounded-md border px-2.5 py-2 text-sm outline-none focus:ring-1 sm:py-1.5 sm:text-xs"
                         style={{
                           borderColor: "var(--border)",
                           background: "var(--background)",
@@ -351,7 +395,7 @@ export default function NotificationBell() {
                         <button
                           type="submit"
                           disabled={!disapprovalReason.trim() || submitting}
-                          className="rounded-md px-2.5 py-1 text-[11px] font-medium text-white transition-opacity disabled:opacity-40"
+                          className="rounded-md px-3 py-1.5 text-xs font-medium text-white transition-opacity disabled:opacity-40 sm:px-2.5 sm:py-1 sm:text-[11px]"
                           style={{ background: "#ef4444" }}
                         >
                           {submitting ? "Correcting..." : "Submit"}
@@ -359,7 +403,7 @@ export default function NotificationBell() {
                         <button
                           type="button"
                           onClick={() => setDisapprovingId(null)}
-                          className="text-[11px] font-medium"
+                          className="text-xs font-medium sm:text-[11px]"
                           style={{ color: "var(--muted)" }}
                         >
                           Cancel
@@ -405,7 +449,7 @@ function ExpandedDetail({
           <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--muted)" }}>
             Opinion submitted
           </div>
-          <p className="text-xs leading-relaxed" style={{ color: "var(--foreground)" }}>
+          <p className="text-xs leading-relaxed sm:text-xs" style={{ color: "var(--foreground)" }}>
             {meta.opinion_text}
           </p>
         </div>
@@ -441,10 +485,10 @@ function ExpandedDetail({
             <button
               onClick={(e) => onRevert(e, n)}
               disabled={reverting}
-              className="mt-2 flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-medium transition-colors hover:border-orange-400 hover:text-orange-500 disabled:opacity-40"
+              className="mt-2 flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors hover:border-orange-400 hover:text-orange-500 disabled:opacity-40 active:opacity-80 sm:px-2 sm:py-0.5 sm:text-[11px]"
               style={{ borderColor: "var(--border)", color: "var(--muted)" }}
             >
-              <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <svg className="h-3.5 w-3.5 sm:h-3 sm:w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
               </svg>
               {reverting ? "Reverting..." : "Revert to previous"}
@@ -507,7 +551,7 @@ function ExpandedDetail({
       {meta.deliberation_id && (
         <a
           href={`/deliberations/${meta.deliberation_id}`}
-          className="mt-2 inline-block text-[11px] font-medium transition-opacity hover:opacity-80"
+          className="mt-2 inline-block text-xs font-medium transition-opacity hover:opacity-80 sm:text-[11px]"
           style={{ color: "var(--accent)" }}
           onClick={(e) => e.stopPropagation()}
         >
