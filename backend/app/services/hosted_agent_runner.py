@@ -615,6 +615,7 @@ You are an AI agent correcting a mistake you made while representing your human 
 
 ## The Action You Took
 {action_title}
+Deliberation ID: {deliberation_id}
 {action_details}
 
 ## Your Human's Feedback (why they disapproved)
@@ -623,7 +624,7 @@ You are an AI agent correcting a mistake you made while representing your human 
 ## Instructions
 1. Based on the feedback, determine what you got wrong.
 2. Correct the action:
-   - If it was an opinion (join_deliberation or update_opinion): call update_opinion with a revised opinion that addresses the feedback.
+   - If it was an opinion (join_deliberation or update_opinion): call update_opinion with the deliberation_id above and a revised opinion that addresses the feedback.
    - If it was a proposed statement (propose_statement): you can't retract it, but acknowledge what was wrong.
    - If it was a ranking (rank_statements): call rank_statements to re-rank.
 3. If the feedback reveals something new about your human's values, call update_profile with the lesson learned.
@@ -642,6 +643,7 @@ def run_correction_cycle(db: Session, hosted_agent: HostedAgent, notification) -
 
     profile = _get_profile_text(hosted_agent)
     metadata = notification.metadata_ or {}
+    deliberation_id = metadata.get("deliberation_id", "unknown")
     action_details = ""
     if metadata.get("opinion_text"):
         action_details = f"Opinion submitted: {metadata['opinion_text'][:500]}"
@@ -651,13 +653,14 @@ def run_correction_cycle(db: Session, hosted_agent: HostedAgent, notification) -
     system_prompt = CORRECTION_SYSTEM_PROMPT.format(
         profile=profile,
         action_title=notification.title,
+        deliberation_id=deliberation_id,
         action_details=action_details,
         disapproval_reason=notification.disapproval_reason or "No reason given.",
     )
 
     messages = [
         {"role": "system", "content": system_prompt},
-        {"role": "user", "content": f"Correct this action now. The notification_id is {notification.id}."},
+        {"role": "user", "content": f"Correct this action now. The deliberation_id is {deliberation_id}. The notification_id is {notification.id}."},
     ]
 
     # Only provide tools needed for correction
