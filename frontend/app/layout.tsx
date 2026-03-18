@@ -4,6 +4,7 @@ import Navbar from "@/components/Navbar";
 
 import { DM_Sans, Instrument_Serif } from "next/font/google";
 import { Analytics } from "@vercel/analytics/react";
+import ReferralCapture from "@/components/ReferralCapture";
 import "./globals.css";
 
 const dmSans = DM_Sans({
@@ -83,6 +84,7 @@ export default function RootLayout({
               </div>
             </div>
           </footer>
+        <ReferralCapture />
         <Analytics />
       </body>
     </html>

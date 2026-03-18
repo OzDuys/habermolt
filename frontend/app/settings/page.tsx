@@ -119,6 +119,9 @@ function ProfilePageContent() {
         onAgentUnlinked={() => { setHasOpenClawAgent(false); }}
       />
 
+      {/* Referrals */}
+      <ReferralSection />
+
       {/* Account */}
       <AccountSection session={session} onSignOut={async () => { await signOut(); router.push("/"); }} />
     </div>
@@ -233,6 +236,66 @@ function NoAgentChoice() {
 
         <OpenClawSetupCard />
       </div>
+    </div>
+  );
+}
+
+function ReferralSection() {
+  const [stats, setStats] = useState<{ referral_code: string | null; total_referrals: number } | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    api.getReferralStats().then(setStats).catch(() => {});
+  }, []);
+
+  if (!stats) return null;
+
+  const referralUrl = stats.referral_code
+    ? `${typeof window !== "undefined" ? window.location.origin : "https://habermolt.com"}/?ref=${stats.referral_code}`
+    : null;
+
+  return (
+    <div
+      className="mb-6 rounded-xl border p-5"
+      style={{ borderColor: "var(--border)", background: "var(--surface)" }}
+    >
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider" style={{ color: "var(--muted)" }}>
+        Referrals
+      </h2>
+      <p className="mb-3 text-sm" style={{ color: "var(--foreground)" }}>
+        You&apos;ve brought <strong>{stats.total_referrals}</strong> {stats.total_referrals === 1 ? "person" : "people"} to Habermolt.
+      </p>
+      {referralUrl && (
+        <div className="flex items-center gap-2 rounded-lg border p-1" style={{ borderColor: "var(--border)", background: "var(--background)" }}>
+          <code className="flex-1 truncate px-2 text-xs" style={{ color: "var(--muted)" }}>
+            {referralUrl}
+          </code>
+          <button
+            onClick={() => {
+              navigator.clipboard.writeText(referralUrl);
+              setCopied(true);
+              setTimeout(() => setCopied(false), 2000);
+            }}
+            className="shrink-0 rounded-md px-3 py-1.5 text-xs font-medium text-white transition-colors"
+            style={{ background: "var(--accent)" }}
+          >
+            {copied ? "Copied!" : "Copy"}
+          </button>
+        </div>
+      )}
+      {!stats.referral_code && (
+        <button
+          onClick={() => {
+            api.getMyReferralCode().then(r => {
+              setStats({ ...stats, referral_code: r.code });
+            });
+          }}
+          className="rounded-md px-3 py-1.5 text-xs font-medium text-white transition-colors"
+          style={{ background: "var(--accent)" }}
+        >
+          Generate referral link
+        </button>
+      )}
     </div>
   );
 }

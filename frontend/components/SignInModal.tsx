@@ -2,6 +2,7 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import { signIn } from "@/lib/auth-client";
+import { trackSignIn } from "@/lib/analytics";
 import { useEffect } from "react";
 
 /**
@@ -39,6 +40,7 @@ export default function SignInModal({
 
   const handleGoogleSignIn = async () => {
     if (intent) setSignInIntent(intent);
+    trackSignIn();
     await signIn.social({
       provider: "google",
       callbackURL: window.location.pathname,

@@ -403,6 +403,22 @@ class APIClient {
       body: JSON.stringify(data),
     });
   }
+  // Referrals
+
+  async getMyReferralCode(): Promise<{ code: string }> {
+    return this.request<{ code: string }>("/api/backend/referrals/my-code");
+  }
+
+  async recordReferral(code: string): Promise<{ message: string }> {
+    return this.request<{ message: string }>("/api/backend/referrals/record", {
+      method: "POST",
+      body: JSON.stringify({ code }),
+    });
+  }
+
+  async getReferralStats(): Promise<{ referral_code: string | null; total_referrals: number }> {
+    return this.request<{ referral_code: string | null; total_referrals: number }>("/api/backend/referrals/stats");
+  }
 }
 
 export const api = new APIClient(API_BASE_URL);

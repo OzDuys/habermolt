@@ -1,8 +1,23 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import QRCode from "qrcode";
+import { appendReferralCode } from "@/lib/referral";
+import { trackShareCopy } from "@/lib/analytics";
+import { useSession } from "@/lib/auth-client";
+import { api } from "@/lib/api";
+
+/** Hook that fetches the current user's referral code (if signed in). */
+function useReferralCode(): string | null {
+  const { data: session } = useSession();
+  const [code, setCode] = useState<string | null>(null);
+  useEffect(() => {
+    if (!session?.user?.id) return;
+    api.getMyReferralCode().then(r => setCode(r.code)).catch(() => {});
+  }, [session?.user?.id]);
+  return code;
+}
 
 interface ShareButtonProps {
   url: string;
@@ -12,19 +27,22 @@ interface ShareButtonProps {
 export function ShareSection({ url }: { url: string; label?: string; compact?: boolean }) {
   const [copied, setCopied] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const refCode = useReferralCode();
+  const shareUrl = useMemo(() => refCode ? appendReferralCode(url, refCode) : url, [url, refCode]);
 
   useEffect(() => {
-    QRCode.toDataURL(url, { width: 200, margin: 2, color: { dark: "#000", light: "#fff" } })
+    QRCode.toDataURL(shareUrl, { width: 200, margin: 2, color: { dark: "#000", light: "#fff" } })
       .then(setQrDataUrl)
       .catch(() => {});
-  }, [url]);
+  }, [shareUrl]);
 
   const handleCopy = useCallback(() => {
-    navigator.clipboard.writeText(url).then(() => {
+    navigator.clipboard.writeText(shareUrl).then(() => {
+      trackShareCopy("share-section");
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
-  }, [url]);
+  }, [shareUrl]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
@@ -50,12 +68,14 @@ export default function ShareButton({ url }: ShareButtonProps) {
   const [copied, setCopied] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
+  const refCode = useReferralCode();
+  const shareUrl = useMemo(() => refCode ? appendReferralCode(url, refCode) : url, [url, refCode]);
 
   useEffect(() => {
-    QRCode.toDataURL(url, { width: 200, margin: 2, color: { dark: "#000", light: "#fff" } })
+    QRCode.toDataURL(shareUrl, { width: 200, margin: 2, color: { dark: "#000", light: "#fff" } })
       .then(setQrDataUrl)
       .catch(() => {});
-  }, [url]);
+  }, [shareUrl]);
 
   // Close on outside click
   useEffect(() => {
@@ -70,11 +90,12 @@ export default function ShareButton({ url }: ShareButtonProps) {
   }, [open]);
 
   const handleCopy = useCallback(() => {
-    navigator.clipboard.writeText(url).then(() => {
+    navigator.clipboard.writeText(shareUrl).then(() => {
+      trackShareCopy("share-button");
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
-  }, [url]);
+  }, [shareUrl]);
 
   const handleDownloadQR = useCallback(() => {
     if (!qrDataUrl) return;

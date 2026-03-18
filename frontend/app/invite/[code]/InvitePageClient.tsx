@@ -4,6 +4,7 @@ import { Suspense, useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useSession, signIn } from "@/lib/auth-client";
 import { api } from "@/lib/api";
+import { trackJoinDeliberation, trackSignIn } from "@/lib/analytics";
 import Link from "next/link";
 import type { InviteInfo } from "@/lib/types";
 
@@ -80,6 +81,9 @@ function InvitePageContent() {
         }
       }
       const alreadyMember = result.message?.includes("already");
+      if (!alreadyMember) {
+        trackJoinDeliberation(result.deliberation_id);
+      }
       if (alreadyMember) {
         router.replace(`/deliberations/${result.deliberation_id}`);
       } else {

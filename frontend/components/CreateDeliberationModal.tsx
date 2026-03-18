@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSession } from "@/lib/auth-client";
 import { api } from "@/lib/api";
+import { trackCreateDeliberation } from "@/lib/analytics";
 import { useRouter } from "next/navigation";
 import SignInModal from "@/components/SignInModal";
 import type { CategoryDef, Community } from "@/lib/types";
@@ -117,6 +118,7 @@ export default function CreateDeliberationModal({
           categories: selectedCategories.length > 0 ? selectedCategories : undefined,
           is_private: isPrivate,
         });
+        trackCreateDeliberation();
         onClose();
         const params = new URLSearchParams({ created: "true" });
         if (data.invite_code) {

@@ -22,6 +22,7 @@ from app.models.deliberation_member import DeliberationMember
 from app.models.moderation_log import ModerationLog
 from app.models.community import Community
 from app.models.community_member import CommunityMember
+from app.models.referral import ReferralCode, Referral
 
 __all__ = [
     "Agent",
@@ -43,4 +44,6 @@ __all__ = [
     "ModerationLog",
     "Community",
     "CommunityMember",
+    "ReferralCode",
+    "Referral",
 ]

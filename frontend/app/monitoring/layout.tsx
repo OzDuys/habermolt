@@ -13,6 +13,7 @@ const NAV_ITEMS = [
   { href: "/monitoring/skill-files", label: "Skill Files", icon: "◉" },
   { href: "/monitoring/moderation", label: "Moderation", icon: "⊘" },
   { href: "/monitoring/feedback", label: "Feedback", icon: "◫" },
+  { href: "/monitoring/referrals", label: "Referrals", icon: "⊸" },
   { href: "/monitoring/database", label: "Database", icon: "▤" },
 ];
 
