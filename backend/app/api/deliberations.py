@@ -939,6 +939,79 @@ def _generate_hierarchical_labels(
     }
 
 
+def _generate_sub_cluster_labels(
+    question: str,
+    valid_groups: list[dict],
+    sub_cluster_opinions: dict[tuple[int, int], list[str]],
+    top_to_kmeans: dict[int, list[int]],
+    db: Session,
+) -> dict[tuple[int, int], str]:
+    """Use LLM to generate short labels for sub-clusters within each top-level group.
+    Returns {(top_id, sub_id): "label", ...}"""
+    from app.services.llm_client import LLMClient
+
+    # Only generate labels if there are sub-clusters to label
+    groups_with_subs = []
+    for top_id, group in enumerate(valid_groups):
+        kmeans_ids = sorted(top_to_kmeans.get(top_id, []))
+        if len(kmeans_ids) <= 1:
+            continue
+        subs = []
+        for sub_id in range(len(kmeans_ids)):
+            opinions = sub_cluster_opinions.get((top_id, sub_id), [])
+            if opinions:
+                subs.append((sub_id, opinions))
+        if subs:
+            groups_with_subs.append((top_id, group.get("label", "Group"), subs))
+
+    if not groups_with_subs:
+        return {}
+
+    # Build prompt
+    sections = []
+    for top_id, top_label, subs in groups_with_subs:
+        sub_parts = []
+        for sub_id, opinions in subs:
+            sample = "\n  - ".join(o[:200] for o in opinions[:3])
+            sub_parts.append(f"  Sub {top_id}-{sub_id} ({len(opinions)} opinions):\n  - {sample}")
+        sections.append(f'"{top_label}" sub-clusters:\n' + "\n".join(sub_parts))
+
+    prompt = (
+        f'Question: "{question}"\n\n'
+        f"Below are sub-clusters within each top-level opinion group. "
+        f"Generate a SHORT label (2-4 words) for each sub-cluster that captures "
+        f"the specific reasoning or angle within that position.\n\n"
+        + "\n\n".join(sections)
+        + "\n\n"
+        "RULES:\n"
+        "- Labels should explain WHY or HOW, not repeat the top-level position\n"
+        "- 2-4 words max per label\n"
+        "- Be specific, not abstract\n\n"
+        'Return ONLY JSON: {"labels": {"0-0": "Safety concerns", "0-1": "Job displacement", "1-0": "Innovation freedom"}}\n'
+        "Keys are top_id-sub_id. No other text."
+    )
+
+    try:
+        client = LLMClient()
+        client.set_trace_context(trace_type="opinion_sub_cluster_labels")
+        raw = client.sample_text(prompt, temperature=0.3, max_tokens=512)
+        import json
+        start = raw.find("{")
+        end = raw.rfind("}") + 1
+        if start >= 0 and end > start:
+            result = json.loads(raw[start:end])
+            labels = result.get("labels", result)
+            return {
+                (int(k.split("-")[0]), int(k.split("-")[1])): str(v)
+                for k, v in labels.items()
+                if "-" in str(k)
+            }
+    except Exception as e:
+        logger.warning(f"Failed to generate sub-cluster labels: {e}")
+
+    return {}
+
+
 def _opinion_set_hash(opinions: list) -> str:
     """Stable hash of opinion IDs + versions to detect changes."""
     import hashlib
@@ -1059,44 +1132,69 @@ def _compute_clusters_direct(
     for kid, gid in kmeans_to_top.items():
         top_to_kmeans.setdefault(gid, []).append(kid)
 
-    # 4. Build output
+    # 4. Assign every opinion to a sub-cluster (no orphans)
+    #    Each opinion goes to its k-means cluster's sub_id within its LLM top group.
+    #    If a k-means cluster was majority-mapped to a different top group,
+    #    the minority opinions get folded into the nearest sub-cluster in their own top group.
     opinion_mapping: dict[int, tuple[int, int]] = {}
+
+    # First pass: map opinions whose k-means cluster belongs to their top group
+    for i in range(total):
+        kid = int(kmeans_labels[i])
+        top_id = llm_assignment.get(i, 0)
+        kmeans_ids_in_group = sorted(top_to_kmeans.get(top_id, []))
+        if kid in kmeans_ids_in_group:
+            sub_id = kmeans_ids_in_group.index(kid)
+            opinion_mapping[i] = (top_id, sub_id)
+
+    # Second pass: orphaned opinions (k-means cluster mapped elsewhere) go to sub_id 0
+    for i in range(total):
+        if i not in opinion_mapping:
+            top_id = llm_assignment.get(i, 0)
+            opinion_mapping[i] = (top_id, 0)
+
+    # Build sub-cluster counts (now includes orphans folded into sub 0)
+    sub_counts_map: dict[tuple[int, int], int] = {}
+    for top_id, sub_id in opinion_mapping.values():
+        sub_counts_map[(top_id, sub_id)] = sub_counts_map.get((top_id, sub_id), 0) + 1
 
     sub_counts = [len(top_to_kmeans.get(gid, [])) for gid in range(len(valid_groups))]
     top_labels = [g.get("label", "Group") for g in valid_groups]
     top_colors, sub_color_lists = _generate_cluster_colors(len(valid_groups), sub_counts, top_labels)
 
+    # Collect sub-cluster opinion texts for LLM labeling
+    sub_cluster_opinions: dict[tuple[int, int], list[str]] = {}
+    for i, o in enumerate(embedded):
+        key = opinion_mapping[i]
+        sub_cluster_opinions.setdefault(key, []).append(o.opinion_text)
+
+    # Generate sub-cluster labels via LLM
+    sub_cluster_labels = _generate_sub_cluster_labels(
+        deliberation.question, valid_groups, sub_cluster_opinions, top_to_kmeans, db,
+    )
+
     clusters_info = []
     for top_id, group in enumerate(valid_groups):
         top_label = group.get("label", f"Group {top_id + 1}")
-        group_opinion_indices = group["_indices"]
-        top_count = len(group_opinion_indices)
+        top_count = len(group["_indices"])
 
         kmeans_ids_in_group = sorted(top_to_kmeans.get(top_id, []))
 
         sub_clusters_info = []
-        for sub_id, kid in enumerate(kmeans_ids_in_group):
-            # Only include opinions that are BOTH in this k-means cluster AND this top-level group
-            kid_indices = [idx for idx in kmeans_indices[kid] if llm_assignment.get(idx) == top_id]
-            sub_color = sub_color_lists[top_id][sub_id] if sub_id < len(sub_color_lists[top_id]) else top_colors[top_id]
-
-            for idx in kid_indices:
-                opinion_mapping[idx] = (top_id, sub_id)
-
-            if len(kmeans_ids_in_group) > 1 and kid_indices:
+        if len(kmeans_ids_in_group) > 1:
+            for sub_id in range(len(kmeans_ids_in_group)):
+                count = sub_counts_map.get((top_id, sub_id), 0)
+                if count == 0:
+                    continue
+                sub_color = sub_color_lists[top_id][sub_id] if sub_id < len(sub_color_lists[top_id]) else top_colors[top_id]
+                sub_label = sub_cluster_labels.get((top_id, sub_id), f"Subgroup {sub_id + 1}")
                 sub_clusters_info.append({
                     "sub_cluster_id": sub_id,
-                    "label": f"Subgroup {sub_id + 1}",
+                    "label": sub_label,
                     "color": sub_color,
-                    "count": len(kid_indices),
-                    "percentage": round(len(kid_indices) / total * 100, 1),
+                    "count": count,
+                    "percentage": round(count / total * 100, 1),
                 })
-
-        # Catch any opinions assigned to this top group but not yet mapped
-        # (edge case: k-means cluster mapped to a different top group by majority)
-        for idx in group_opinion_indices:
-            if idx not in opinion_mapping:
-                opinion_mapping[idx] = (top_id, 0)
 
         clusters_info.append({
             "cluster_id": top_id,
