@@ -79,7 +79,7 @@ export default function RankingRidgeline({ statements, rankings, agentClusterCol
         data,
         index: i,
         mean: d3.mean(data) || 0,
-        color: (agentClusterColor && s.contributed_by_agent_id && agentClusterColor[s.contributed_by_agent_id]) || PALETTE[i % PALETTE.length],
+        color: (agentClusterColor && s.contributed_by_agent_id && agentClusterColor[s.contributed_by_agent_id]) || "#a8a29e",
       };
     });
 
