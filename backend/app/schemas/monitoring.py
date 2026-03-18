@@ -64,7 +64,6 @@ class MonitoringStatsResponse(BaseModel):
     # Interaction leaderboards (top agents by opinion source)
     top_autonomous_agents: List[Dict[str, object]]  # [{agent_name, count}]
     top_api_agents: List[Dict[str, object]]
-    top_creation_agents: List[Dict[str, object]]
     top_interview_agents: List[Dict[str, object]]
     top_chat_tool_agents: List[Dict[str, object]]
     top_deliberation_creators: List[Dict[str, object]]

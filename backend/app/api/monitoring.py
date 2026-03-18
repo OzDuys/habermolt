@@ -239,7 +239,6 @@ async def get_monitoring_stats(
 
     top_autonomous_agents = _top_agents_by_source("autonomous")
     top_api_agents = _top_agents_by_source("api")
-    top_creation_agents = _top_agents_by_source("creation")
     top_interview_agents = _top_agents_by_source("topic_interview")
     top_chat_tool_agents = _top_agents_by_source("chat_tool")
 
@@ -285,7 +284,6 @@ async def get_monitoring_stats(
         cost_24h=round(float(cost_24h), 6),
         top_autonomous_agents=top_autonomous_agents,
         top_api_agents=top_api_agents,
-        top_creation_agents=top_creation_agents,
         top_interview_agents=top_interview_agents,
         top_chat_tool_agents=top_chat_tool_agents,
         top_deliberation_creators=top_deliberation_creators,

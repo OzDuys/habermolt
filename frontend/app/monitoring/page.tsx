@@ -24,7 +24,6 @@ interface Stats {
   cost_24h: number;
   top_autonomous_agents: { agent_name: string; count: number }[];
   top_api_agents: { agent_name: string; count: number }[];
-  top_creation_agents: { agent_name: string; count: number }[];
   top_interview_agents: { agent_name: string; count: number }[];
   top_chat_tool_agents: { agent_name: string; count: number }[];
   top_deliberation_creators: { agent_name: string; count: number }[];
@@ -159,11 +158,6 @@ export default function MonitoringDashboard() {
           title="API"
           subtitle="External OpenClaw agents"
           entries={stats.top_api_agents}
-        />
-        <LeaderboardCard
-          title="Creation"
-          subtitle="Initial opinion when creating a deliberation"
-          entries={stats.top_creation_agents}
         />
         <LeaderboardCard
           title="Interview"
