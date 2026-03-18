@@ -6,7 +6,7 @@ import type { Notification } from "@/lib/types";
 import { timeAgo } from "@/lib/utils";
 import { api } from "@/lib/api";
 
-type Tab = "unread" | "all";
+type Tab = "actions" | "recommended";
 
 export default function NotificationBell() {
   const [count, setCount] = useState(0);
@@ -18,7 +18,7 @@ export default function NotificationBell() {
   const [submitting, setSubmitting] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [reverting, setReverting] = useState<string | null>(null);
-  const [tab, setTab] = useState<Tab>("unread");
+  const [tab, setTab] = useState<Tab>("actions");
   const ref = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
@@ -52,9 +52,10 @@ export default function NotificationBell() {
       const data = await res.json();
       const items = data.notifications || [];
       setNotifications(items);
-      // Default to "all" if nothing is unread
-      const hasUnread = items.some((n: Notification) => !n.read);
-      setTab(hasUnread ? "unread" : "all");
+      // Default to whichever tab has unread items (prefer actions)
+      const hasUnreadActions = items.some((n: Notification) => !n.read && !!n.metadata?.action_type);
+      const hasUnreadRecs = items.some((n: Notification) => !n.read && !n.metadata?.action_type);
+      setTab(hasUnreadActions ? "actions" : hasUnreadRecs ? "recommended" : "actions");
     } catch {}
     finally { setLoading(false); }
   };
@@ -66,11 +67,21 @@ export default function NotificationBell() {
   };
 
   const markAllRead = async () => {
-    await fetch("/api/backend/notifications/mark-all-read", { method: "POST" });
+    // Mark only the current tab's unread notifications as read
+    const isRec = (n: Notification) => n.type === "agent_action" && !n.metadata?.action_type;
+    const idsToMark = notifications
+      .filter((n) => !n.read && (tab === "recommended" ? isRec(n) : !isRec(n)))
+      .map((n) => n.id);
+    if (idsToMark.length === 0) return;
+    await fetch("/api/backend/notifications/mark-read", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ notification_ids: idsToMark }),
+    });
     const now = new Date().toISOString();
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true, read_at: n.read_at || now })));
-    setCount(0);
-    setTab("all");
+    const idSet = new Set(idsToMark);
+    setNotifications((prev) => prev.map((n) => idSet.has(n.id) ? { ...n, read: true, read_at: now } : n));
+    setCount((c) => Math.max(0, c - idsToMark.length));
   };
 
   const markRead = async (id: string) => {
@@ -167,21 +178,19 @@ export default function NotificationBell() {
     setExpandedId((prev) => prev === id ? null : id);
   };
 
-  const unreadNotifications = notifications.filter((n) => !n.read);
-  // "All" tab: unread first (by created_at desc), then read by read_at desc
-  const allSorted = [...notifications].sort((a, b) => {
-    if (!a.read && b.read) return -1;
-    if (a.read && !b.read) return 1;
-    if (a.read && b.read) {
-      // Both read — sort by when they were read (most recent first)
-      const aRead = a.read_at ? new Date(a.read_at).getTime() : 0;
-      const bRead = b.read_at ? new Date(b.read_at).getTime() : 0;
-      return bRead - aRead;
-    }
-    // Both unread — sort by creation time (newest first)
-    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-  });
-  const filtered = tab === "unread" ? unreadNotifications : allSorted;
+  const isRecommendation = (n: Notification) => n.type === "agent_action" && !n.metadata?.action_type;
+  const actionNotifications = notifications.filter((n) => !isRecommendation(n));
+  const recommendedNotifications = notifications.filter(isRecommendation);
+  const unreadActions = actionNotifications.filter((n) => !n.read).length;
+  const unreadRecommended = recommendedNotifications.filter((n) => !n.read).length;
+  // Each tab: unread first, then read — both groups sorted by created_at desc
+  const sortWithUnreadFirst = (items: Notification[]) =>
+    [...items].sort((a, b) => {
+      if (!a.read && b.read) return -1;
+      if (a.read && !b.read) return 1;
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
+  const filtered = sortWithUnreadFirst(tab === "actions" ? actionNotifications : recommendedNotifications);
 
   return (
     <div className="relative" ref={ref}>
@@ -226,7 +235,7 @@ export default function NotificationBell() {
         <div className="flex items-center justify-between border-b px-4 py-3" style={{ borderColor: "var(--border)" }}>
           <span className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>Notifications</span>
           <div className="flex items-center gap-3">
-            {unreadNotifications.length > 0 && tab === "unread" && (
+            {(tab === "actions" ? unreadActions : unreadRecommended) > 0 && (
               <button
                 onClick={markAllRead}
                 className="text-xs font-medium transition-opacity hover:opacity-80"
@@ -250,15 +259,18 @@ export default function NotificationBell() {
 
         {/* Tabs */}
         <div className="flex border-b px-4" style={{ borderColor: "var(--border)" }}>
-          {(["unread", "all"] as const).map((t) => (
+          {([
+            { key: "actions" as const, label: "Actions", unread: unreadActions },
+            { key: "recommended" as const, label: "Recommended", unread: unreadRecommended },
+          ]).map((t) => (
             <button
-              key={t}
-              onClick={() => setTab(t)}
+              key={t.key}
+              onClick={() => setTab(t.key)}
               className="relative px-3 py-2 text-xs font-medium transition-colors"
-              style={{ color: tab === t ? "var(--foreground)" : "var(--muted)" }}
+              style={{ color: tab === t.key ? "var(--foreground)" : "var(--muted)" }}
             >
-              {t === "unread" ? `Unread${unreadNotifications.length > 0 ? ` (${unreadNotifications.length})` : ""}` : "All"}
-              {tab === t && (
+              {t.label}{t.unread > 0 ? ` (${t.unread})` : ""}
+              {tab === t.key && (
                 <span
                   className="absolute bottom-0 left-3 right-3 h-0.5 rounded-full"
                   style={{ background: "var(--accent)" }}
@@ -274,7 +286,7 @@ export default function NotificationBell() {
             <div className="py-8 text-center text-sm" style={{ color: "var(--muted)" }}>Loading...</div>
           ) : filtered.length === 0 ? (
             <div className="py-8 text-center text-sm" style={{ color: "var(--muted)" }}>
-              {tab === "unread" ? "All caught up." : "No notifications yet."}
+              {tab === "actions" ? "No actions yet." : "No recommendations yet."}
             </div>
           ) : (
             <div>
@@ -284,7 +296,7 @@ export default function NotificationBell() {
                   className={`border-b px-4 py-3 transition-colors last:border-b-0 ${(!n.read || n.metadata?.deliberation_id || hasExpandableDetail(n)) ? "cursor-pointer active:opacity-80 hover:opacity-90" : ""}`}
                   style={{
                     borderColor: "var(--border)",
-                    opacity: n.read && tab === "all" ? 0.6 : 1,
+                    opacity: n.read ? 0.6 : 1,
                   }}
                   onClick={(e) => {
                     if (hasExpandableDetail(n)) {
