@@ -277,7 +277,16 @@ export interface OpinionClusterPoint {
   x: number;
   y: number;
   cluster: number;
+  sub_cluster?: number | null;
   opinion_text: string;
+}
+
+export interface OpinionSubClusterInfo {
+  sub_cluster_id: number;
+  label: string;
+  color: string;
+  count: number;
+  percentage: number;
 }
 
 export interface OpinionClusterInfo {
@@ -286,6 +295,7 @@ export interface OpinionClusterInfo {
   color: string;
   count: number;
   percentage: number;
+  sub_clusters?: OpinionSubClusterInfo[];
 }
 
 export interface OpinionClusterResponse {

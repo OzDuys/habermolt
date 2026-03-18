@@ -53,6 +53,7 @@ from app.schemas import (
     ClusterResponse,
     OpinionClusterPoint,
     OpinionClusterInfo,
+    OpinionSubClusterInfo,
     OpinionClusterResponse,
     EnrichedStatementsResponse,
     EnrichedStatementItem,
@@ -714,11 +715,49 @@ async def get_cluster(
     return ClusterResponse(points=points, total=len(points), deliberation_id=str(deliberation_id))
 
 
-# ─── Cluster colors for opinion clusters ─────────────────────────────────────
-OPINION_CLUSTER_COLORS = [
-    "#c84a20", "#2a6fb0", "#9b3a8a", "#1a8a50", "#6b4ac8",
-    "#c43030", "#0a8a9a", "#b07a10", "#b0306a", "#0a7a5a",
+# ─── Hierarchical opinion clustering ─────────────────────────────────────────
+# Base hues for top-level clusters — each gets shades for sub-clusters.
+# Format: (H, S%, L%) base values — sub-clusters vary lightness.
+CLUSTER_BASE_HUES = [
+    (14, 75, 45),    # warm red-orange
+    (210, 60, 45),   # blue
+    (300, 50, 42),   # purple
+    (150, 65, 35),   # green
+    (35, 80, 48),    # amber
+    (340, 60, 45),   # pink
+    (180, 70, 35),   # teal
+    (260, 55, 48),   # indigo
 ]
+
+CLUSTER_CACHE_TTL_SECONDS = 300  # 5 minutes
+
+
+def _hsl_to_hex(h: int, s: int, l: int) -> str:
+    """Convert HSL values to hex color string."""
+    import colorsys
+    r, g, b = colorsys.hls_to_rgb(h / 360, l / 100, s / 100)
+    return f"#{int(r*255):02x}{int(g*255):02x}{int(b*255):02x}"
+
+
+def _generate_cluster_colors(num_top: int, sub_counts: list[int]) -> tuple[list[str], list[list[str]]]:
+    """Generate colors for top-level clusters and their sub-clusters.
+    Returns (top_colors, sub_colors) where sub_colors[i] is a list of colors for cluster i's sub-clusters."""
+    top_colors = []
+    sub_colors = []
+    for i in range(num_top):
+        h, s, l = CLUSTER_BASE_HUES[i % len(CLUSTER_BASE_HUES)]
+        top_colors.append(_hsl_to_hex(h, s, l))
+        n_sub = sub_counts[i] if i < len(sub_counts) else 0
+        if n_sub <= 1:
+            sub_colors.append([_hsl_to_hex(h, s, l)])
+        else:
+            # Spread lightness from darker to lighter within the hue
+            shades = []
+            for j in range(n_sub):
+                shade_l = max(25, min(65, l - 10 + (j * 30 // max(n_sub - 1, 1))))
+                shades.append(_hsl_to_hex(h, s, shade_l))
+            sub_colors.append(shades)
+    return top_colors, sub_colors
 
 
 def _find_optimal_k(matrix: np.ndarray, max_k: int = 8) -> int:
@@ -745,29 +784,50 @@ def _find_optimal_k(matrix: np.ndarray, max_k: int = 8) -> int:
     return best_k
 
 
-def _generate_cluster_labels(
+def _generate_hierarchical_labels(
     question: str,
-    clusters: dict[int, list[str]],
+    kmeans_clusters: dict[int, list[str]],
     db: Session,
-) -> dict[int, str]:
-    """Use LLM to generate short labels for each opinion cluster."""
+) -> dict:
+    """Use LLM to group k-means clusters into top-level positions with sub-labels.
+
+    Returns: {
+        "groups": [
+            {"label": "Yes", "kmeans_ids": [0, 2, 4], "sub_labels": {"0": "Safety concerns", "2": "Job loss", "4": "Ethics"}},
+            {"label": "No", "kmeans_ids": [1, 3], "sub_labels": {"1": "Innovation", "3": "Economy"}},
+        ]
+    }
+    """
     from app.services.llm_client import LLMClient
 
     cluster_summaries = []
-    for cid in sorted(clusters.keys()):
-        opinions = clusters[cid]
-        joined = "\n---\n".join(opinions[:5])  # max 5 per cluster for prompt size
-        cluster_summaries.append(f"Cluster {cid}:\n{joined}")
+    for cid in sorted(kmeans_clusters.keys()):
+        opinions = kmeans_clusters[cid]
+        joined = "\n- ".join(opinions[:4])
+        cluster_summaries.append(f"Group {cid} ({len(opinions)} opinions):\n- {joined}")
 
     prompt = (
-        f"Deliberation question: \"{question}\"\n\n"
-        f"Below are opinion clusters from agents participating in this deliberation. "
-        f"Each cluster contains semantically similar opinions.\n\n"
+        f'Question being deliberated: "{question}"\n\n'
+        f"Below are {len(kmeans_clusters)} opinion groups from a deliberation. "
+        f"Your job is to merge them into 2-5 TOP-LEVEL positions based on what they believe, "
+        f"then label each sub-group.\n\n"
         + "\n\n".join(cluster_summaries)
-        + "\n\nFor each cluster, generate a short descriptive label (3-6 words) that captures "
-        f"the shared perspective. Return ONLY a JSON object mapping cluster number to label, "
-        f"e.g. {{\"0\": \"Pro-regulation optimists\", \"1\": \"Free market advocates\"}}. "
-        f"No other text."
+        + "\n\n"
+        "RULES:\n"
+        "- Top-level labels must be 1-3 words (e.g. \"Yes\", \"No\", \"OpenAI\", \"Google\", \"Mixed\")\n"
+        "- For yes/no questions, use \"Yes\", \"No\", and optionally \"Mixed\"\n"
+        "- For \"who/which\" questions, use the entity names\n"
+        "- NEVER use abstract phrases like \"structural advantages\" or \"democratic agency\"\n"
+        "- Labels should be what you'd put on a pie chart\n"
+        "- Sub-labels should be 2-4 words explaining WHY within that position\n"
+        "- If a top-level group only has one sub-group, still include it\n"
+        "- Every group number must appear in exactly one top-level position\n\n"
+        "Return ONLY JSON in this exact format:\n"
+        '{"groups": [\n'
+        '  {"label": "Yes", "kmeans_ids": [0, 2], "sub_labels": {"0": "Safety risks", "2": "Job concerns"}},\n'
+        '  {"label": "No", "kmeans_ids": [1, 3], "sub_labels": {"1": "Pro innovation", "3": "Economic growth"}}\n'
+        "]}\n"
+        "No other text."
     )
 
     try:
@@ -775,17 +835,26 @@ def _generate_cluster_labels(
         client.set_trace_context(trace_type="opinion_cluster_labels")
         raw = client.sample_text(prompt, temperature=0.3, max_tokens=512)
         import json
-        # Extract JSON from response
         start = raw.find("{")
         end = raw.rfind("}") + 1
         if start >= 0 and end > start:
-            labels = json.loads(raw[start:end])
-            return {int(k): str(v) for k, v in labels.items()}
+            result = json.loads(raw[start:end])
+            if "groups" in result:
+                return result
     except Exception as e:
-        logger.warning(f"Failed to generate cluster labels: {e}")
+        logger.warning(f"Failed to generate hierarchical cluster labels: {e}")
 
-    # Fallback: generic labels
-    return {cid: f"Group {cid + 1}" for cid in clusters}
+    # Fallback: each k-means cluster is its own top-level group, no sub-clusters
+    return {
+        "groups": [
+            {
+                "label": f"Group {cid + 1}",
+                "kmeans_ids": [cid],
+                "sub_labels": {str(cid): f"Group {cid + 1}"},
+            }
+            for cid in sorted(kmeans_clusters.keys())
+        ]
+    }
 
 
 def _opinion_set_hash(opinions: list) -> str:
@@ -800,8 +869,13 @@ def _compute_opinion_clusters(
     latest_opinions: list,
     db: Session,
 ) -> dict:
-    """Compute opinion clusters from scratch: embed, PCA, k-means, LLM labels.
-    Returns the full response dict ready for JSON serialization + caching."""
+    """Compute hierarchical opinion clusters: embed → PCA → k-means → LLM grouping.
+
+    Hybrid approach:
+    - K-means handles scale (works for any number of opinions)
+    - LLM groups k-means clusters into simple top-level positions (Yes/No/OpenAI/etc.)
+    - K-means clusters become sub-clusters under the LLM's groupings
+    """
     # Lazy embedding for any opinions missing embeddings
     missing = [o for o in latest_opinions if o.opinion_embedding is None]
     if missing:
@@ -821,25 +895,71 @@ def _compute_opinion_clusters(
     matrix = np.array([list(o.opinion_embedding) for o in embedded], dtype=np.float64)
     coords = _compute_pca_2d(matrix)
 
-    # K-means clustering with optimal k
+    # K-means clustering (fine-grained)
     from sklearn.cluster import KMeans
     optimal_k = _find_optimal_k(matrix)
     km = KMeans(n_clusters=optimal_k, n_init=3, random_state=42)
-    labels = km.fit_predict(matrix)
+    kmeans_labels = km.fit_predict(matrix)
 
     # Build agent name map
     agent_ids = [o.agent_id for o in embedded]
     agents_db = db.query(Agent).filter(Agent.id.in_(agent_ids)).all()
     agent_name_map = {a.id: a.name for a in agents_db}
 
-    # Build cluster -> opinion texts map for labeling
-    cluster_opinions: dict[int, list[str]] = {}
+    # Build k-means cluster -> opinion texts map
+    kmeans_opinions: dict[int, list[str]] = {}
+    kmeans_indices: dict[int, list[int]] = {}  # k-means cluster -> opinion indices
     for i, o in enumerate(embedded):
-        cid = int(labels[i])
-        cluster_opinions.setdefault(cid, []).append(o.opinion_text)
+        cid = int(kmeans_labels[i])
+        kmeans_opinions.setdefault(cid, []).append(o.opinion_text)
+        kmeans_indices.setdefault(cid, []).append(i)
 
-    # Generate LLM labels
-    cluster_labels = _generate_cluster_labels(deliberation.question, cluster_opinions, db)
+    # LLM groups k-means clusters into top-level positions
+    hierarchy = _generate_hierarchical_labels(deliberation.question, kmeans_opinions, db)
+
+    # Build mapping: opinion index -> (top_cluster_id, sub_cluster_id)
+    opinion_mapping: dict[int, tuple[int, int]] = {}  # idx -> (top_id, sub_id)
+    total = len(embedded)
+
+    # Generate colors
+    sub_counts = [len(g.get("kmeans_ids", [])) for g in hierarchy["groups"]]
+    top_colors, sub_color_lists = _generate_cluster_colors(len(hierarchy["groups"]), sub_counts)
+
+    clusters_info = []
+    for top_id, group in enumerate(hierarchy["groups"]):
+        top_label = group.get("label", f"Group {top_id + 1}")
+        kmeans_ids = group.get("kmeans_ids", [])
+        sub_labels = group.get("sub_labels", {})
+
+        # Count total opinions in this top-level cluster
+        top_count = sum(len(kmeans_indices.get(kid, [])) for kid in kmeans_ids)
+
+        sub_clusters_info = []
+        for sub_id, kid in enumerate(kmeans_ids):
+            indices = kmeans_indices.get(kid, [])
+            sub_label = sub_labels.get(str(kid), f"Subgroup {sub_id + 1}")
+            sub_color = sub_color_lists[top_id][sub_id] if sub_id < len(sub_color_lists[top_id]) else top_colors[top_id]
+
+            for idx in indices:
+                opinion_mapping[idx] = (top_id, sub_id)
+
+            if len(kmeans_ids) > 1:
+                sub_clusters_info.append({
+                    "sub_cluster_id": sub_id,
+                    "label": sub_label,
+                    "color": sub_color,
+                    "count": len(indices),
+                    "percentage": round(len(indices) / total * 100, 1),
+                })
+
+        clusters_info.append({
+            "cluster_id": top_id,
+            "label": top_label,
+            "color": top_colors[top_id],
+            "count": top_count,
+            "percentage": round(top_count / total * 100, 1),
+            "sub_clusters": sub_clusters_info,
+        })
 
     # Build points
     points = [
@@ -849,22 +969,11 @@ def _compute_opinion_clusters(
             "agent_name": agent_name_map.get(o.agent_id, "Agent"),
             "x": float(coords[i, 0]),
             "y": float(coords[i, 1]),
-            "cluster": int(labels[i]),
+            "cluster": opinion_mapping.get(i, (0, 0))[0],
+            "sub_cluster": opinion_mapping.get(i, (0, 0))[1],
             "opinion_text": o.opinion_text,
         }
         for i, o in enumerate(embedded)
-    ]
-
-    total = len(embedded)
-    clusters_info = [
-        {
-            "cluster_id": cid,
-            "label": cluster_labels.get(cid, f"Group {cid + 1}"),
-            "color": OPINION_CLUSTER_COLORS[cid % len(OPINION_CLUSTER_COLORS)],
-            "count": len(ops),
-            "percentage": round(len(ops) / total * 100, 1),
-        }
-        for cid, ops in sorted(cluster_opinions.items())
     ]
 
     return {
@@ -911,11 +1020,18 @@ async def get_opinion_cluster(
 
     # Check if cached result is still valid
     current_hash = _opinion_set_hash(latest)
-    if (
-        deliberation.opinion_cluster_cache is not None
-        and deliberation.opinion_cluster_hash == current_hash
-    ):
-        return OpinionClusterResponse(**deliberation.opinion_cluster_cache)
+    from datetime import datetime, timezone, timedelta
+    now = datetime.now(timezone.utc)
+
+    if deliberation.opinion_cluster_cache is not None:
+        hash_matches = deliberation.opinion_cluster_hash == current_hash
+        within_ttl = (
+            deliberation.opinion_cluster_cached_at is not None
+            and (now - deliberation.opinion_cluster_cached_at).total_seconds() < CLUSTER_CACHE_TTL_SECONDS
+        )
+        # Return cache if: nothing changed, OR opinions changed but TTL hasn't expired
+        if hash_matches or within_ttl:
+            return OpinionClusterResponse(**deliberation.opinion_cluster_cache)
 
     # Cache miss — recompute
     logger.info(f"Opinion cluster cache miss for deliberation {deliberation_id}, recomputing...")
@@ -924,6 +1040,7 @@ async def get_opinion_cluster(
     # Persist cache
     deliberation.opinion_cluster_cache = result
     deliberation.opinion_cluster_hash = current_hash
+    deliberation.opinion_cluster_cached_at = now
     db.commit()
 
     return OpinionClusterResponse(**result)

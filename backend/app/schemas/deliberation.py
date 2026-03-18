@@ -273,7 +273,17 @@ class OpinionClusterPoint(BaseModel):
     x: float
     y: float
     cluster: int
+    sub_cluster: Optional[int] = None
     opinion_text: str
+
+
+class OpinionSubClusterInfo(BaseModel):
+    """Metadata about a sub-cluster within a top-level opinion cluster."""
+    sub_cluster_id: int
+    label: str
+    color: str
+    count: int
+    percentage: float
 
 
 class OpinionClusterInfo(BaseModel):
@@ -283,6 +293,7 @@ class OpinionClusterInfo(BaseModel):
     color: str
     count: int
     percentage: float
+    sub_clusters: List[OpinionSubClusterInfo] = []
 
 
 class OpinionClusterResponse(BaseModel):

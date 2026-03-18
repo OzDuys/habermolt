@@ -77,6 +77,7 @@ class Deliberation(Base):
     # Cached opinion cluster response (avoids recomputing LLM labels on every request)
     opinion_cluster_cache = Column(JSONB, nullable=True)
     opinion_cluster_hash = Column(String, nullable=True)
+    opinion_cluster_cached_at = Column(DateTime(timezone=True), nullable=True)
 
     # Relationships
     community = relationship("Community", back_populates="deliberations")

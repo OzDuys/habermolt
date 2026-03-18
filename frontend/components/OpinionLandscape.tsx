@@ -43,11 +43,28 @@ export default function OpinionLandscape({ points, clusters, onPointClick }: Opi
     svgY: number;
   } | null>(null);
 
-  const colorMap = useMemo(() => {
-    const m: Record<number, string> = {};
-    clusters.forEach((c) => { m[c.cluster_id] = c.color; });
-    return m;
-  }, [clusters]);
+  // Build color map: for each point, resolve to sub-cluster color if available, else top-level color
+  const { topColorMap, pointColorMap } = useMemo(() => {
+    const topMap: Record<number, string> = {};
+    // Map: "clusterId-subClusterId" -> color
+    const subMap: Record<string, string> = {};
+    clusters.forEach((c) => {
+      topMap[c.cluster_id] = c.color;
+      if (c.sub_clusters) {
+        c.sub_clusters.forEach((s) => {
+          subMap[`${c.cluster_id}-${s.sub_cluster_id}`] = s.color;
+        });
+      }
+    });
+
+    const ptMap: Record<string, string> = {};
+    points.forEach((p) => {
+      const subKey = `${p.cluster}-${p.sub_cluster ?? 0}`;
+      ptMap[p.id] = subMap[subKey] || topMap[p.cluster] || "#888";
+    });
+
+    return { topColorMap: topMap, pointColorMap: ptMap };
+  }, [clusters, points]);
 
   const { xScale, yScale } = useMemo(() => {
     if (points.length < 2) return { xScale: null, yScale: null };
@@ -70,6 +87,14 @@ export default function OpinionLandscape({ points, clusters, onPointClick }: Opi
 
   const truncate = (text: string, max = 120) =>
     text.length > max ? text.slice(0, max) + "\u2026" : text;
+
+  // Find sub-cluster label for a point
+  const getSubClusterLabel = (p: OpinionClusterPoint): string | null => {
+    const cluster = clusters.find((c) => c.cluster_id === p.cluster);
+    if (!cluster?.sub_clusters || cluster.sub_clusters.length <= 1) return null;
+    const sub = cluster.sub_clusters.find((s) => s.sub_cluster_id === (p.sub_cluster ?? 0));
+    return sub?.label ?? null;
+  };
 
   return (
     <div className="relative w-full">
@@ -120,11 +145,11 @@ export default function OpinionLandscape({ points, clusters, onPointClick }: Opi
           />
         ))}
 
-        {/* Points */}
+        {/* Points — colored by sub-cluster shade */}
         {points.map((p) => {
           const cx = xScale(p.x);
           const cy = yScale(p.y);
-          const color = colorMap[p.cluster] || "#888";
+          const color = pointColorMap[p.id] || "#888";
           return (
             <g key={p.id}>
               <circle
@@ -149,6 +174,8 @@ export default function OpinionLandscape({ points, clusters, onPointClick }: Opi
             const tx = Math.min(tooltip.svgX + 18, WIDTH - TOOLTIP_W - 8);
             const ty = Math.max(tooltip.svgY - TOOLTIP_H - 12, 8);
             const clusterInfo = clusters.find((c) => c.cluster_id === tooltip.point.cluster);
+            const subLabel = getSubClusterLabel(tooltip.point);
+            const color = pointColorMap[tooltip.point.id] || "#888";
             return (
               <foreignObject
                 x={tx} y={ty}
@@ -158,7 +185,7 @@ export default function OpinionLandscape({ points, clusters, onPointClick }: Opi
                 <div
                   style={{
                     background: "#fffcf7",
-                    border: `1.5px solid ${colorMap[tooltip.point.cluster] || "#888"}30`,
+                    border: `1.5px solid ${color}30`,
                     borderRadius: 12,
                     padding: "10px 14px",
                     fontSize: 12,
@@ -170,17 +197,18 @@ export default function OpinionLandscape({ points, clusters, onPointClick }: Opi
                   <span style={{
                     display: "flex", alignItems: "center", gap: 6,
                     fontWeight: 700, fontSize: 11, marginBottom: 4,
-                    color: colorMap[tooltip.point.cluster] || "#888",
+                    color: color,
                   }}>
                     <span style={{
                       width: 8, height: 8, borderRadius: "50%",
-                      background: colorMap[tooltip.point.cluster] || "#888",
+                      background: color,
                       flexShrink: 0,
                     }} />
                     {tooltip.point.agent_name}
                     {clusterInfo && (
                       <span style={{ fontWeight: 400, color: "#999", fontSize: 10 }}>
                         &middot; {clusterInfo.label}
+                        {subLabel && ` / ${subLabel}`}
                       </span>
                     )}
                   </span>
@@ -191,20 +219,38 @@ export default function OpinionLandscape({ points, clusters, onPointClick }: Opi
           })()}
       </svg>
 
-      {/* Legend — cluster labels */}
+      {/* Legend — hierarchical cluster labels */}
       <div style={{
         display: "flex", flexWrap: "wrap", justifyContent: "center",
         gap: "4px 16px", marginTop: 12, fontSize: 11, color: "#aaa",
       }}>
-        {clusters.map((c) => (
-          <span key={c.cluster_id} style={{ display: "flex", alignItems: "center", gap: 5 }}>
-            <span style={{
-              width: 10, height: 10, borderRadius: "50%",
-              background: c.color, opacity: 0.85, flexShrink: 0,
-            }} />
-            {c.label}
-          </span>
-        ))}
+        {clusters.map((c) => {
+          const hasSubs = c.sub_clusters && c.sub_clusters.length > 1;
+          return (
+            <div key={c.cluster_id} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+              <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                <span style={{
+                  width: 10, height: 10, borderRadius: "50%",
+                  background: c.color, opacity: 0.85, flexShrink: 0,
+                }} />
+                {c.label}
+              </span>
+              {hasSubs && (
+                <div style={{ display: "flex", gap: "2px 8px", flexWrap: "wrap", justifyContent: "center" }}>
+                  {c.sub_clusters!.map((s) => (
+                    <span key={s.sub_cluster_id} style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 9, color: "#bbb" }}>
+                      <span style={{
+                        width: 6, height: 6, borderRadius: "50%",
+                        background: s.color, opacity: 0.85, flexShrink: 0,
+                      }} />
+                      {s.label}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
