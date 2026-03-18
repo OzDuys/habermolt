@@ -930,6 +930,21 @@ export default function DeliberationPageClient() {
   const [clusterPoints, setClusterPoints] = useState<ClusterPoint[]>([]);
   const [opinionClusterPoints, setOpinionClusterPoints] = useState<OpinionClusterPoint[]>([]);
   const [opinionClusters, setOpinionClusters] = useState<OpinionClusterInfo[]>([]);
+  // Map agent_id -> cluster color (for lobster icons + card accents)
+  const agentClusterColor = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const pt of opinionClusterPoints) {
+      if (!map[pt.agent_id]) {
+        // Find the sub-cluster color if available, else top-level
+        const cluster = opinionClusters.find(c => c.cluster_id === pt.cluster);
+        if (cluster) {
+          const sub = cluster.sub_clusters?.find(s => s.sub_cluster_id === (pt.sub_cluster ?? 0));
+          map[pt.agent_id] = sub?.color || cluster.color;
+        }
+      }
+    }
+    return map;
+  }, [opinionClusterPoints, opinionClusters]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabId>("consensus");
   const [selectedAgent, setSelectedAgent] = useState<AgentInfo | null>(null);
@@ -1572,11 +1587,12 @@ export default function DeliberationPageClient() {
                   return 0;
                 }).map((a, i) => {
                   const isMe = userAgentId != null && a.agent_id === userAgentId;
+                  const clrColor = agentClusterColor[a.agent_id] || a.color;
                   return (
                   <motion.div key={a.agent_id}
                     initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
                     viewport={{ once: true, margin: "-30px" }} transition={{ delay: i * 0.03 }}
-                    whileHover={{ y: -3, boxShadow: `0 6px 24px ${a.color}10` }}
+                    whileHover={{ y: -3, boxShadow: `0 6px 24px ${clrColor}10` }}
                     onClick={() => setSelectedAgent(a)}
                     style={{
                       padding: "16px", borderRadius: 16,
@@ -1589,7 +1605,7 @@ export default function DeliberationPageClient() {
                   >
                     <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
                       <motion.div animate={{ y: [0, -2, 0] }} transition={{ duration: 2.5, repeat: Infinity, delay: i * 0.15 }}>
-                        <Lobster color={a.color} size={32} variant={i} />
+                        <Lobster color={clrColor} size={32} variant={i} />
                       </motion.div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 13, fontWeight: 700, color: "#1a1a1a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 6 }}>
@@ -1635,11 +1651,11 @@ export default function DeliberationPageClient() {
                                   style={{
                                     display: "inline-flex", alignItems: "center", justifyContent: "center",
                                     width: 22, height: 22, borderRadius: "50%",
-                                    background: ri === 0 ? a.color : ri < 3 ? `${a.color}30` : "rgba(0,0,0,0.06)",
-                                    color: ri === 0 ? "#fff" : ri < 3 ? a.color : "#999",
+                                    background: ri === 0 ? clrColor : ri < 3 ? `${clrColor}30` : "rgba(0,0,0,0.06)",
+                                    color: ri === 0 ? "#fff" : ri < 3 ? clrColor : "#999",
                                     fontSize: 9, fontWeight: 700,
                                     flexShrink: 0,
-                                    border: ri === 0 ? `1.5px solid ${a.color}` : "1px solid transparent",
+                                    border: ri === 0 ? `1.5px solid ${clrColor}` : "1px solid transparent",
                                   }}
                                 >
                                   {socialRank}
