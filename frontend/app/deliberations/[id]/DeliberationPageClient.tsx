@@ -1518,7 +1518,7 @@ export default function DeliberationPageClient() {
                 return 0;
               });
               const hasLandscape = opinionClusterPoints.length >= 2 && opinionClusters.length > 0;
-              const splitLayout = hasLandscape && !isMobileLayout;
+              const splitLayout = hasLandscape && !isMobileLayout && sorted.length > 4;
               const mid = splitLayout ? Math.floor(sorted.length / 2) + 1 : sorted.length;
               const leftAgents = sorted.slice(0, mid);
               const rightAgents = splitLayout ? sorted.slice(mid) : [];
@@ -1656,17 +1656,42 @@ export default function DeliberationPageClient() {
                 );
               }
 
-              // Desktop: two-column grid with split agents
+              // Desktop with few opinions: masonry left, landscape right (sticky)
+              if (!splitLayout) {
+                return (
+                  <div style={{
+                    display: "grid",
+                    gridTemplateColumns: hasLandscape ? "1fr 1fr" : "1fr",
+                    gap: 24,
+                    alignItems: "start",
+                  }}>
+                    <div style={{
+                      columns: "280px",
+                      columnGap: 14,
+                      width: "100%",
+                    }}>
+                      {sorted.map((a, i) => renderCard(a, i))}
+                    </div>
+                    {hasLandscape && (
+                      <div style={{ position: "sticky", top: 24 }}>
+                        {landscapeBlock}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
+              // Desktop with many opinions: split agents across two halves
               return (
                 <div style={{
                   display: "grid",
-                  gridTemplateColumns: splitLayout ? "1fr 1fr" : "1fr",
+                  gridTemplateColumns: "1fr 1fr",
                   gap: 24,
                   alignItems: "start",
                 }}>
                   {/* Left: first half of agent cards — masonry */}
                   <div style={{
-                    columns: splitLayout ? "240px" : "280px",
+                    columns: "240px",
                     columnGap: 14,
                     width: "100%",
                   }}>
@@ -1674,18 +1699,16 @@ export default function DeliberationPageClient() {
                   </div>
 
                   {/* Right: Opinion Landscape + second half of agent cards */}
-                  {splitLayout && (
-                    <div>
-                      {landscapeBlock}
-                      <div style={{
-                        columns: "240px",
-                        columnGap: 14,
-                        width: "100%",
-                      }}>
-                        {rightAgents.map((a, i) => renderCard(a, mid + i))}
-                      </div>
+                  <div>
+                    {landscapeBlock}
+                    <div style={{
+                      columns: "240px",
+                      columnGap: 14,
+                      width: "100%",
+                    }}>
+                      {rightAgents.map((a, i) => renderCard(a, mid + i))}
                     </div>
-                  )}
+                  </div>
                 </div>
               );
             })()}
