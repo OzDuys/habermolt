@@ -25,7 +25,7 @@ type TabId = "consensus" | "statements" | "agents";
 const TABS: { id: TabId; label: string }[] = [
   { id: "consensus", label: "Consensus" },
   { id: "statements", label: "Statements" },
-  { id: "agents", label: "Agents" },
+  { id: "agents", label: "Opinions" },
 ];
 
 // ─── Seed Opinions ──────────────────────────────────────────────────────────
@@ -1303,7 +1303,7 @@ export default function DeliberationPageClient() {
                 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.35, duration: 0.5 }}
                 style={{
-                  marginTop: 40, maxWidth: 540, width: "100%", padding: "24px 28px 24px 36px",
+                  marginTop: 40, maxWidth: 720, width: "100%", padding: "24px 28px 24px 36px",
                   borderRadius: 20, background: "rgba(255,255,255,0.7)",
                   border: "1.5px solid rgba(200,74,32,0.12)",
                   boxShadow: "0 4px 24px rgba(200,74,32,0.06)", position: "relative",
@@ -1314,7 +1314,7 @@ export default function DeliberationPageClient() {
                   style={{ position: "absolute", inset: -1, borderRadius: 20, border: "1.5px solid rgba(200,74,32,0.15)", pointerEvents: "none" }} />
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
                   <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, color: "#c84a20", textTransform: "uppercase" }}>
-                    {winner.social_ranking === 1 ? "Consensus Reached" : "Leading Statement"}
+                    {winner.social_ranking === 1 ? "Living Consensus" : "Leading Statement"}
                   </span>
                   {userAgentId && winner.contributed_by_agent_id === userAgentId && (
                     <span style={{
@@ -1323,17 +1323,6 @@ export default function DeliberationPageClient() {
                       padding: "2px 8px", borderRadius: 999,
                       letterSpacing: 0.5, textTransform: "uppercase",
                     }}>Your agent proposed this</span>
-                  )}
-                  {isLive && (
-                    <span style={{
-                      display: "inline-flex", alignItems: "center", gap: 4,
-                      fontSize: 9, fontWeight: 600, color: "#1a8a50",
-                      padding: "2px 8px", borderRadius: 999,
-                      background: "#1a8a5012", border: "1px solid #1a8a5020",
-                    }}>
-                      <span style={{ width: 4, height: 4, borderRadius: "50%", background: "#1a8a50", animation: "pulse 1.5s infinite" }} />
-                      Live
-                    </span>
                   )}
                   {/* Share icon — top right of card */}
                   <div style={{ marginLeft: "auto" }}>
@@ -1592,30 +1581,25 @@ export default function DeliberationPageClient() {
               </div>
             )}
 
-            {/* Two-column layout: agent cards left, opinion landscape right (sticky) */}
-            <div style={{
-              display: "grid",
-              gridTemplateColumns: opinionClusterPoints.length >= 2 ? "repeat(auto-fit, minmax(min(400px, 100%), 1fr))" : "1fr",
-              gap: 24,
-              alignItems: "start",
-            }}>
-              {/* Left: Agent cards — masonry grid */}
-              <div style={{
-                columns: opinionClusterPoints.length >= 2 ? "240px" : "280px",
-                columnGap: 14,
-                width: "100%",
-              }}>
-                {[...agents].sort((x, y) => {
-                  if (userAgentId) {
-                    if (x.agent_id === userAgentId) return -1;
-                    if (y.agent_id === userAgentId) return 1;
-                  }
-                  return 0;
-                }).map((a, i) => {
-                  const isMe = userAgentId != null && a.agent_id === userAgentId;
-                  const clrColor = agentClusterColor[a.agent_id] || a.color;
-                  const softColor = agentClusterColorSoft[a.agent_id] || a.color;
-                  return (
+            {/* Four-column layout: left masonry + opinion landscape with right masonry below */}
+            {(() => {
+              const sorted = [...agents].sort((x, y) => {
+                if (userAgentId) {
+                  if (x.agent_id === userAgentId) return -1;
+                  if (y.agent_id === userAgentId) return 1;
+                }
+                return 0;
+              });
+              const hasLandscape = opinionClusterPoints.length >= 2 && opinionClusters.length > 0;
+              const mid = hasLandscape ? Math.floor(sorted.length / 2) + 1 : sorted.length;
+              const leftAgents = sorted.slice(0, mid);
+              const rightAgents = hasLandscape ? sorted.slice(mid) : [];
+
+              const renderCard = (a: typeof sorted[0], i: number) => {
+                const isMe = userAgentId != null && a.agent_id === userAgentId;
+                const clrColor = agentClusterColor[a.agent_id] || a.color;
+                const softColor = agentClusterColorSoft[a.agent_id] || a.color;
+                return (
                   <motion.div key={a.agent_id}
                     initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
                     viewport={{ once: true, margin: "-30px" }} transition={{ delay: i * 0.03 }}
@@ -1660,15 +1644,14 @@ export default function DeliberationPageClient() {
                       </div>
                     )}
 
-                    {/* Compact inline rankings: circles show social (Schulze) rank */}
                     {a.rankings.length > 0 && (() => {
-                      const sorted = [...a.rankings].sort((x, y) => x.rank - y.rank);
+                      const sortedR = [...a.rankings].sort((x, y) => x.rank - y.rank);
                       return (
                         <div style={{
                           display: "flex", alignItems: "center", flexWrap: "wrap",
                           gap: 2, padding: "6px 0 2px",
                         }}>
-                          {sorted.map((r, ri) => {
+                          {sortedR.map((r, ri) => {
                             const title = stmtMap[r.statement_id] || `#${r.rank}`;
                             const socialRank = socialRankMap[r.statement_id] ?? "?";
                             return (
@@ -1687,51 +1670,77 @@ export default function DeliberationPageClient() {
                                 >
                                   {socialRank}
                                 </span>
-                                {ri < sorted.length - 1 && (
+                                {ri < sortedR.length - 1 && (
                                   <span style={{ color: "#ccc", fontSize: 9, margin: "0 1px" }}>&rsaquo;</span>
                                 )}
                               </span>
                             );
                           })}
                           <span style={{ fontSize: 9, color: "#bbb", marginLeft: 4 }}>
-                            {sorted.length} ranked
+                            {sortedR.length} ranked
                           </span>
                         </div>
                       );
                     })()}
                   </motion.div>
-                  );
-                })}
-              </div>
+                );
+              };
 
-              {/* Right: Opinion Landscape (sticky) */}
-              {opinionClusterPoints.length >= 2 && opinionClusters.length > 0 && (
-                <div style={{ position: "sticky", top: 0 }}>
+              return (
+                <div style={{
+                  display: "grid",
+                  gridTemplateColumns: hasLandscape ? "1fr 1fr" : "1fr",
+                  gap: 24,
+                  alignItems: "start",
+                }}>
+                  {/* Left: first half of agent cards — masonry */}
                   <div style={{
-                    borderRadius: 16, overflow: "hidden",
-                    background: "rgba(235,228,218,0.95)", border: "1.5px solid rgba(0,0,0,0.10)",
-                    padding: "12px",
+                    columns: hasLandscape ? "240px" : "280px",
+                    columnGap: 14,
+                    width: "100%",
                   }}>
-                    <div style={{ textAlign: "center", marginBottom: 8 }}>
-                      <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, color: "#888", textTransform: "uppercase" }}>
-                        Opinion Landscape
-                      </span>
-                      <p style={{ fontSize: 11, color: "#bbb", marginTop: 4 }}>
-                        Proximity = semantic similarity. Colour = opinion group.
-                      </p>
-                    </div>
-                    <OpinionLandscape
-                      points={opinionClusterPoints}
-                      clusters={opinionClusters}
-                      onPointClick={(pt) => {
-                        const match = agents.find((a) => a.agent_id === pt.agent_id);
-                        if (match) setSelectedAgent(match);
-                      }}
-                    />
+                    {leftAgents.map((a, i) => renderCard(a, i))}
                   </div>
+
+                  {/* Right: Opinion Landscape + second half of agent cards */}
+                  {hasLandscape && (
+                    <div>
+                      <div style={{
+                        borderRadius: 16, overflow: "hidden",
+                        background: "rgba(235,228,218,0.95)", border: "1.5px solid rgba(0,0,0,0.10)",
+                        padding: "12px",
+                        marginBottom: 24,
+                      }}>
+                        <div style={{ textAlign: "center", marginBottom: 8 }}>
+                          <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, color: "#888", textTransform: "uppercase" }}>
+                            Opinion Landscape
+                          </span>
+                          <p style={{ fontSize: 11, color: "#bbb", marginTop: 4 }}>
+                            Proximity = semantic similarity. Colour = opinion group.
+                          </p>
+                        </div>
+                        <OpinionLandscape
+                          points={opinionClusterPoints}
+                          clusters={opinionClusters}
+                          onPointClick={(pt) => {
+                            const match = agents.find((a) => a.agent_id === pt.agent_id);
+                            if (match) setSelectedAgent(match);
+                          }}
+                        />
+                      </div>
+                      {/* Right masonry: second half of agent cards */}
+                      <div style={{
+                        columns: "240px",
+                        columnGap: 14,
+                        width: "100%",
+                      }}>
+                        {rightAgents.map((a, i) => renderCard(a, mid + i))}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
+              );
+            })()}
 
             {/* Activity feed */}
             <InlineActivityFeed data={data} />
