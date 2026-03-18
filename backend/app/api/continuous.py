@@ -15,6 +15,7 @@ from app.database import get_db
 from app.models import Agent, Deliberation, DeliberationStage, Opinion, Ranking, Statement
 from app.middleware.auth import APIKeyAuth, OptionalAPIKeyAuth
 from app.services.access_control import check_private_access, enforce_deliberation_access
+from app.services.id_resolution import resolve_deliberation_id
 from app.services.continuous_deliberation_service import ContinuousDeliberationService
 from app.schemas import (
     StatementResponse,
@@ -33,9 +34,13 @@ from app.schemas import (
 router = APIRouter(prefix="/deliberations", tags=["continuous"])
 
 
-def _get_active_deliberation(deliberation_id: UUID, db: Session) -> Deliberation:
-    """Helper to fetch and validate an active deliberation."""
-    deliberation = db.query(Deliberation).filter(Deliberation.id == deliberation_id).first()
+def _get_active_deliberation(deliberation_id: str, db: Session) -> Deliberation:
+    """Helper to fetch and validate an active deliberation. Accepts ID prefixes."""
+    try:
+        resolved_id = resolve_deliberation_id(db, deliberation_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    deliberation = db.query(Deliberation).filter(Deliberation.id == resolved_id).first()
     if not deliberation:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Deliberation not found")
     if deliberation.stage != DeliberationStage.ACTIVE:
@@ -50,7 +55,7 @@ def _get_active_deliberation(deliberation_id: UUID, db: Session) -> Deliberation
     summary="Add a statement to the pool"
 )
 async def add_statement(
-    deliberation_id: UUID,
+    deliberation_id: str,
     request: StatementSubmitRequest,
     agent: Agent = Depends(APIKeyAuth()),
     db: Session = Depends(get_db),
@@ -76,12 +81,17 @@ async def add_statement(
     summary="Get current winning statement"
 )
 async def get_current_winner(
-    deliberation_id: UUID,
+    deliberation_id: str,
     request: Request,
     agent: Optional[Agent] = Depends(OptionalAPIKeyAuth()),
     db: Session = Depends(get_db),
 ):
     """Get the current winning statement. Works even while deliberation is active."""
+    try:
+        deliberation_id = resolve_deliberation_id(db, deliberation_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
     deliberation = db.query(Deliberation).filter(Deliberation.id == deliberation_id).first()
     if not deliberation:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Deliberation not found")
@@ -111,7 +121,7 @@ async def get_current_winner(
     summary="Get all opinions + statements for proposing consensus",
 )
 async def get_all_opinions(
-    deliberation_id: UUID,
+    deliberation_id: str,
     agent: Agent = Depends(APIKeyAuth()),
     db: Session = Depends(get_db),
 ):
@@ -200,7 +210,7 @@ async def get_all_opinions(
     summary="Update rankings"
 )
 async def update_ranking(
-    deliberation_id: UUID,
+    deliberation_id: str,
     request: RankingSubmitRequest,
     agent: Agent = Depends(APIKeyAuth()),
     db: Session = Depends(get_db),
@@ -213,7 +223,7 @@ async def update_ranking(
     try:
         from app.services.id_resolution import resolve_statement_ids
         id_map = resolve_statement_ids(
-            db, deliberation_id,
+            db, deliberation.id,
             [r.statement_id for r in request.statement_rankings],
         )
         rankings_dicts = [
@@ -237,13 +247,18 @@ async def update_ranking(
     summary="Get all opinion versions for an agent in a deliberation",
 )
 async def get_opinion_history(
-    deliberation_id: UUID,
+    deliberation_id: str,
     agent_id: UUID,
     request: Request,
     agent: Optional[Agent] = Depends(OptionalAPIKeyAuth()),
     db: Session = Depends(get_db),
 ):
     """Returns all opinion versions for an agent, ordered chronologically (oldest first)."""
+    try:
+        deliberation_id = resolve_deliberation_id(db, deliberation_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
     deliberation = db.query(Deliberation).filter(Deliberation.id == deliberation_id).first()
     if not deliberation:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Deliberation not found")

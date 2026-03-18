@@ -18,6 +18,7 @@ from sqlalchemy import text
 
 from app.database import get_db
 from app.models import Agent, Deliberation, DeliberationStage, Opinion, Ranking, Statement as StatementModel
+from app.services.id_resolution import resolve_deliberation_id
 
 
 def _latest_opinions(opinions: list) -> list:
@@ -336,7 +337,7 @@ async def list_deliberations(
     summary="Get deliberation details"
 )
 async def get_deliberation(
-    deliberation_id: UUID,
+    deliberation_id: str,
     request: Request,
     agent: Optional[Agent] = Depends(OptionalAPIKeyAuth()),
     db: Session = Depends(get_db)
@@ -348,6 +349,11 @@ async def get_deliberation(
     When called by an authenticated agent, only that agent's own opinion is returned.
     When called without auth (e.g. the public frontend), all opinions are returned.
     """
+    try:
+        deliberation_id = resolve_deliberation_id(db, deliberation_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
     deliberation = db.query(Deliberation).filter(Deliberation.id == deliberation_id).first()
 
     if not deliberation:
@@ -412,7 +418,7 @@ async def get_deliberation(
 )
 @limiter.limit("10/minute")
 async def submit_opinion(
-    deliberation_id: UUID,
+    deliberation_id: str,
     body: OpinionSubmitRequest,
     request: Request,
     background_tasks: BackgroundTasks,
@@ -426,6 +432,11 @@ async def submit_opinion(
     so the agent can immediately rank them.
     """
     _opinion_start = time.time()
+
+    try:
+        deliberation_id = resolve_deliberation_id(db, deliberation_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
     deliberation = db.query(Deliberation).filter(Deliberation.id == deliberation_id).first()
 
@@ -474,7 +485,7 @@ async def submit_opinion(
     summary="Get statements for ranking (with per-agent context)"
 )
 async def get_statements(
-    deliberation_id: UUID,
+    deliberation_id: str,
     agent: Agent = Depends(APIKeyAuth()),
     db: Session = Depends(get_db)
 ):
@@ -487,6 +498,11 @@ async def get_statements(
 
     Agents must submit their opinion before viewing statements.
     """
+    try:
+        deliberation_id = resolve_deliberation_id(db, deliberation_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
     deliberation = db.query(Deliberation).filter(Deliberation.id == deliberation_id).first()
 
     if not deliberation:
@@ -556,7 +572,7 @@ async def get_statements(
 )
 @limiter.limit("20/minute")
 async def submit_ranking(
-    deliberation_id: UUID,
+    deliberation_id: str,
     body: RankingSubmitRequest,
     request: Request,
     background_tasks: BackgroundTasks,
@@ -569,6 +585,11 @@ async def submit_ranking(
     Returns enriched response with my_status so agent knows what to do next.
     """
     _ranking_start = time.time()
+
+    try:
+        deliberation_id = resolve_deliberation_id(db, deliberation_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
     deliberation = db.query(Deliberation).filter(Deliberation.id == deliberation_id).first()
 
@@ -583,7 +604,15 @@ async def submit_ranking(
 
     service = ContinuousDeliberationService(db)
     try:
-        rankings_dicts = [r.model_dump(mode="json") for r in body.statement_rankings]
+        from app.services.id_resolution import resolve_statement_ids
+        id_map = resolve_statement_ids(
+            db, deliberation_id,
+            [r.statement_id for r in body.statement_rankings],
+        )
+        rankings_dicts = [
+            {"statement_id": id_map[r.statement_id], "rank": r.rank}
+            for r in body.statement_rankings
+        ]
         ranking = service.submit_ranking(deliberation, agent, rankings_dicts)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -622,7 +651,7 @@ def _compute_pca_2d(matrix: np.ndarray) -> np.ndarray:
     summary="Get PCA-clustered statement positions for visualization"
 )
 async def get_cluster(
-    deliberation_id: UUID,
+    deliberation_id: str,
     request: Request,
     agent: Optional[Agent] = Depends(OptionalAPIKeyAuth()),
     db: Session = Depends(get_db)
@@ -632,6 +661,11 @@ async def get_cluster(
 
     Embeddings are generated lazily on first call and persisted to the DB.
     """
+    try:
+        deliberation_id = resolve_deliberation_id(db, deliberation_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
     deliberation = db.query(Deliberation).filter(Deliberation.id == deliberation_id).first()
     if not deliberation:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Deliberation not found")
@@ -847,7 +881,7 @@ def _compute_opinion_clusters(
     summary="Get PCA-clustered opinion positions with auto-detected clusters"
 )
 async def get_opinion_cluster(
-    deliberation_id: UUID,
+    deliberation_id: str,
     request: Request,
     agent: Optional[Agent] = Depends(OptionalAPIKeyAuth()),
     db: Session = Depends(get_db),
@@ -857,6 +891,11 @@ async def get_opinion_cluster(
     Results are cached on the deliberation and only recomputed when the
     set of opinions changes (new opinion or updated version).
     """
+    try:
+        deliberation_id = resolve_deliberation_id(db, deliberation_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
     deliberation = db.query(Deliberation).filter(Deliberation.id == deliberation_id).first()
     if not deliberation:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Deliberation not found")

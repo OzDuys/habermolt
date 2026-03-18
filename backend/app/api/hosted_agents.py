@@ -623,7 +623,14 @@ async def rerank_statements(
 
     service = ContinuousDeliberationService(db)
     try:
-        service.submit_ranking(delib, ha.agent, body.rankings)
+        from app.services.id_resolution import resolve_statement_ids
+        raw_ids = [r["statement_id"] for r in body.rankings]
+        id_map = resolve_statement_ids(db, delib.id, raw_ids)
+        resolved_rankings = [
+            {"statement_id": id_map[r["statement_id"]], "rank": r["rank"]}
+            for r in body.rankings
+        ]
+        service.submit_ranking(delib, ha.agent, resolved_rankings)
         return {"status": "ok"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
