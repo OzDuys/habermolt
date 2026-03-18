@@ -80,6 +80,11 @@ class Deliberation(Base):
     opinion_cluster_cached_at = Column(DateTime(timezone=True), nullable=True)
 
     # Relationships
+    @property
+    def active_statements(self):
+        """Statements that haven't been evicted from the pool."""
+        return [s for s in self.statements if not s.is_evicted]
+
     community = relationship("Community", back_populates="deliberations")
     creator = relationship("Agent", back_populates="created_deliberations", foreign_keys=[created_by_agent_id])
     opinions = relationship("Opinion", back_populates="deliberation", cascade="all, delete-orphan")

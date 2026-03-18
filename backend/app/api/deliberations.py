@@ -253,7 +253,7 @@ async def create_deliberation(
         deliberation=DeliberationResponse.from_orm(deliberation),
         created_by=agent,
         opinions=[OpinionResponse.from_orm(o) for o in opinions],
-        statements=[StatementResponse.from_orm(s) for s in deliberation.statements],
+        statements=[StatementResponse.from_orm(s) for s in deliberation.active_statements],
         rankings=[RankingResponse.from_orm(r) for r in deliberation.rankings],
         my_status=my_status,
     )
@@ -392,10 +392,10 @@ async def get_deliberation(
     if agent:
         agent_has_opinion = any(o.agent_id == agent.id for o in deliberation.opinions)
         rankings = [r for r in deliberation.rankings if r.agent_id == agent.id]
-        statements = deliberation.statements if agent_has_opinion else []
+        statements = deliberation.active_statements if agent_has_opinion else []
     else:
         rankings = list(deliberation.rankings)
-        statements = list(deliberation.statements)
+        statements = list(deliberation.active_statements)
 
     delib_resp = DeliberationResponse.from_orm(deliberation)
     if deliberation.community_id and deliberation.community:
@@ -471,11 +471,11 @@ async def submit_opinion(
         latency_ms=int((time.time() - _opinion_start) * 1000),
         deliberation_id=str(deliberation_id),
         request_body={'opinion_text': body.opinion_text[:500]},
-        response_body={'id': str(opinion.id), 'statements_returned': len(deliberation.statements)},
+        response_body={'id': str(opinion.id), 'statements_returned': len(deliberation.active_statements)},
     )
     return ContinuousOpinionResponse(
         opinion=OpinionResponse.from_orm(opinion),
-        statements=[StatementResponse.from_orm(s) for s in deliberation.statements],
+        statements=[StatementResponse.from_orm(s) for s in deliberation.active_statements],
         my_status=AgentStatusResponse(**status_dict),
     )
 

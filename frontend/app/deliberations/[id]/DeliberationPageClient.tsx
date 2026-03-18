@@ -86,9 +86,15 @@ function hexToHsl(hex: string) {
 
 function lobsterColorFilter(color: string) {
   const { h, s, l } = hexToHsl(color);
+  // Sepia produces a base hue of ~30deg (orange-brown).
+  // hue-rotate is relative to that base, so subtract it.
+  // Extra -10deg nudge for reds/warm hues to pull them away from orange.
+  const SEPIA_BASE_HUE = 30;
+  let rotation = h - SEPIA_BASE_HUE;
+  if (h < 30 || h > 330) rotation -= 10;
   const saturation = Math.round(200 + s * 9);
   const brightness = (0.82 + l / 260).toFixed(2);
-  return `grayscale(1) sepia(1) saturate(${saturation}%) hue-rotate(${Math.round(h)}deg) brightness(${brightness})`;
+  return `grayscale(1) sepia(1) saturate(${saturation}%) hue-rotate(${Math.round(rotation)}deg) brightness(${brightness})`;
 }
 
 function Lobster({ color, size = 64, variant = 0 }: { color: string; size?: number; variant?: number }) {
@@ -761,7 +767,7 @@ function placeLobsters(count: number, w: number, h: number, size: number) {
   return placed;
 }
 
-function LobsterCloud({ agents, onSelect, userAgentId }: { agents: AgentInfo[]; onSelect: (a: AgentInfo) => void; userAgentId?: string | null }) {
+function LobsterCloud({ agents, onSelect, userAgentId, agentClusterColor }: { agents: AgentInfo[]; onSelect: (a: AgentInfo) => void; userAgentId?: string | null; agentClusterColor?: Record<string, string>; }) {
   const count = agents.length;
   const containerRef = useRef<HTMLDivElement>(null);
   const [measuredWidth, setMeasuredWidth] = useState(0);
@@ -823,9 +829,6 @@ function LobsterCloud({ agents, onSelect, userAgentId }: { agents: AgentInfo[]; 
         if (!pos) return null;
         const isMe = userAgentId != null && a.agent_id === userAgentId;
         const prng = seededRandom(i * 137 + 7);
-        const driftX = (prng() - 0.5) * (isMobile ? 5 : 8);
-        const driftY = (prng() - 0.5) * (isMobile ? 4 : 6);
-        const driftDuration = 2.5 + prng() * 2;
         const rotation = (prng() - 0.5) * 8;
 
         return (
@@ -852,32 +855,19 @@ function LobsterCloud({ agents, onSelect, userAgentId }: { agents: AgentInfo[]; 
               zIndex: isMe ? 90 : i,
             }}
           >
-            <motion.div
-              animate={{
-                x: [0, driftX, 0],
-                y: [0, driftY, 0],
-                rotate: [0, rotation, 0],
-              }}
-              transition={{
-                duration: driftDuration,
-                repeat: Infinity,
-                ease: "easeInOut",
-                delay: i * 0.08,
-              }}
-              style={undefined}
-            >
-              <Lobster color={a.color} size={lobsterSize} variant={i} />
-            </motion.div>
+            <div>
+              <Lobster color={agentClusterColor?.[a.agent_id] || a.color} size={lobsterSize} variant={i} />
+            </div>
             {isMe ? (
               <span style={{
                 fontSize: 8, fontWeight: 700, color: "#fff",
-                background: a.color, borderRadius: 4,
+                background: agentClusterColor?.[a.agent_id] || a.color, borderRadius: 4,
                 padding: "1px 5px", marginTop: 1,
               }}>You</span>
             ) : showNames ? (
               <span style={{
                 fontSize: 8,
-                color: a.color,
+                color: agentClusterColor?.[a.agent_id] || a.color,
                 fontWeight: 600,
                 maxWidth: lobsterSize + 10,
                 overflow: "hidden",
@@ -930,20 +920,54 @@ export default function DeliberationPageClient() {
   const [clusterPoints, setClusterPoints] = useState<ClusterPoint[]>([]);
   const [opinionClusterPoints, setOpinionClusterPoints] = useState<OpinionClusterPoint[]>([]);
   const [opinionClusters, setOpinionClusters] = useState<OpinionClusterInfo[]>([]);
-  // Map agent_id -> cluster color (for lobster icons + card accents)
-  const agentClusterColor = useMemo(() => {
+  // Map agent_id -> cluster color (for charts) and softened version (for lobsters)
+  const { agentClusterColor, agentClusterColorSoft } = useMemo(() => {
+    const soften = (hex: string): string => {
+      // Parse hex -> RGB -> HSL, reduce saturation by 40%, increase lightness by 15%
+      const r = parseInt(hex.slice(1, 3), 16) / 255;
+      const g = parseInt(hex.slice(3, 5), 16) / 255;
+      const b = parseInt(hex.slice(5, 7), 16) / 255;
+      const max = Math.max(r, g, b), min = Math.min(r, g, b);
+      let h = 0, s = 0, l = (max + min) / 2;
+      if (max !== min) {
+        const d = max - min;
+        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+        if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
+        else if (max === g) h = ((b - r) / d + 2) / 6;
+        else h = ((r - g) / d + 4) / 6;
+      }
+      s = Math.max(0, s * 0.55);   // reduce saturation
+      l = Math.min(1, l + 0.12);   // lighten
+      // HSL -> RGB -> hex
+      const hue2rgb = (p: number, q: number, t: number) => {
+        if (t < 0) t += 1; if (t > 1) t -= 1;
+        if (t < 1/6) return p + (q - p) * 6 * t;
+        if (t < 1/2) return q;
+        if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+        return p;
+      };
+      const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+      const p = 2 * l - q;
+      const ro = Math.round(hue2rgb(p, q, h + 1/3) * 255);
+      const go = Math.round(hue2rgb(p, q, h) * 255);
+      const bo = Math.round(hue2rgb(p, q, h - 1/3) * 255);
+      return `#${ro.toString(16).padStart(2,"0")}${go.toString(16).padStart(2,"0")}${bo.toString(16).padStart(2,"0")}`;
+    };
+
     const map: Record<string, string> = {};
+    const softMap: Record<string, string> = {};
     for (const pt of opinionClusterPoints) {
       if (!map[pt.agent_id]) {
-        // Find the sub-cluster color if available, else top-level
         const cluster = opinionClusters.find(c => c.cluster_id === pt.cluster);
         if (cluster) {
           const sub = cluster.sub_clusters?.find(s => s.sub_cluster_id === (pt.sub_cluster ?? 0));
-          map[pt.agent_id] = sub?.color || cluster.color;
+          const color = sub?.color || cluster.color;
+          map[pt.agent_id] = color;
+          softMap[pt.agent_id] = soften(color);
         }
       }
     }
-    return map;
+    return { agentClusterColor: map, agentClusterColorSoft: softMap };
   }, [opinionClusterPoints, opinionClusters]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabId>("consensus");
@@ -1410,7 +1434,7 @@ export default function DeliberationPageClient() {
             </motion.div>
 
             {/* Agent lobster cloud */}
-            <LobsterCloud agents={agents} onSelect={setSelectedAgent} userAgentId={userAgentId} />
+            <LobsterCloud agents={agents} onSelect={setSelectedAgent} userAgentId={userAgentId} agentClusterColor={agentClusterColorSoft} />
           </div>
 
           {/* ═══ STATEMENTS ═══ */}
@@ -1588,11 +1612,12 @@ export default function DeliberationPageClient() {
                 }).map((a, i) => {
                   const isMe = userAgentId != null && a.agent_id === userAgentId;
                   const clrColor = agentClusterColor[a.agent_id] || a.color;
+                  const softColor = agentClusterColorSoft[a.agent_id] || a.color;
                   return (
                   <motion.div key={a.agent_id}
                     initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
                     viewport={{ once: true, margin: "-30px" }} transition={{ delay: i * 0.03 }}
-                    whileHover={{ y: -3, boxShadow: `0 6px 24px ${clrColor}10` }}
+                    whileHover={{ y: -3, boxShadow: `0 6px 24px ${softColor}10` }}
                     onClick={() => setSelectedAgent(a)}
                     style={{
                       padding: "16px", borderRadius: 16,
@@ -1605,7 +1630,7 @@ export default function DeliberationPageClient() {
                   >
                     <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
                       <motion.div animate={{ y: [0, -2, 0] }} transition={{ duration: 2.5, repeat: Infinity, delay: i * 0.15 }}>
-                        <Lobster color={clrColor} size={32} variant={i} />
+                        <Lobster color={softColor} size={32} variant={i} />
                       </motion.div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 13, fontWeight: 700, color: "#1a1a1a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 6 }}>

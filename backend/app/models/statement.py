@@ -38,6 +38,7 @@ class Statement(Base):
 
     # Social Choice Results
     social_ranking = Column(Integer, nullable=True)  # 1 = winner, 2 = second place, etc.
+    is_evicted = Column(Boolean, nullable=False, default=False, server_default="false")  # Soft-evicted from the pool
 
     # Timestamp
     generated_at = Column(DateTime, default=datetime.utcnow, nullable=False)

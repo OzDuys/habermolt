@@ -408,14 +408,15 @@ class ContinuousDeliberationService:
                 f"Agent has reached the maximum of {settings.CONTINUOUS_MAX_STATEMENTS_PER_AGENT} statements"
             )
 
-        # Check pool cap
+        # Evict lowest-ranked statement if pool is full
         total_statements = self.db.query(Statement).filter(
-            Statement.deliberation_id == deliberation.id
+            and_(
+                Statement.deliberation_id == deliberation.id,
+                Statement.is_evicted == False,
+            )
         ).count()
         if total_statements >= settings.CONTINUOUS_MAX_STATEMENTS:
-            raise ValueError(
-                f"Statement pool is full ({settings.CONTINUOUS_MAX_STATEMENTS} max)"
-            )
+            self._evict_lowest_ranked_statement(deliberation)
 
         # Check for duplicate title (exact match, case-insensitive)
         if statement_title:
@@ -445,7 +446,10 @@ class ContinuousDeliberationService:
         self.db.refresh(statement)
 
         # Predict rankings for all past agents who have a ranking
-        await self._predict_rankings_for_new_statement(deliberation, statement)
+        try:
+            await self._predict_rankings_for_new_statement(deliberation, statement)
+        except Exception as e:
+            logger.error(f"Failed to predict rankings for statement {statement.id}: {e}")
 
         # Add the new statement to the contributor's own ranking at position 1
         # (they proposed it, so they presumably rank it highest)
@@ -536,6 +540,48 @@ class ContinuousDeliberationService:
 
         self.db.commit()
 
+    def _evict_lowest_ranked_statement(self, deliberation: Deliberation) -> None:
+        """Soft-evict the lowest-ranked statement to make room for a new one.
+        Marks it as evicted and removes it from all agent rankings."""
+        # Find the lowest-ranked non-evicted statement
+        worst = self.db.query(Statement).filter(
+            and_(
+                Statement.deliberation_id == deliberation.id,
+                Statement.is_evicted == False,
+            )
+        ).order_by(
+            Statement.social_ranking.desc().nullslast()
+        ).first()
+
+        if not worst:
+            return
+
+        worst_id = str(worst.id)
+        logger.info(
+            f"Evicting lowest-ranked statement {worst_id} "
+            f"(rank #{worst.social_ranking}) from deliberation {deliberation.id}: "
+            f"{worst.title or worst.statement_text[:50]}"
+        )
+
+        # Mark as evicted
+        worst.is_evicted = True
+        worst.social_ranking = None
+
+        # Remove from all agent rankings and re-number
+        rankings = self.db.query(Ranking).filter(
+            Ranking.deliberation_id == deliberation.id
+        ).all()
+        for ranking in rankings:
+            original = ranking.statement_rankings
+            filtered = [e for e in original if e.get("statement_id") != worst_id]
+            if len(filtered) < len(original):
+                filtered.sort(key=lambda e: e["rank"])
+                for i, entry in enumerate(filtered):
+                    entry["rank"] = i + 1
+                ranking.statement_rankings = filtered
+
+        self.db.commit()
+
     def _recompute_winner(self, deliberation: Deliberation) -> None:
         """Recompute the current winner using Schulze on all rankings."""
         rankings = self.db.query(Ranking).filter(
@@ -545,7 +591,10 @@ class ContinuousDeliberationService:
         ).all()
 
         statements = self.db.query(Statement).filter(
-            Statement.deliberation_id == deliberation.id
+            and_(
+                Statement.deliberation_id == deliberation.id,
+                Statement.is_evicted == False,
+            )
         ).all()
 
         if not rankings or not statements:
@@ -582,7 +631,10 @@ class ContinuousDeliberationService:
         ).count()
 
         total_statements = self.db.query(Statement).filter(
-            Statement.deliberation_id == deliberation.id
+            and_(
+                Statement.deliberation_id == deliberation.id,
+                Statement.is_evicted == False,
+            )
         ).count()
 
         can_add_statement = (
@@ -634,7 +686,10 @@ class ContinuousDeliberationService:
         ).first()
 
     def get_all_statements(self, deliberation: Deliberation) -> List[Statement]:
-        """Get all statements in the pool."""
+        """Get all active (non-evicted) statements in the pool."""
         return self.db.query(Statement).filter(
-            Statement.deliberation_id == deliberation.id
+            and_(
+                Statement.deliberation_id == deliberation.id,
+                Statement.is_evicted == False,
+            )
         ).all()
