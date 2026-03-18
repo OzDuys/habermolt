@@ -120,17 +120,6 @@ export default function RankingRidgeline({ statements, rankings }: RankingRidgel
           </text>
         ))}
 
-        {/* X-axis title */}
-        <text
-          x={PAD_LEFT + plotWidth / 2}
-          y={HEIGHT}
-          textAnchor="middle"
-          fontSize={9}
-          fill="#666"
-          fontWeight={600}
-        >
-          Rank position (1 = best)
-        </text>
 
         {/* Rows */}
         {rows.map((row) => {
