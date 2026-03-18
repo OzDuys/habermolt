@@ -67,7 +67,8 @@ export default function NotificationBell() {
 
   const markAllRead = async () => {
     await fetch("/api/backend/notifications/mark-all-read", { method: "POST" });
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    const now = new Date().toISOString();
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true, read_at: n.read_at || now })));
     setCount(0);
     setTab("all");
   };
@@ -78,7 +79,7 @@ export default function NotificationBell() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ notification_ids: [id] }),
     });
-    setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, read: true } : n));
+    setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, read: true, read_at: new Date().toISOString() } : n));
     setCount((c) => Math.max(0, c - 1));
   };
 
@@ -167,7 +168,20 @@ export default function NotificationBell() {
   };
 
   const unreadNotifications = notifications.filter((n) => !n.read);
-  const filtered = tab === "unread" ? unreadNotifications : notifications;
+  // "All" tab: unread first (by created_at desc), then read by read_at desc
+  const allSorted = [...notifications].sort((a, b) => {
+    if (!a.read && b.read) return -1;
+    if (a.read && !b.read) return 1;
+    if (a.read && b.read) {
+      // Both read — sort by when they were read (most recent first)
+      const aRead = a.read_at ? new Date(a.read_at).getTime() : 0;
+      const bRead = b.read_at ? new Date(b.read_at).getTime() : 0;
+      return bRead - aRead;
+    }
+    // Both unread — sort by creation time (newest first)
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+  });
+  const filtered = tab === "unread" ? unreadNotifications : allSorted;
 
   return (
     <div className="relative" ref={ref}>

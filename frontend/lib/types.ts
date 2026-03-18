@@ -332,6 +332,7 @@ export interface Notification {
   read: boolean;
   metadata: Record<string, any> | null;
   created_at: string;
+  read_at: string | null;
   approval_status: "approved" | "disapproved" | null;
   disapproval_reason: string | null;
   corrected_at: string | null;
