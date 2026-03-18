@@ -226,24 +226,34 @@ async def get_monitoring_stats(
     latency_by_model = {row[0]: round(float(row[1]), 1) for row in lbm_base.group_by(LLMTrace.model).all()}
 
     # Interaction leaderboards by opinion source
-    # Autonomous: agent acted on its own (autonomous heartbeat, external API, deliberation creation)
-    autonomous_sources = ("autonomous", "api", "creation")
-    # User-driven: human directly participated (interview, chat tool)
-    user_sources = ("topic_interview", "chat_tool")
-
-    def _top_agents_by_sources(sources: tuple) -> list:
+    def _top_agents_by_source(source: str) -> list:
         q = (
             db.query(Agent.name, func.count(Opinion.id).label("cnt"))
             .join(Agent, Opinion.agent_id == Agent.id)
-            .filter(Opinion.source.in_(sources))
+            .filter(Opinion.source == source)
         )
         if cutoff:
             q = q.filter(Opinion.submitted_at >= cutoff)
         rows = q.group_by(Agent.name).order_by(desc("cnt")).limit(15).all()
         return [{"agent_name": name, "count": count} for name, count in rows]
 
-    top_autonomous_agents = _top_agents_by_sources(autonomous_sources)
-    top_user_agents = _top_agents_by_sources(user_sources)
+    top_autonomous_agents = _top_agents_by_source("autonomous")
+    top_api_agents = _top_agents_by_source("api")
+    top_creation_agents = _top_agents_by_source("creation")
+    top_interview_agents = _top_agents_by_source("topic_interview")
+    top_chat_tool_agents = _top_agents_by_source("chat_tool")
+
+    # Top deliberation creators
+    delib_q = (
+        db.query(Agent.name, func.count(Deliberation.id).label("cnt"))
+        .join(Agent, Deliberation.created_by_agent_id == Agent.id)
+    )
+    if cutoff:
+        delib_q = delib_q.filter(Deliberation.created_at >= cutoff)
+    top_deliberation_creators = [
+        {"agent_name": name, "count": count}
+        for name, count in delib_q.group_by(Agent.name).order_by(desc("cnt")).limit(15).all()
+    ]
 
     # Opinions breakdown by source
     src_base = db.query(Opinion.source, func.count(Opinion.id))
@@ -274,7 +284,11 @@ async def get_monitoring_stats(
         cost_by_model=cost_by_model,
         cost_24h=round(float(cost_24h), 6),
         top_autonomous_agents=top_autonomous_agents,
-        top_user_agents=top_user_agents,
+        top_api_agents=top_api_agents,
+        top_creation_agents=top_creation_agents,
+        top_interview_agents=top_interview_agents,
+        top_chat_tool_agents=top_chat_tool_agents,
+        top_deliberation_creators=top_deliberation_creators,
         opinions_by_source=opinions_by_source,
     )
 

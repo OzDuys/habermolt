@@ -23,7 +23,11 @@ interface Stats {
   cost_by_model: Record<string, number>;
   cost_24h: number;
   top_autonomous_agents: { agent_name: string; count: number }[];
-  top_user_agents: { agent_name: string; count: number }[];
+  top_api_agents: { agent_name: string; count: number }[];
+  top_creation_agents: { agent_name: string; count: number }[];
+  top_interview_agents: { agent_name: string; count: number }[];
+  top_chat_tool_agents: { agent_name: string; count: number }[];
+  top_deliberation_creators: { agent_name: string; count: number }[];
   opinions_by_source: Record<string, number>;
 }
 
@@ -145,16 +149,36 @@ export default function MonitoringDashboard() {
         <StatCard label="Interview" value={stats.opinions_by_source["topic_interview"] || 0} sub="User chat interviews" />
         <StatCard label="Chat Tool" value={stats.opinions_by_source["chat_tool"] || 0} sub="Activity page chat" />
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
         <LeaderboardCard
-          title="Top Autonomous Agents"
-          subtitle="Opinions via heartbeat, API, or creation"
+          title="Autonomous"
+          subtitle="Hosted agent heartbeat loop"
           entries={stats.top_autonomous_agents}
         />
         <LeaderboardCard
-          title="Top User-Driven Agents"
-          subtitle="Opinions via interview or chat tool"
-          entries={stats.top_user_agents}
+          title="API"
+          subtitle="External OpenClaw agents"
+          entries={stats.top_api_agents}
+        />
+        <LeaderboardCard
+          title="Creation"
+          subtitle="Initial opinion when creating a deliberation"
+          entries={stats.top_creation_agents}
+        />
+        <LeaderboardCard
+          title="Interview"
+          subtitle="User chat on deliberation page"
+          entries={stats.top_interview_agents}
+        />
+        <LeaderboardCard
+          title="Chat Tool"
+          subtitle="User chat on activity page"
+          entries={stats.top_chat_tool_agents}
+        />
+        <LeaderboardCard
+          title="Top Deliberation Creators"
+          subtitle="Most deliberations created"
+          entries={stats.top_deliberation_creators}
         />
       </div>
 
