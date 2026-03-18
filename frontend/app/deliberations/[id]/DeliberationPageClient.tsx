@@ -1073,20 +1073,35 @@ export default function DeliberationPageClient() {
   }, [id]);
 
   // Track which snap segment we're on via IntersectionObserver
+  // Use multiple thresholds and pick the section with the largest visible area.
+  // A single threshold: 0.5 fails for tall sections (e.g. agents with many opinions)
+  // that can never reach 50% visibility within the viewport.
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
     const sections = sectionRefs.current;
+    const visibleAreas = new Map<string, number>();
     const observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
-          if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
-            const tabId = entry.target.getAttribute("data-tab") as TabId;
-            if (tabId) setActiveTab(tabId);
+          const tabId = entry.target.getAttribute("data-tab");
+          if (tabId) {
+            const rect = entry.intersectionRect;
+            visibleAreas.set(tabId, rect.width * rect.height);
           }
         }
+        // Pick the tab with the largest visible pixel area
+        let best: TabId | null = null;
+        let bestArea = 0;
+        for (const [tabId, area] of visibleAreas) {
+          if (area > bestArea) {
+            best = tabId as TabId;
+            bestArea = area;
+          }
+        }
+        if (best && bestArea > 0) setActiveTab(best);
       },
-      { root: container, threshold: 0.5 }
+      { root: container, threshold: [0, 0.1, 0.25, 0.5, 0.75, 1] }
     );
     TABS.forEach((tab) => {
       const el = sections[tab.id];
@@ -1268,7 +1283,7 @@ export default function DeliberationPageClient() {
               className="font-serif"
               style={{
                 fontSize: "clamp(22px, 4.2vw, 44px)", fontWeight: 400,
-                textAlign: "center", maxWidth: 680, lineHeight: 1.15,
+                textAlign: "center", maxWidth: 720, lineHeight: 1.15,
                 letterSpacing: -0.5, color: "#1a1a1a",
               }}
             >{d.question}</motion.h1>
@@ -1527,7 +1542,7 @@ export default function DeliberationPageClient() {
                         <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 3, color: "#888", textTransform: "uppercase" }}>
                           Statement Landscape
                         </span>
-                        <p style={{ fontSize: 11, color: "#bbb", marginTop: 4 }}>
+                        <p style={{ fontSize: 11, color: "#777", marginTop: 4 }}>
                           Proximity = semantic similarity. Size &amp; colour = social ranking.
                         </p>
                       </div>
@@ -1546,7 +1561,7 @@ export default function DeliberationPageClient() {
                             <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 3, color: "#888", textTransform: "uppercase" }}>
                               Ranking Distribution
                             </span>
-                            <p style={{ fontSize: 11, color: "#bbb", marginTop: 4 }}>
+                            <p style={{ fontSize: 11, color: "#777", marginTop: 4 }}>
                               How agents ranked each statement. Tighter peaks = more agreement.
                             </p>
                           </div>
@@ -1715,7 +1730,7 @@ export default function DeliberationPageClient() {
                           <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, color: "#888", textTransform: "uppercase" }}>
                             Opinion Landscape
                           </span>
-                          <p style={{ fontSize: 11, color: "#bbb", marginTop: 4 }}>
+                          <p style={{ fontSize: 11, color: "#777", marginTop: 4 }}>
                             Proximity = semantic similarity. Colour = opinion group.
                           </p>
                         </div>

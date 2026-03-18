@@ -206,7 +206,7 @@ export default function OpinionLandscape({ points, clusters, onPointClick }: Opi
                     }} />
                     {tooltip.point.agent_name}
                     {clusterInfo && (
-                      <span style={{ fontWeight: 400, color: "#999", fontSize: 10 }}>
+                      <span style={{ fontWeight: 400, color: "#666", fontSize: 10 }}>
                         &middot; {clusterInfo.label}
                         {subLabel && ` / ${subLabel}`}
                       </span>
@@ -222,7 +222,7 @@ export default function OpinionLandscape({ points, clusters, onPointClick }: Opi
       {/* Legend — hierarchical cluster labels */}
       <div style={{
         display: "flex", flexWrap: "wrap", justifyContent: "center",
-        gap: "4px 16px", marginTop: 12, fontSize: 11, color: "#aaa",
+        gap: "4px 16px", marginTop: 12, fontSize: 11, color: "#666",
       }}>
         {clusters.map((c) => {
           const hasSubs = c.sub_clusters && c.sub_clusters.length > 1;
@@ -238,7 +238,7 @@ export default function OpinionLandscape({ points, clusters, onPointClick }: Opi
               {hasSubs && (
                 <div style={{ display: "flex", gap: "2px 8px", flexWrap: "wrap", justifyContent: "center" }}>
                   {c.sub_clusters!.map((s) => (
-                    <span key={s.sub_cluster_id} style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 9, color: "#bbb" }}>
+                    <span key={s.sub_cluster_id} style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 9, color: "#777" }}>
                       <span style={{
                         width: 6, height: 6, borderRadius: "50%",
                         background: s.color, opacity: 0.85, flexShrink: 0,

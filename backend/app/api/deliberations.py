@@ -771,7 +771,7 @@ def _generate_cluster_colors(
             # Spread lightness from darker to lighter within the hue
             shades = []
             for j in range(n_sub):
-                shade_l = max(25, min(65, l - 10 + (j * 30 // max(n_sub - 1, 1))))
+                shade_l = max(25, min(52, l - 10 + (j * 25 // max(n_sub - 1, 1))))
                 shades.append(_hsl_to_hex(h, s, shade_l))
             sub_colors.append(shades)
     return top_colors, sub_colors

@@ -114,7 +114,7 @@ export default function RankingRidgeline({ statements, rankings }: RankingRidgel
             y={HEIGHT - 6}
             textAnchor="middle"
             fontSize={9}
-            fill="#bbb"
+            fill="#777"
           >
             {rank}
           </text>
@@ -126,7 +126,7 @@ export default function RankingRidgeline({ statements, rankings }: RankingRidgel
           y={HEIGHT}
           textAnchor="middle"
           fontSize={9}
-          fill="#999"
+          fill="#666"
           fontWeight={600}
         >
           Rank position (1 = best)
@@ -179,7 +179,7 @@ export default function RankingRidgeline({ statements, rankings }: RankingRidgel
                 y={3}
                 textAnchor="end"
                 fontSize={11}
-                fill={isHovered ? row.color : isFaded ? "#ddd" : "#aaa"}
+                fill={isHovered ? row.color : isFaded ? "#ccc" : "#777"}
                 fontWeight={700}
                 style={{ transition: "fill 0.2s" }}
               >
@@ -193,7 +193,7 @@ export default function RankingRidgeline({ statements, rankings }: RankingRidgel
       {/* Legend */}
       <div style={{
         display: "flex", flexWrap: "wrap", justifyContent: "center",
-        gap: "4px 14px", marginTop: 8, fontSize: 10, color: "#aaa",
+        gap: "4px 14px", marginTop: 8, fontSize: 10, color: "#666",
       }}>
         <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
           <span style={{ width: 16, height: 8, borderRadius: 2, background: "rgba(0,0,0,0.15)" }} />

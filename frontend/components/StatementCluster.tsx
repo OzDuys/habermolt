@@ -272,7 +272,7 @@ export default function StatementCluster({ points }: StatementClusterProps) {
       {/* Legend */}
       <div style={{
         display: "flex", flexWrap: "wrap", justifyContent: "center",
-        gap: "4px 16px", marginTop: 12, fontSize: 11, color: "#aaa",
+        gap: "4px 16px", marginTop: 12, fontSize: 11, color: "#666",
       }}>
         {[
           { color: "#f59e0b", label: "Winner", size: 10 },
