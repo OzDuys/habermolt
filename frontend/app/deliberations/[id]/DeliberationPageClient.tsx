@@ -975,6 +975,14 @@ export default function DeliberationPageClient() {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const sectionRefs = useRef<Record<TabId, HTMLDivElement | null>>({ consensus: null, statements: null, agents: null });
   const rightColRef = useRef<HTMLDivElement>(null);
+  const [isMobileLayout, setIsMobileLayout] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 768px)");
+    setIsMobileLayout(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setIsMobileLayout(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
   const [rightColHeight, setRightColHeight] = useState<number>(0);
 
   // Sync left column height to right column
@@ -1283,7 +1291,7 @@ export default function DeliberationPageClient() {
               className="font-serif"
               style={{
                 fontSize: "clamp(22px, 4.2vw, 44px)", fontWeight: 400,
-                textAlign: "center", maxWidth: 720, lineHeight: 1.15,
+                textAlign: "center", maxWidth: 1000, lineHeight: 1.15,
                 letterSpacing: -0.5, color: "#1a1a1a",
               }}
             >{d.question}</motion.h1>
@@ -1606,9 +1614,10 @@ export default function DeliberationPageClient() {
                 return 0;
               });
               const hasLandscape = opinionClusterPoints.length >= 2 && opinionClusters.length > 0;
-              const mid = hasLandscape ? Math.floor(sorted.length / 2) + 1 : sorted.length;
+              const splitLayout = hasLandscape && !isMobileLayout;
+              const mid = splitLayout ? Math.floor(sorted.length / 2) + 1 : sorted.length;
               const leftAgents = sorted.slice(0, mid);
-              const rightAgents = hasLandscape ? sorted.slice(mid) : [];
+              const rightAgents = splitLayout ? sorted.slice(mid) : [];
 
               const renderCard = (a: typeof sorted[0], i: number) => {
                 const isMe = userAgentId != null && a.agent_id === userAgentId;
@@ -1701,16 +1710,59 @@ export default function DeliberationPageClient() {
                 );
               };
 
+              const landscapeBlock = hasLandscape && (
+                <div style={{
+                  borderRadius: 16, overflow: "hidden",
+                  background: "rgba(235,228,218,0.95)", border: "1.5px solid rgba(0,0,0,0.10)",
+                  padding: "12px",
+                  marginBottom: 24,
+                }}>
+                  <div style={{ textAlign: "center", marginBottom: 8 }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, color: "#888", textTransform: "uppercase" }}>
+                      Opinion Landscape
+                    </span>
+                    <p style={{ fontSize: 11, color: "#777", marginTop: 4 }}>
+                      Proximity = semantic similarity. Colour = opinion group.
+                    </p>
+                  </div>
+                  <OpinionLandscape
+                    points={opinionClusterPoints}
+                    clusters={opinionClusters}
+                    onPointClick={(pt) => {
+                      const match = agents.find((a) => a.agent_id === pt.agent_id);
+                      if (match) setSelectedAgent(match);
+                    }}
+                  />
+                </div>
+              );
+
+              // Mobile: landscape on top, single masonry with all agents
+              if (isMobileLayout) {
+                return (
+                  <div>
+                    {landscapeBlock}
+                    <div style={{
+                      columns: "280px",
+                      columnGap: 14,
+                      width: "100%",
+                    }}>
+                      {sorted.map((a, i) => renderCard(a, i))}
+                    </div>
+                  </div>
+                );
+              }
+
+              // Desktop: two-column grid with split agents
               return (
                 <div style={{
                   display: "grid",
-                  gridTemplateColumns: hasLandscape ? "1fr 1fr" : "1fr",
+                  gridTemplateColumns: splitLayout ? "1fr 1fr" : "1fr",
                   gap: 24,
                   alignItems: "start",
                 }}>
                   {/* Left: first half of agent cards — masonry */}
                   <div style={{
-                    columns: hasLandscape ? "240px" : "280px",
+                    columns: splitLayout ? "240px" : "280px",
                     columnGap: 14,
                     width: "100%",
                   }}>
@@ -1718,32 +1770,9 @@ export default function DeliberationPageClient() {
                   </div>
 
                   {/* Right: Opinion Landscape + second half of agent cards */}
-                  {hasLandscape && (
+                  {splitLayout && (
                     <div>
-                      <div style={{
-                        borderRadius: 16, overflow: "hidden",
-                        background: "rgba(235,228,218,0.95)", border: "1.5px solid rgba(0,0,0,0.10)",
-                        padding: "12px",
-                        marginBottom: 24,
-                      }}>
-                        <div style={{ textAlign: "center", marginBottom: 8 }}>
-                          <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, color: "#888", textTransform: "uppercase" }}>
-                            Opinion Landscape
-                          </span>
-                          <p style={{ fontSize: 11, color: "#777", marginTop: 4 }}>
-                            Proximity = semantic similarity. Colour = opinion group.
-                          </p>
-                        </div>
-                        <OpinionLandscape
-                          points={opinionClusterPoints}
-                          clusters={opinionClusters}
-                          onPointClick={(pt) => {
-                            const match = agents.find((a) => a.agent_id === pt.agent_id);
-                            if (match) setSelectedAgent(match);
-                          }}
-                        />
-                      </div>
-                      {/* Right masonry: second half of agent cards */}
+                      {landscapeBlock}
                       <div style={{
                         columns: "240px",
                         columnGap: 14,
