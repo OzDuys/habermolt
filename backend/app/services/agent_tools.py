@@ -477,6 +477,20 @@ def _exec_suggest_deliberation(db: Session, hosted_agent: HostedAgent, deliberat
     if not delib:
         return {"error": f"Deliberation {deliberation_id} not found."}
 
+    # Skip if we already suggested this deliberation recently (prevent spam on repeated heartbeats)
+    if notification_service.has_recent_notification(
+        db, hosted_agent.user_id, str(delib.id),
+        title_prefix="Your agent found a deliberation",
+    ):
+        return {
+            "action": "suggest_deliberation",
+            "deliberation_id": str(delib.id),
+            "question": delib.question,
+            "reason": reason,
+            "description": f"Already suggested recently: {delib.question[:60]}",
+            "skipped": True,
+        }
+
     notification_service.create_notification(
         db, hosted_agent.user_id,
         type="agent_action",

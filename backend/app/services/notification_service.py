@@ -3,7 +3,7 @@ Notification service — CRUD for in-app notifications.
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 from uuid import UUID
 
@@ -115,6 +115,27 @@ def disapprove_notification(db: Session, notification_id: str, user_id: str, rea
     db.commit()
     db.refresh(notification)
     return notification
+
+
+def has_recent_notification(
+    db: Session,
+    user_id: str,
+    deliberation_id: str,
+    title_prefix: str,
+    days: int = 7,
+) -> bool:
+    """Check if a notification with matching title prefix + deliberation_id exists within the last N days."""
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    return (
+        db.query(Notification)
+        .filter(
+            Notification.user_id == user_id,
+            Notification.title.startswith(title_prefix),
+            Notification.metadata_["deliberation_id"].astext == deliberation_id,
+            Notification.created_at >= cutoff,
+        )
+        .first()
+    ) is not None
 
 
 def get_pending_disapprovals(db: Session, user_id: str) -> list[Notification]:
