@@ -1,13 +1,13 @@
 """Add opinion_cluster_cached_at for TTL-based cache invalidation
 
-Revision ID: 041_add_opinion_cluster_cached_at
+Revision ID: 041_cluster_cached_at
 Revises: 040_add_referral_tracking
 Create Date: 2026-03-18
 """
 from alembic import op
 import sqlalchemy as sa
 
-revision = "041_add_opinion_cluster_cached_at"
+revision = "041_cluster_cached_at"
 down_revision = "040_add_referral_tracking"
 branch_labels = None
 depends_on = None
