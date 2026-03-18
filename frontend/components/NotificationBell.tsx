@@ -273,11 +273,11 @@ export default function NotificationBell() {
                     opacity: n.read && tab === "all" ? 0.6 : 1,
                   }}
                   onClick={(e) => {
-                    if (!n.read) markRead(n.id);
                     if (hasExpandableDetail(n)) {
                       toggleExpand(e, n.id);
                       return;
                     }
+                    if (!n.read) markRead(n.id);
                     const delibId = n.metadata?.deliberation_id;
                     if (delibId) {
                       setOpen(false);
