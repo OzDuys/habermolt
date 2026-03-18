@@ -1468,14 +1468,15 @@ export default function DeliberationPageClient() {
                     .map((s, i) => {
                       const isWinner = s.social_ranking === 1;
                       const isMine = userAgentId != null && s.contributed_by_agent_id === userAgentId;
+                      const myColor = userAgentId ? (agentClusterColorSoft[userAgentId] || agentClusterColor[userAgentId]) : null;
                       return (
                         <motion.div key={s.id}
                           initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }}
                           viewport={{ once: true }} transition={{ delay: i * 0.03 }}
                           style={{
                             padding: "18px 20px", borderRadius: 16,
-                            background: isMine ? "rgba(26,138,80,0.04)" : isWinner ? "rgba(200,74,32,0.04)" : "rgba(255,255,255,0.6)",
-                            border: `1.5px solid ${isMine ? "rgba(26,138,80,0.18)" : isWinner ? "rgba(200,74,32,0.15)" : "rgba(0,0,0,0.04)"}`,
+                            background: isMine && myColor ? `${myColor}0a` : isWinner ? "rgba(200,74,32,0.04)" : "rgba(255,255,255,0.6)",
+                            border: `1.5px solid ${isMine && myColor ? `${myColor}30` : isWinner ? "rgba(200,74,32,0.15)" : "rgba(0,0,0,0.04)"}`,
                             boxShadow: isWinner ? "0 4px 16px rgba(200,74,32,0.06)" : "none",
                           }}
                         >
@@ -1491,7 +1492,8 @@ export default function DeliberationPageClient() {
                             {isMine && (
                               <span style={{
                                 fontSize: 9, padding: "2px 7px", borderRadius: 4,
-                                background: "#1a8a5010", color: "#1a8a50", fontWeight: 700,
+                                background: myColor ? `${myColor}10` : "#1a8a5010",
+                                color: myColor || "#1a8a50", fontWeight: 700,
                                 letterSpacing: 0.5, textTransform: "uppercase",
                               }}>your agent</span>
                             )}
@@ -1503,7 +1505,7 @@ export default function DeliberationPageClient() {
                               }}>seed</span>
                             )}
                             {s.contributed_by_agent_id && agentNameMap[s.contributed_by_agent_id] && (
-                              <span style={{ fontSize: 10, color: isMine ? "#1a8a50" : "#888", marginLeft: "auto" }}>
+                              <span style={{ fontSize: 10, color: isMine && myColor ? myColor : "#888", marginLeft: "auto" }}>
                                 by {agentNameMap[s.contributed_by_agent_id]}
                               </span>
                             )}
@@ -1621,8 +1623,8 @@ export default function DeliberationPageClient() {
                     onClick={() => setSelectedAgent(a)}
                     style={{
                       padding: "16px", borderRadius: 16,
-                      background: isMe ? "rgba(26,138,80,0.04)" : "rgba(255,255,255,0.65)",
-                      border: isMe ? "1.5px solid rgba(26,138,80,0.2)" : "1.5px solid rgba(0,0,0,0.05)",
+                      background: isMe ? `${softColor}0a` : "rgba(255,255,255,0.65)",
+                      border: isMe ? `1.5px solid ${softColor}33` : "1.5px solid rgba(0,0,0,0.05)",
                       cursor: "pointer", transition: "box-shadow 0.3s",
                       breakInside: "avoid",
                       marginBottom: 14,
@@ -1637,8 +1639,8 @@ export default function DeliberationPageClient() {
                           {a.agent_name}
                           {isMe && (
                             <span style={{
-                              fontSize: 8, fontWeight: 700, color: "#1a8a50",
-                              background: "#1a8a5012", border: "1px solid #1a8a5020",
+                              fontSize: 8, fontWeight: 700, color: softColor,
+                              background: `${softColor}12`, border: `1px solid ${softColor}20`,
                               padding: "1px 6px", borderRadius: 4,
                               textTransform: "uppercase", letterSpacing: 0.5,
                             }}>You</span>
