@@ -565,9 +565,7 @@ async def rate_consensus(
     )
 
     if existing:
-        existing.representativeness = body.representativeness
-        existing.specificity = body.specificity
-        existing.usefulness = body.usefulness
+        existing.thumb_vote = body.thumb_vote
         existing.feedback = body.feedback
         existing.statement_id = winner_id
         db.commit()
@@ -578,9 +576,7 @@ async def rate_consensus(
         user_id=user_id,
         deliberation_id=body.deliberation_id,
         statement_id=winner_id,
-        representativeness=body.representativeness,
-        specificity=body.specificity,
-        usefulness=body.usefulness,
+        thumb_vote=body.thumb_vote,
         feedback=body.feedback,
     )
     db.add(cr)

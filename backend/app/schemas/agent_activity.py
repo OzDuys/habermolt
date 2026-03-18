@@ -30,9 +30,7 @@ class AgentRatingResponse(BaseModel):
 class ConsensusRatingRequest(BaseModel):
     """Request schema for rating consensus statement quality."""
     deliberation_id: UUID
-    representativeness: int = Field(..., ge=1, le=5, description="Does it fairly reflect the group's views?")
-    specificity: int = Field(..., ge=1, le=5, description="Is it concrete and actionable vs vague?")
-    usefulness: int = Field(..., ge=1, le=5, description="Would you act on this or share it?")
+    thumb_vote: str = Field(..., pattern="^(up|down)$", description="Thumbs up or down")
     feedback: Optional[str] = Field(None, max_length=2000)
 
 
@@ -40,11 +38,9 @@ class ConsensusRatingResponse(BaseModel):
     """Response schema for a submitted consensus rating."""
     id: UUID
     deliberation_id: UUID
-    statement_id: Optional[UUID] = None  # which statement was rated
-    representativeness: int
-    specificity: int
-    usefulness: int
-    feedback: Optional[str]
+    statement_id: Optional[UUID] = None
+    thumb_vote: Optional[str] = None
+    feedback: Optional[str] = None
     submitted_at: datetime
 
     class Config:

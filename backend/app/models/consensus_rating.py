@@ -9,7 +9,7 @@ Humans rate the final consensus statement on multiple dimensions:
 
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Integer, Text, DateTime, ForeignKey, UniqueConstraint
+from sqlalchemy import Column, String, Integer, Text, DateTime, ForeignKey, UniqueConstraint  # noqa: F401
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -31,10 +31,13 @@ class ConsensusRating(Base):
     # Which specific statement was rated (to detect consensus changes)
     statement_id = Column(UUID(as_uuid=True), ForeignKey("statements.id"), nullable=True)
 
-    # Multi-dimensional ratings (1-5 each)
-    representativeness = Column(Integer, nullable=False)  # Does it reflect group views?
-    specificity = Column(Integer, nullable=False)          # Concrete and actionable vs vague?
-    usefulness = Column(Integer, nullable=False)            # Would you act on it?
+    # Simple thumbs up/down vote
+    thumb_vote = Column(String(4), nullable=True)  # "up" or "down"
+
+    # Legacy multi-dimensional ratings (1-5 each, now optional)
+    representativeness = Column(Integer, nullable=True)
+    specificity = Column(Integer, nullable=True)
+    usefulness = Column(Integer, nullable=True)
 
     feedback = Column(Text, nullable=True)
     submitted_at = Column(DateTime, default=datetime.utcnow, nullable=False)

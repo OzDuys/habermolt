@@ -442,51 +442,9 @@ interface ConsensusRatingData {
   id: string;
   deliberation_id: string;
   statement_id: string | null;
-  representativeness: number;
-  specificity: number;
-  usefulness: number;
+  thumb_vote: "up" | "down" | null;
   feedback: string | null;
   submitted_at: string;
-}
-
-function StarRow({
-  label,
-  hint,
-  value,
-  onChange,
-}: {
-  label: string;
-  hint: string;
-  value: number;
-  onChange: (v: number) => void;
-}) {
-  const [hover, setHover] = useState(0);
-  return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-      <div style={{ minWidth: 0 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: "#333" }}>{label}</div>
-        <div style={{ fontSize: 11, color: "#999" }}>{hint}</div>
-      </div>
-      <div style={{ display: "flex", gap: 2, flexShrink: 0 }}>
-        {[1, 2, 3, 4, 5].map((n) => (
-          <button
-            key={n}
-            type="button"
-            onClick={() => onChange(n)}
-            onMouseEnter={() => setHover(n)}
-            onMouseLeave={() => setHover(0)}
-            style={{
-              fontSize: 18, background: "none", border: "none", cursor: "pointer",
-              color: n <= (hover || value) ? "#c84a20" : "#ddd",
-              transition: "color 0.15s, transform 0.1s",
-              transform: n <= (hover || value) ? "scale(1.1)" : "scale(1)",
-              padding: 0,
-            }}
-          >★</button>
-        ))}
-      </div>
-    </div>
-  );
 }
 
 function ThumbButton({
@@ -536,23 +494,13 @@ function ConsensusRatingWidget({
 
   const [existing, setExisting] = useState<ConsensusRatingData | null>(null);
   const [loaded, setLoaded] = useState(false);
-  const [expanded, setExpanded] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [thumbVote, setThumbVote] = useState<"up" | "down" | null>(null);
-
-  const [representativeness, setRepresentativeness] = useState(0);
-  const [specificity, setSpecificity] = useState(0);
-  const [usefulness, setUsefulness] = useState(0);
+  const [showComment, setShowComment] = useState(false);
   const [feedback, setFeedback] = useState("");
 
   const consensusChanged = existing?.statement_id != null
     && winnerId != null
     && existing.statement_id !== winnerId;
-
-  // Derive thumb state from existing rating
-  const existingThumb = existing
-    ? ((existing.representativeness + existing.specificity + existing.usefulness) / 3 >= 3 ? "up" : "down")
-    : null;
 
   // Fetch existing rating
   useEffect(() => {
@@ -562,9 +510,6 @@ function ConsensusRatingWidget({
       .then((data) => {
         if (data && data.id) {
           setExisting(data);
-          setRepresentativeness(data.representativeness);
-          setSpecificity(data.specificity);
-          setUsefulness(data.usefulness);
           setFeedback(data.feedback || "");
         }
       })
@@ -572,7 +517,7 @@ function ConsensusRatingWidget({
       .finally(() => setLoaded(true));
   }, [session, deliberationId]);
 
-  const handleSubmit = useCallback(async () => {
+  const submitVote = useCallback(async (direction: "up" | "down", comment?: string | null) => {
     if (!session?.user?.id) {
       router.push("/sign-in");
       return;
@@ -581,37 +526,36 @@ function ConsensusRatingWidget({
     try {
       const data = await api.rateConsensus({
         deliberation_id: deliberationId,
-        representativeness,
-        specificity,
-        usefulness,
-        feedback: feedback || null,
+        thumb_vote: direction,
+        feedback: comment || null,
       });
       setExisting(data);
-      setExpanded(false);
     } catch {} finally {
       setSaving(false);
     }
-  }, [session, deliberationId, representativeness, specificity, usefulness, feedback, router]);
+  }, [session, deliberationId, router]);
 
   const handleThumb = (direction: "up" | "down") => {
     if (!session?.user?.id) {
       router.push("/sign-in");
       return;
     }
-    setThumbVote(direction);
-    // Pre-fill stars based on thumb direction
-    if (!existing) {
-      const preset = direction === "up" ? 4 : 2;
-      setRepresentativeness(preset);
-      setSpecificity(preset);
-      setUsefulness(preset);
+    // Save the vote immediately
+    submitVote(direction);
+    // Show comment input after voting
+    setShowComment(true);
+  };
+
+  const handleCommentSubmit = () => {
+    if (existing) {
+      submitVote(existing.thumb_vote!, feedback || null);
     }
-    setExpanded(true);
+    setShowComment(false);
   };
 
   if (!loaded && session?.user?.id) return null;
 
-  const activeThumb = expanded ? thumbVote : existingThumb;
+  const activeThumb = existing?.thumb_vote ?? null;
 
   return (
     <motion.div
@@ -629,95 +573,55 @@ function ConsensusRatingWidget({
       )}
 
       {/* Thumbs — pinned to bottom-right of parent card */}
-      {!expanded && (
-        <div style={{
-          position: "absolute", bottom: 14, right: 16,
-          display: "flex", alignItems: "center", gap: 5,
-        }}>
-          {existing && !consensusChanged && (
-            <span style={{ fontSize: 11, color: "#999" }}>rated</span>
-          )}
-          <ThumbButton direction="up" active={activeThumb === "up"} onClick={() => handleThumb("up")} />
-          <ThumbButton direction="down" active={activeThumb === "down"} onClick={() => handleThumb("down")} />
-        </div>
-      )}
+      <div style={{
+        position: "absolute", bottom: 14, right: 16,
+        display: "flex", alignItems: "center", gap: 5,
+      }}>
+        <ThumbButton direction="up" active={activeThumb === "up"} onClick={() => handleThumb("up")} />
+        <ThumbButton direction="down" active={activeThumb === "down"} onClick={() => handleThumb("down")} />
+      </div>
 
-      {/* Expanded detail form */}
+      {/* Optional comment after voting */}
       <AnimatePresence>
-        {expanded && (
+        {showComment && existing && (
           <motion.div
             initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
             style={{ overflow: "hidden" }}
           >
             <div style={{
-              padding: "20px 24px", borderRadius: 20, marginTop: 8,
+              padding: "14px 18px", borderRadius: 14, marginTop: 8,
               background: "rgba(255,255,255,0.85)", border: "1.5px solid rgba(200,74,32,0.1)",
-              boxShadow: "0 4px 20px rgba(0,0,0,0.04)",
             }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, color: "#c84a20", textTransform: "uppercase" }}>
-                  Tell us more
-                </div>
-                <div style={{ display: "flex", gap: 6 }}>
-                  <ThumbButton direction="up" active={thumbVote === "up"} onClick={() => {
-                    setThumbVote("up");
-                    if (!existing) { setRepresentativeness(4); setSpecificity(4); setUsefulness(4); }
-                  }} />
-                  <ThumbButton direction="down" active={thumbVote === "down"} onClick={() => {
-                    setThumbVote("down");
-                    if (!existing) { setRepresentativeness(2); setSpecificity(2); setUsefulness(2); }
-                  }} />
-                </div>
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                <StarRow
-                  label="Representativeness"
-                  hint="Does it fairly reflect the group's views?"
-                  value={representativeness}
-                  onChange={setRepresentativeness}
-                />
-                <StarRow
-                  label="Specificity"
-                  hint="Is it concrete and actionable, not vague?"
-                  value={specificity}
-                  onChange={setSpecificity}
-                />
-                <StarRow
-                  label="Usefulness"
-                  hint="Would you act on this or share it?"
-                  value={usefulness}
-                  onChange={setUsefulness}
-                />
-              </div>
               <textarea
                 value={feedback}
                 onChange={(e) => setFeedback(e.target.value)}
-                placeholder="Optional: What would make this consensus better?"
+                placeholder="Any thoughts on this consensus? (optional)"
                 rows={2}
+                autoFocus
                 style={{
-                  width: "100%", marginTop: 14, padding: "10px 14px", borderRadius: 12,
+                  width: "100%", padding: "10px 14px", borderRadius: 12,
                   border: "1.5px solid rgba(0,0,0,0.06)", background: "rgba(0,0,0,0.02)",
                   fontSize: 13, color: "#333", resize: "vertical", fontFamily: "inherit",
                 }}
               />
-              <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+              <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
                 <button
-                  onClick={() => setExpanded(false)}
+                  onClick={() => setShowComment(false)}
                   style={{
-                    flex: 1, padding: "10px 16px", borderRadius: 12, border: "1.5px solid rgba(0,0,0,0.06)",
-                    background: "transparent", cursor: "pointer", fontSize: 13, color: "#888",
+                    flex: 1, padding: "8px 14px", borderRadius: 10, border: "1.5px solid rgba(0,0,0,0.06)",
+                    background: "transparent", cursor: "pointer", fontSize: 12, color: "#888",
                   }}
-                >Cancel</button>
+                >Skip</button>
                 <button
-                  onClick={handleSubmit}
-                  disabled={representativeness === 0 || specificity === 0 || usefulness === 0 || saving}
+                  onClick={handleCommentSubmit}
+                  disabled={!feedback.trim() || saving}
                   style={{
-                    flex: 2, padding: "10px 16px", borderRadius: 12, border: "none",
-                    background: (representativeness === 0 || specificity === 0 || usefulness === 0) ? "#ddd" : "#c84a20",
-                    color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 600,
+                    flex: 1, padding: "8px 14px", borderRadius: 10, border: "none",
+                    background: !feedback.trim() ? "#ddd" : "#c84a20",
+                    color: "#fff", cursor: "pointer", fontSize: 12, fontWeight: 600,
                     opacity: saving ? 0.6 : 1,
                   }}
-                >{saving ? "Saving..." : existing ? "Update" : "Submit"}</button>
+                >{saving ? "Saving..." : "Submit"}</button>
               </div>
             </div>
           </motion.div>
@@ -1456,10 +1360,10 @@ export default function DeliberationPageClient() {
           }}>
             <div style={{ width: "100%", maxWidth: 1200 }}>
               <div style={{ textAlign: "center", marginBottom: 28 }}>
-                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 3, color: "#888", textTransform: "uppercase" }}>
+                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 3, color: "#666", textTransform: "uppercase" }}>
                   {data.statements.length} Statements
                 </span>
-                <p style={{ fontSize: 12, color: "#aaa", marginTop: 6, maxWidth: 420, marginLeft: "auto", marginRight: "auto" }}>
+                <p style={{ fontSize: 12, color: "#777", marginTop: 6, maxWidth: 420, marginLeft: "auto", marginRight: "auto" }}>
                   Group statements generated from agent opinions, ranked by collective preference
                 </p>
               </div>
@@ -1589,10 +1493,10 @@ export default function DeliberationPageClient() {
           }}>
           <div style={{ maxWidth: 1200, margin: "0 auto" }}>
             <div style={{ textAlign: "center", marginBottom: 20 }}>
-              <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 3, color: "#888", textTransform: "uppercase" }}>
+              <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 3, color: "#666", textTransform: "uppercase" }}>
                 {agents.length} Agents
               </span>
-              <p style={{ fontSize: 12, color: "#aaa", marginTop: 6, maxWidth: 420, marginLeft: "auto", marginRight: "auto" }}>
+              <p style={{ fontSize: 12, color: "#777", marginTop: 6, maxWidth: 420, marginLeft: "auto", marginRight: "auto" }}>
                 AI agents representing human participants — their opinions and rankings
               </p>
             </div>

@@ -362,9 +362,7 @@ class APIClient {
   /** POST /api/backend/agents/me/rate-consensus */
   async rateConsensus(data: {
     deliberation_id: string;
-    representativeness: number;
-    specificity: number;
-    usefulness: number;
+    thumb_vote: "up" | "down";
     feedback?: string | null;
   }): Promise<any> {
     return this.request<any>("/api/backend/agents/me/rate-consensus", {
