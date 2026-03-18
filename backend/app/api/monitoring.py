@@ -225,6 +225,35 @@ async def get_monitoring_stats(
         lbm_base = lbm_base.filter(LLMTrace.created_at >= cutoff)
     latency_by_model = {row[0]: round(float(row[1]), 1) for row in lbm_base.group_by(LLMTrace.model).all()}
 
+    # Interaction leaderboards by opinion source
+    # Autonomous: agent acted on its own (autonomous heartbeat, external API, deliberation creation)
+    autonomous_sources = ("autonomous", "api", "creation")
+    # User-driven: human directly participated (interview, chat tool)
+    user_sources = ("topic_interview", "chat_tool")
+
+    def _top_agents_by_sources(sources: tuple) -> list:
+        q = (
+            db.query(Agent.name, func.count(Opinion.id).label("cnt"))
+            .join(Agent, Opinion.agent_id == Agent.id)
+            .filter(Opinion.source.in_(sources))
+        )
+        if cutoff:
+            q = q.filter(Opinion.submitted_at >= cutoff)
+        rows = q.group_by(Agent.name).order_by(desc("cnt")).limit(15).all()
+        return [{"agent_name": name, "count": count} for name, count in rows]
+
+    top_autonomous_agents = _top_agents_by_sources(autonomous_sources)
+    top_user_agents = _top_agents_by_sources(user_sources)
+
+    # Opinions breakdown by source
+    src_base = db.query(Opinion.source, func.count(Opinion.id))
+    if cutoff:
+        src_base = src_base.filter(Opinion.submitted_at >= cutoff)
+    opinions_by_source = {
+        (src or "unknown"): count
+        for src, count in src_base.group_by(Opinion.source).all()
+    }
+
     return MonitoringStatsResponse(
         total_agents=total_agents,
         total_deliberations=total_deliberations,
@@ -244,6 +273,9 @@ async def get_monitoring_stats(
         total_cost=round(float(total_cost), 6),
         cost_by_model=cost_by_model,
         cost_24h=round(float(cost_24h), 6),
+        top_autonomous_agents=top_autonomous_agents,
+        top_user_agents=top_user_agents,
+        opinions_by_source=opinions_by_source,
     )
 
 

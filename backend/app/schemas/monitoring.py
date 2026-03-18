@@ -61,6 +61,10 @@ class MonitoringStatsResponse(BaseModel):
     total_cost: float
     cost_by_model: Dict[str, float]
     cost_24h: float
+    # Interaction leaderboards (top agents by opinion source)
+    top_autonomous_agents: List[Dict[str, object]]  # [{agent_name, count}]
+    top_user_agents: List[Dict[str, object]]  # [{agent_name, count}]
+    opinions_by_source: Dict[str, int]
 
 
 class SystemConfigResponse(BaseModel):

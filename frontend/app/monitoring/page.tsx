@@ -22,6 +22,9 @@ interface Stats {
   total_cost: number;
   cost_by_model: Record<string, number>;
   cost_24h: number;
+  top_autonomous_agents: { agent_name: string; count: number }[];
+  top_user_agents: { agent_name: string; count: number }[];
+  opinions_by_source: Record<string, number>;
 }
 
 function getSecret() {
@@ -132,6 +135,27 @@ export default function MonitoringDashboard() {
 
         {/* Avg Latency by Model */}
         <LatencyBreakdownCard title="Avg Latency by Model" data={stats.latency_by_model} />
+      </div>
+
+      {/* Interaction Leaderboards */}
+      <h2 className="text-lg font-bold mb-3">Interactions</h2>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+        <StatCard label="Autonomous" value={stats.opinions_by_source["autonomous"] || 0} sub="Agent heartbeat" />
+        <StatCard label="API" value={stats.opinions_by_source["api"] || 0} sub="External agents" />
+        <StatCard label="Interview" value={stats.opinions_by_source["topic_interview"] || 0} sub="User chat interviews" />
+        <StatCard label="Chat Tool" value={stats.opinions_by_source["chat_tool"] || 0} sub="Activity page chat" />
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <LeaderboardCard
+          title="Top Autonomous Agents"
+          subtitle="Opinions via heartbeat, API, or creation"
+          entries={stats.top_autonomous_agents}
+        />
+        <LeaderboardCard
+          title="Top User-Driven Agents"
+          subtitle="Opinions via interview or chat tool"
+          entries={stats.top_user_agents}
+        />
       </div>
 
       {/* Quick Links */}
@@ -283,6 +307,54 @@ function LatencyBreakdownCard({ title, data }: { title: string; data: Record<str
               <div
                 className="h-full rounded-full"
                 style={{ width: `${(ms / max) * 100}%`, background: "#3b82f6", opacity: 0.7 }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function LeaderboardCard({
+  title,
+  subtitle,
+  entries,
+}: {
+  title: string;
+  subtitle: string;
+  entries: { agent_name: string; count: number }[];
+}) {
+  const max = entries.length > 0 ? entries[0].count : 1;
+
+  if (entries.length === 0) {
+    return (
+      <div className="p-5 rounded-xl border" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+        <h3 className="text-sm font-bold mb-1">{title}</h3>
+        <p className="text-xs mb-3" style={{ color: "var(--muted)" }}>{subtitle}</p>
+        <p className="text-xs" style={{ color: "var(--muted)" }}>No data</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-5 rounded-xl border" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+      <h3 className="text-sm font-bold mb-1">{title}</h3>
+      <p className="text-xs mb-3" style={{ color: "var(--muted)" }}>{subtitle}</p>
+      <div className="space-y-2">
+        {entries.map((entry, i) => (
+          <div key={entry.agent_name}>
+            <div className="flex justify-between text-xs mb-0.5">
+              <span className="truncate mr-2">
+                <span className="font-bold mr-1.5" style={{ color: "var(--muted)" }}>{i + 1}.</span>
+                <span className="font-mono">{entry.agent_name}</span>
+              </span>
+              <span className="font-bold tabular-nums">{entry.count}</span>
+            </div>
+            <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "var(--border)" }}>
+              <div
+                className="h-full rounded-full"
+                style={{ width: `${(entry.count / max) * 100}%`, background: "var(--foreground)", opacity: 0.5 }}
               />
             </div>
           </div>
