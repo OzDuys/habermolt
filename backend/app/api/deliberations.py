@@ -719,17 +719,23 @@ async def get_cluster(
 # Base hues for top-level clusters — each gets shades for sub-clusters.
 # Format: (H, S%, L%) base values — sub-clusters vary lightness.
 CLUSTER_BASE_HUES = [
-    (14, 75, 45),    # warm red-orange
     (210, 60, 45),   # blue
-    (300, 50, 42),   # purple
-    (150, 65, 35),   # green
     (35, 80, 48),    # amber
-    (340, 60, 45),   # pink
+    (300, 50, 42),   # purple
     (180, 70, 35),   # teal
     (260, 55, 48),   # indigo
+    (14, 75, 45),    # warm red-orange
+    (150, 65, 35),   # green
+    (340, 60, 45),   # pink
 ]
 
 CLUSTER_CACHE_TTL_SECONDS = 300  # 5 minutes
+
+# Semantic label -> forced hue override (H, S%, L%)
+LABEL_HUE_OVERRIDES: dict[str, tuple[int, int, int]] = {
+    "yes": (140, 65, 38),   # green
+    "no": (0, 70, 45),      # red
+}
 
 
 def _hsl_to_hex(h: int, s: int, l: int) -> str:
@@ -739,13 +745,24 @@ def _hsl_to_hex(h: int, s: int, l: int) -> str:
     return f"#{int(r*255):02x}{int(g*255):02x}{int(b*255):02x}"
 
 
-def _generate_cluster_colors(num_top: int, sub_counts: list[int]) -> tuple[list[str], list[list[str]]]:
+def _generate_cluster_colors(
+    num_top: int, sub_counts: list[int], labels: list[str],
+) -> tuple[list[str], list[list[str]]]:
     """Generate colors for top-level clusters and their sub-clusters.
+    Labels like "Yes"/"No" get forced green/red hues.
     Returns (top_colors, sub_colors) where sub_colors[i] is a list of colors for cluster i's sub-clusters."""
     top_colors = []
     sub_colors = []
+    # Track which default hues have been used so overrides don't cause duplicates
+    next_default = 0
     for i in range(num_top):
-        h, s, l = CLUSTER_BASE_HUES[i % len(CLUSTER_BASE_HUES)]
+        label_lower = labels[i].strip().lower() if i < len(labels) else ""
+        if label_lower in LABEL_HUE_OVERRIDES:
+            h, s, l = LABEL_HUE_OVERRIDES[label_lower]
+        else:
+            h, s, l = CLUSTER_BASE_HUES[next_default % len(CLUSTER_BASE_HUES)]
+            next_default += 1
+
         top_colors.append(_hsl_to_hex(h, s, l))
         n_sub = sub_counts[i] if i < len(sub_counts) else 0
         if n_sub <= 1:
@@ -921,9 +938,10 @@ def _compute_opinion_clusters(
     opinion_mapping: dict[int, tuple[int, int]] = {}  # idx -> (top_id, sub_id)
     total = len(embedded)
 
-    # Generate colors
+    # Generate colors (Yes→green, No→red, others get default hues)
     sub_counts = [len(g.get("kmeans_ids", [])) for g in hierarchy["groups"]]
-    top_colors, sub_color_lists = _generate_cluster_colors(len(hierarchy["groups"]), sub_counts)
+    top_labels = [g.get("label", "") for g in hierarchy["groups"]]
+    top_colors, sub_color_lists = _generate_cluster_colors(len(hierarchy["groups"]), sub_counts, top_labels)
 
     clusters_info = []
     for top_id, group in enumerate(hierarchy["groups"]):

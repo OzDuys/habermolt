@@ -9,7 +9,7 @@ interface ClusterBarProps {
 }
 
 export default function ClusterBar({ clusters }: ClusterBarProps) {
-  const [hoveredId, setHoveredId] = useState<string | null>(null); // "top-0" or "sub-0-1"
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
   const sorted = [...clusters].sort((a, b) => b.percentage - a.percentage);
 
   if (sorted.length === 0) return null;
@@ -26,12 +26,8 @@ export default function ClusterBar({ clusters }: ClusterBarProps) {
           const hasSubs = c.sub_clusters && c.sub_clusters.length > 1;
           const topKey = `top-${c.cluster_id}`;
           const isTopHovered = hoveredId === topKey;
-          const isAnySubHovered = hasSubs && c.sub_clusters!.some(
-            (s) => hoveredId === `sub-${c.cluster_id}-${s.sub_cluster_id}`
-          );
 
           if (hasSubs) {
-            // Render sub-cluster segments within this top-level cluster's space
             return c.sub_clusters!.map((s, si) => {
               const subKey = `sub-${c.cluster_id}-${s.sub_cluster_id}`;
               const isHovered = hoveredId === subKey || isTopHovered;
@@ -53,7 +49,6 @@ export default function ClusterBar({ clusters }: ClusterBarProps) {
                     alignItems: "center",
                     justifyContent: "center",
                     minWidth: s.percentage > 5 ? undefined : 2,
-                    // Add subtle border between sub-clusters of same parent
                     borderRight: si < c.sub_clusters!.length - 1 ? "1px solid rgba(255,255,255,0.3)" : "none",
                   }}
                 >
@@ -70,7 +65,6 @@ export default function ClusterBar({ clusters }: ClusterBarProps) {
             });
           }
 
-          // No sub-clusters — render as single bar segment
           return (
             <motion.div
               key={topKey}
@@ -104,11 +98,8 @@ export default function ClusterBar({ clusters }: ClusterBarProps) {
         })}
       </div>
 
-      {/* Labels below — top-level with optional sub-cluster expansion */}
-      <div style={{
-        display: "flex", flexWrap: "wrap", justifyContent: "center",
-        gap: "6px 18px", marginTop: 10, fontSize: 11, color: "#777",
-      }}>
+      {/* Labels — each column width matches its bar segment */}
+      <div style={{ display: "flex", width: "100%", marginTop: 8 }}>
         {sorted.map((c) => {
           const topKey = `top-${c.cluster_id}`;
           const hasSubs = c.sub_clusters && c.sub_clusters.length > 1;
@@ -118,32 +109,52 @@ export default function ClusterBar({ clusters }: ClusterBarProps) {
           );
 
           return (
-            <div key={c.cluster_id} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+            <div
+              key={c.cluster_id}
+              style={{
+                width: `${c.percentage}%`,
+                minWidth: 0,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                padding: "0 2px",
+                overflow: "hidden",
+              }}
+            >
+              {/* Top-level label */}
               <span
                 onMouseEnter={() => setHoveredId(topKey)}
                 onMouseLeave={() => setHoveredId(null)}
                 style={{
-                  display: "flex", alignItems: "center", gap: 6,
+                  display: "flex", alignItems: "center", gap: 4,
                   cursor: "pointer",
                   opacity: hoveredId === null || isTopHovered || isAnySubHovered ? 1 : 0.4,
                   transition: "opacity 0.2s",
+                  textAlign: "center",
+                  flexWrap: "wrap",
+                  justifyContent: "center",
                 }}
               >
                 <span style={{
-                  width: 10, height: 10, borderRadius: "50%",
+                  width: 8, height: 8, borderRadius: "50%",
                   background: c.color, opacity: 0.85, flexShrink: 0,
                 }} />
-                <span style={{ fontWeight: 600, color: "#555" }}>{c.label}</span>
-                <span style={{ color: "#aaa" }}>
+                <span style={{
+                  fontWeight: 600, color: "#555", fontSize: 11,
+                  overflow: "hidden", textOverflow: "ellipsis",
+                }}>
+                  {c.label}
+                </span>
+                <span style={{ color: "#aaa", fontSize: 10, whiteSpace: "nowrap" }}>
                   {c.count} ({Math.round(c.percentage)}%)
                 </span>
               </span>
 
-              {/* Sub-cluster labels */}
+              {/* Sub-cluster labels — constrained to parent width */}
               {hasSubs && (
                 <div style={{
-                  display: "flex", flexWrap: "wrap", gap: "2px 12px",
-                  paddingLeft: 16, fontSize: 10,
+                  display: "flex", flexDirection: "column", alignItems: "center",
+                  gap: 1, marginTop: 4, width: "100%", fontSize: 10,
                 }}>
                   {c.sub_clusters!.map((s) => {
                     const subKey = `sub-${c.cluster_id}-${s.sub_cluster_id}`;
@@ -153,18 +164,28 @@ export default function ClusterBar({ clusters }: ClusterBarProps) {
                         onMouseEnter={() => setHoveredId(subKey)}
                         onMouseLeave={() => setHoveredId(null)}
                         style={{
-                          display: "flex", alignItems: "center", gap: 4,
+                          display: "flex", alignItems: "center", gap: 3,
                           cursor: "pointer",
                           opacity: hoveredId === null || hoveredId === subKey || isTopHovered ? 1 : 0.35,
                           transition: "opacity 0.2s",
+                          textAlign: "center",
+                          flexWrap: "wrap",
+                          justifyContent: "center",
+                          maxWidth: "100%",
                         }}
                       >
                         <span style={{
-                          width: 7, height: 7, borderRadius: "50%",
+                          width: 6, height: 6, borderRadius: "50%",
                           background: s.color, opacity: 0.85, flexShrink: 0,
                         }} />
-                        <span style={{ color: "#888" }}>{s.label}</span>
-                        <span style={{ color: "#bbb" }}>{s.count}</span>
+                        <span style={{
+                          color: "#888",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                        }}>
+                          {s.label}
+                        </span>
+                        <span style={{ color: "#bbb", whiteSpace: "nowrap" }}>{s.count}</span>
                       </span>
                     );
                   })}
