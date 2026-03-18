@@ -7,6 +7,8 @@ import type { Statement, Ranking } from "@/lib/types";
 interface RankingRidgelineProps {
   statements: Statement[];
   rankings: Ranking[];
+  /** Map from agent_id to cluster color — used to color each statement by its contributor */
+  agentClusterColor?: Record<string, string>;
 }
 
 const WIDTH = 600;
@@ -40,7 +42,7 @@ function kernelDensity(data: number[], domain: [number, number], bandwidth: numb
   return pts;
 }
 
-export default function RankingRidgeline({ statements, rankings }: RankingRidgelineProps) {
+export default function RankingRidgeline({ statements, rankings, agentClusterColor }: RankingRidgelineProps) {
   const [hovered, setHovered] = useState<string | null>(null);
 
   const { rows, maxRank, maxDensity } = useMemo(() => {
@@ -77,7 +79,7 @@ export default function RankingRidgeline({ statements, rankings }: RankingRidgel
         data,
         index: i,
         mean: d3.mean(data) || 0,
-        color: PALETTE[i % PALETTE.length],
+        color: (agentClusterColor && s.contributed_by_agent_id && agentClusterColor[s.contributed_by_agent_id]) || PALETTE[i % PALETTE.length],
       };
     });
 

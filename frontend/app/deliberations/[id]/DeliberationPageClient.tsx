@@ -1477,7 +1477,7 @@ export default function DeliberationPageClient() {
                               How agents ranked each statement. Tighter peaks = more agreement.
                             </p>
                           </div>
-                          <RankingRidgeline statements={data.statements} rankings={data.rankings} />
+                          <RankingRidgeline statements={data.statements} rankings={data.rankings} agentClusterColor={agentClusterColor} />
                         </div>
                       </div>
                     )}
