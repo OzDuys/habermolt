@@ -777,8 +777,9 @@ def _generate_cluster_colors(
     return top_colors, sub_colors
 
 
-def _find_optimal_k(matrix: np.ndarray, max_k: int = 8) -> int:
-    """Find the optimal number of clusters using silhouette score."""
+def _find_optimal_k(matrix: np.ndarray, max_k: int = 8, min_k: int = 3) -> int:
+    """Find the optimal number of clusters using silhouette score.
+    min_k=3 ensures the LLM has enough clusters to group into distinct positions."""
     from sklearn.cluster import KMeans
     from sklearn.metrics import silhouette_score
 
@@ -786,12 +787,13 @@ def _find_optimal_k(matrix: np.ndarray, max_k: int = 8) -> int:
     if n < 3:
         return 1
     max_k = min(max_k, n - 1)
+    min_k = min(min_k, max_k)
     if max_k < 2:
         return 1
 
-    best_k = 2
+    best_k = min_k
     best_score = -1.0
-    for k in range(2, max_k + 1):
+    for k in range(min_k, max_k + 1):
         km = KMeans(n_clusters=k, n_init=3, random_state=42)
         labels = km.fit_predict(matrix)
         score = silhouette_score(matrix, labels)
@@ -933,6 +935,26 @@ def _compute_opinion_clusters(
 
     # LLM groups k-means clusters into top-level positions
     hierarchy = _generate_hierarchical_labels(deliberation.question, kmeans_opinions, db)
+
+    # Deduplicate: ensure each kmeans_id appears in exactly one top-level group
+    seen_kmeans_ids: set[int] = set()
+    for group in hierarchy["groups"]:
+        original_ids = group.get("kmeans_ids", [])
+        deduped = [kid for kid in original_ids if kid not in seen_kmeans_ids]
+        if len(deduped) < len(original_ids):
+            removed = set(original_ids) - set(deduped)
+            logger.warning(
+                f"Duplicate kmeans_ids {removed} in group '{group.get('label')}' — "
+                f"k-means clusters don't cleanly map to LLM positions. Deduplicating."
+            )
+            # Also clean sub_labels
+            sub_labels = group.get("sub_labels", {})
+            group["sub_labels"] = {k: v for k, v in sub_labels.items() if int(k) not in removed}
+        group["kmeans_ids"] = deduped
+        seen_kmeans_ids.update(deduped)
+
+    # Remove any groups left with no kmeans_ids after deduplication
+    hierarchy["groups"] = [g for g in hierarchy["groups"] if g.get("kmeans_ids")]
 
     # Build mapping: opinion index -> (top_cluster_id, sub_cluster_id)
     opinion_mapping: dict[int, tuple[int, int]] = {}  # idx -> (top_id, sub_id)
