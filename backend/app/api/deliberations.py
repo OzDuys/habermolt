@@ -997,84 +997,105 @@ def _compute_opinion_clusters(
 def _compute_clusters_direct(
     deliberation, embedded, matrix, coords, agent_name_map, total, db,
 ) -> dict:
-    """LLM directly assigns each opinion to a top-level group.
-    K-means finds sub-clusters within each group if large enough."""
-    from sklearn.cluster import KMeans
+    """LLM assigns each opinion to a top-level group (accurate by position).
+    K-means runs on the full space and its clusters become sub-clusters,
+    mapped to whichever top-level group holds the majority of their opinions.
 
-    # LLM assigns each opinion to a group
+    This gives you both:
+    - LLM accuracy for top-level grouping (Employees vs Companies)
+    - K-means embedding structure for sub-clusters (reasoning similarity)
+    """
+    from sklearn.cluster import KMeans
+    from collections import Counter
+
+    # 1. K-means on full embedding space
+    optimal_k = _find_optimal_k(matrix)
+    km = KMeans(n_clusters=optimal_k, n_init=3, random_state=42)
+    kmeans_labels = km.fit_predict(matrix)
+
+    # 2. LLM assigns each opinion to a top-level group
     opinions_for_llm = [(i, o.opinion_text) for i, o in enumerate(embedded)]
     hierarchy = _llm_direct_cluster(deliberation.question, opinions_for_llm, db)
 
-    # Build index sets per group and deduplicate
-    all_indices = set(range(total))
-    opinion_mapping: dict[int, tuple[int, int]] = {}
-
+    # Parse LLM response — build opinion_index -> top_group_id mapping
     groups = hierarchy.get("groups", [])
-    group_indices: list[list[int]] = []
+    all_indices = set(range(total))
+    llm_assignment: dict[int, int] = {}  # opinion_index -> top_group_id
     seen: set[int] = set()
+    valid_groups: list[dict] = []
     for group in groups:
         raw_indices = group.get("opinion_indices", [])
         deduped = [idx for idx in raw_indices if idx in all_indices and idx not in seen]
         seen.update(deduped)
-        group_indices.append(deduped)
+        if deduped:
+            gid = len(valid_groups)
+            for idx in deduped:
+                llm_assignment[idx] = gid
+            valid_groups.append({**group, "_indices": deduped})
 
-    # Assign any unassigned opinions to the largest group
+    # Assign unassigned opinions to the largest group
     unassigned = all_indices - seen
-    if unassigned and group_indices:
-        largest = max(range(len(group_indices)), key=lambda i: len(group_indices[i]))
-        group_indices[largest].extend(unassigned)
+    if unassigned and valid_groups:
+        largest = max(range(len(valid_groups)), key=lambda i: len(valid_groups[i]["_indices"]))
+        for idx in unassigned:
+            llm_assignment[idx] = largest
+        valid_groups[largest]["_indices"].extend(unassigned)
 
-    # Remove empty groups
-    non_empty = [(groups[i], group_indices[i]) for i in range(len(groups)) if group_indices[i]]
+    # 3. Map each k-means cluster to the top-level group that holds the majority
+    #    of its opinions — k-means clusters become sub-clusters
+    kmeans_to_top: dict[int, int] = {}  # kmeans_cluster_id -> top_group_id
+    kmeans_indices: dict[int, list[int]] = {}
+    for i in range(total):
+        kid = int(kmeans_labels[i])
+        kmeans_indices.setdefault(kid, []).append(i)
 
-    # Generate colors
-    sub_counts_list = []
-    top_labels = []
-    for group, indices in non_empty:
-        top_labels.append(group.get("label", "Group"))
-        # Sub-cluster count: k-means within group if >= 4 opinions
-        if len(indices) >= 4:
-            group_matrix = matrix[indices]
-            sub_k = _find_optimal_k(group_matrix, max_k=4, min_k=2)
-            sub_counts_list.append(sub_k)
-        else:
-            sub_counts_list.append(1)
+    for kid, indices in kmeans_indices.items():
+        # Majority vote: which top-level group do most opinions in this k-means cluster belong to?
+        votes = Counter(llm_assignment.get(idx, 0) for idx in indices)
+        kmeans_to_top[kid] = votes.most_common(1)[0][0]
 
-    top_colors, sub_color_lists = _generate_cluster_colors(len(non_empty), sub_counts_list, top_labels)
+    # Build top_group -> list of kmeans_cluster_ids
+    top_to_kmeans: dict[int, list[int]] = {}
+    for kid, gid in kmeans_to_top.items():
+        top_to_kmeans.setdefault(gid, []).append(kid)
+
+    # 4. Build output
+    opinion_mapping: dict[int, tuple[int, int]] = {}
+
+    sub_counts = [len(top_to_kmeans.get(gid, [])) for gid in range(len(valid_groups))]
+    top_labels = [g.get("label", "Group") for g in valid_groups]
+    top_colors, sub_color_lists = _generate_cluster_colors(len(valid_groups), sub_counts, top_labels)
 
     clusters_info = []
-    for top_id, (group, indices) in enumerate(non_empty):
+    for top_id, group in enumerate(valid_groups):
         top_label = group.get("label", f"Group {top_id + 1}")
-        top_count = len(indices)
+        group_opinion_indices = group["_indices"]
+        top_count = len(group_opinion_indices)
+
+        kmeans_ids_in_group = sorted(top_to_kmeans.get(top_id, []))
 
         sub_clusters_info = []
-        if top_count >= 4:
-            # K-means sub-clustering within this group
-            group_matrix = matrix[indices]
-            sub_k = _find_optimal_k(group_matrix, max_k=4, min_k=2)
-            km = KMeans(n_clusters=sub_k, n_init=3, random_state=42)
-            sub_labels = km.fit_predict(group_matrix)
+        for sub_id, kid in enumerate(kmeans_ids_in_group):
+            # Only include opinions that are BOTH in this k-means cluster AND this top-level group
+            kid_indices = [idx for idx in kmeans_indices[kid] if llm_assignment.get(idx) == top_id]
+            sub_color = sub_color_lists[top_id][sub_id] if sub_id < len(sub_color_lists[top_id]) else top_colors[top_id]
 
-            # Group indices by sub-cluster
-            sub_groups: dict[int, list[int]] = {}
-            for local_i, global_i in enumerate(indices):
-                sid = int(sub_labels[local_i])
-                sub_groups.setdefault(sid, []).append(global_i)
-                opinion_mapping[global_i] = (top_id, sid)
+            for idx in kid_indices:
+                opinion_mapping[idx] = (top_id, sub_id)
 
-            if sub_k > 1:
-                for sid in sorted(sub_groups.keys()):
-                    sub_idxs = sub_groups[sid]
-                    sub_color = sub_color_lists[top_id][sid] if sid < len(sub_color_lists[top_id]) else top_colors[top_id]
-                    sub_clusters_info.append({
-                        "sub_cluster_id": sid,
-                        "label": f"Subgroup {sid + 1}",
-                        "color": sub_color,
-                        "count": len(sub_idxs),
-                        "percentage": round(len(sub_idxs) / total * 100, 1),
-                    })
-        else:
-            for idx in indices:
+            if len(kmeans_ids_in_group) > 1 and kid_indices:
+                sub_clusters_info.append({
+                    "sub_cluster_id": sub_id,
+                    "label": f"Subgroup {sub_id + 1}",
+                    "color": sub_color,
+                    "count": len(kid_indices),
+                    "percentage": round(len(kid_indices) / total * 100, 1),
+                })
+
+        # Catch any opinions assigned to this top group but not yet mapped
+        # (edge case: k-means cluster mapped to a different top group by majority)
+        for idx in group_opinion_indices:
+            if idx not in opinion_mapping:
                 opinion_mapping[idx] = (top_id, 0)
 
         clusters_info.append({
