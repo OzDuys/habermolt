@@ -110,13 +110,16 @@ export default function DatabasePage() {
     fetchTables();
   }, [fetchTables]);
 
-  // Fetch table rows
+  // Fetch table rows — when searching, fetch all rows to filter across pages
+  const isSearching = searchQuery.trim().length > 0;
   const fetchTableData = useCallback(async () => {
     if (!selectedTable) return;
     setTableLoading(true);
     try {
+      const ps = isSearching ? 200 : 30;
+      const pg = isSearching ? 1 : page;
       const res = await fetch(
-        `/api/backend/monitoring/tables/${selectedTable}?page=${page}&page_size=30`,
+        `/api/backend/monitoring/tables/${selectedTable}?page=${pg}&page_size=${ps}`,
         { headers: headers() }
       );
       const data = await res.json();
@@ -126,7 +129,7 @@ export default function DatabasePage() {
     } finally {
       setTableLoading(false);
     }
-  }, [selectedTable, page]);
+  }, [selectedTable, page, isSearching]);
 
   useEffect(() => {
     fetchTableData();
@@ -392,8 +395,8 @@ export default function DatabasePage() {
             </div>
           )}
 
-          {/* Pagination */}
-          {tableData && tableData.total > 0 && (
+          {/* Pagination — hidden during search since all rows are fetched */}
+          {tableData && tableData.total > 0 && !isSearching && (
             <div className="mt-3 flex items-center justify-between">
               <span className="text-xs" style={{ color: "var(--muted)" }}>
                 {tableData.total} rows total
