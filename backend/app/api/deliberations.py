@@ -803,6 +803,68 @@ def _find_optimal_k(matrix: np.ndarray, max_k: int = 8, min_k: int = 3) -> int:
     return best_k
 
 
+LLM_DIRECT_ASSIGN_THRESHOLD = 50  # Below this, LLM assigns opinions directly
+
+
+def _llm_direct_cluster(
+    question: str,
+    opinions: list[tuple[int, str]],  # (index, opinion_text)
+    db: Session,
+) -> dict:
+    """LLM directly assigns each opinion to a top-level group.
+
+    Used when opinion count is small enough. More accurate than k-means
+    because the LLM understands the question and groups by position, not
+    writing style.
+
+    Returns same format as _generate_hierarchical_labels:
+    {"groups": [{"label": "...", "opinion_indices": [0, 2, 5], ...}, ...]}
+    """
+    from app.services.llm_client import LLMClient
+
+    opinion_list = "\n".join(
+        f"{idx}. {text[:300]}" for idx, text in opinions
+    )
+
+    prompt = (
+        f'Question being deliberated: "{question}"\n\n'
+        f"Below are {len(opinions)} opinions. Assign EACH opinion to a top-level position "
+        f"(2-5 groups based on WHAT they believe).\n\n"
+        f"{opinion_list}\n\n"
+        "RULES:\n"
+        "- Top-level labels must be 1-3 words (e.g. \"Yes\", \"No\", \"OpenAI\", \"Google\", \"Mixed\")\n"
+        "- For yes/no questions, use \"Yes\", \"No\", and optionally \"Mixed\"\n"
+        "- For \"who/which\" questions, use the entity names\n"
+        "- NEVER use abstract phrases like \"structural advantages\" or \"democratic agency\"\n"
+        "- Labels should be what you'd put on a pie chart\n"
+        "- Group by WHAT they believe, not HOW they express it\n"
+        "- Every opinion number must appear in exactly one group\n\n"
+        "Return ONLY JSON:\n"
+        '{"groups": [\n'
+        '  {"label": "Yes", "opinion_indices": [0, 2, 5]},\n'
+        '  {"label": "No", "opinion_indices": [1, 3, 4]}\n'
+        "]}\n"
+        "No other text."
+    )
+
+    try:
+        client = LLMClient()
+        client.set_trace_context(trace_type="opinion_cluster_direct")
+        raw = client.sample_text(prompt, temperature=0.3, max_tokens=1024)
+        import json
+        start = raw.find("{")
+        end = raw.rfind("}") + 1
+        if start >= 0 and end > start:
+            result = json.loads(raw[start:end])
+            if "groups" in result:
+                return result
+    except Exception as e:
+        logger.warning(f"Failed LLM direct clustering: {e}")
+
+    # Fallback: single group
+    return {"groups": [{"label": "All", "opinion_indices": [idx for idx, _ in opinions]}]}
+
+
 def _generate_hierarchical_labels(
     question: str,
     kmeans_clusters: dict[int, list[str]],
@@ -840,7 +902,8 @@ def _generate_hierarchical_labels(
         "- Labels should be what you'd put on a pie chart\n"
         "- Sub-labels should be 2-4 words explaining WHY within that position\n"
         "- If a top-level group only has one sub-group, still include it\n"
-        "- Every group number must appear in exactly one top-level position\n\n"
+        "- Every group number must appear in exactly one top-level position\n"
+        "- NEVER put the same group number in multiple positions\n\n"
         "Return ONLY JSON in this exact format:\n"
         '{"groups": [\n'
         '  {"label": "Yes", "kmeans_ids": [0, 2], "sub_labels": {"0": "Safety risks", "2": "Job concerns"}},\n'
@@ -888,12 +951,12 @@ def _compute_opinion_clusters(
     latest_opinions: list,
     db: Session,
 ) -> dict:
-    """Compute hierarchical opinion clusters: embed → PCA → k-means → LLM grouping.
+    """Compute hierarchical opinion clusters.
 
-    Hybrid approach:
-    - K-means handles scale (works for any number of opinions)
-    - LLM groups k-means clusters into simple top-level positions (Yes/No/OpenAI/etc.)
-    - K-means clusters become sub-clusters under the LLM's groupings
+    Two paths:
+    - Small (≤50 opinions): LLM directly assigns each opinion to a position,
+      then k-means finds sub-clusters within each group.
+    - Large (>50 opinions): k-means first, then LLM groups k-means clusters.
     """
     # Lazy embedding for any opinions missing embeddings
     missing = [o for o in latest_opinions if o.opinion_embedding is None]
@@ -914,20 +977,150 @@ def _compute_opinion_clusters(
     matrix = np.array([list(o.opinion_embedding) for o in embedded], dtype=np.float64)
     coords = _compute_pca_2d(matrix)
 
-    # K-means clustering (fine-grained)
-    from sklearn.cluster import KMeans
-    optimal_k = _find_optimal_k(matrix)
-    km = KMeans(n_clusters=optimal_k, n_init=3, random_state=42)
-    kmeans_labels = km.fit_predict(matrix)
-
     # Build agent name map
     agent_ids = [o.agent_id for o in embedded]
     agents_db = db.query(Agent).filter(Agent.id.in_(agent_ids)).all()
     agent_name_map = {a.id: a.name for a in agents_db}
 
+    total = len(embedded)
+
+    if total <= LLM_DIRECT_ASSIGN_THRESHOLD:
+        return _compute_clusters_direct(
+            deliberation, embedded, matrix, coords, agent_name_map, total, db,
+        )
+    else:
+        return _compute_clusters_kmeans(
+            deliberation, embedded, matrix, coords, agent_name_map, total, db,
+        )
+
+
+def _compute_clusters_direct(
+    deliberation, embedded, matrix, coords, agent_name_map, total, db,
+) -> dict:
+    """LLM directly assigns each opinion to a top-level group.
+    K-means finds sub-clusters within each group if large enough."""
+    from sklearn.cluster import KMeans
+
+    # LLM assigns each opinion to a group
+    opinions_for_llm = [(i, o.opinion_text) for i, o in enumerate(embedded)]
+    hierarchy = _llm_direct_cluster(deliberation.question, opinions_for_llm, db)
+
+    # Build index sets per group and deduplicate
+    all_indices = set(range(total))
+    opinion_mapping: dict[int, tuple[int, int]] = {}
+
+    groups = hierarchy.get("groups", [])
+    group_indices: list[list[int]] = []
+    seen: set[int] = set()
+    for group in groups:
+        raw_indices = group.get("opinion_indices", [])
+        deduped = [idx for idx in raw_indices if idx in all_indices and idx not in seen]
+        seen.update(deduped)
+        group_indices.append(deduped)
+
+    # Assign any unassigned opinions to the largest group
+    unassigned = all_indices - seen
+    if unassigned and group_indices:
+        largest = max(range(len(group_indices)), key=lambda i: len(group_indices[i]))
+        group_indices[largest].extend(unassigned)
+
+    # Remove empty groups
+    non_empty = [(groups[i], group_indices[i]) for i in range(len(groups)) if group_indices[i]]
+
+    # Generate colors
+    sub_counts_list = []
+    top_labels = []
+    for group, indices in non_empty:
+        top_labels.append(group.get("label", "Group"))
+        # Sub-cluster count: k-means within group if >= 4 opinions
+        if len(indices) >= 4:
+            group_matrix = matrix[indices]
+            sub_k = _find_optimal_k(group_matrix, max_k=4, min_k=2)
+            sub_counts_list.append(sub_k)
+        else:
+            sub_counts_list.append(1)
+
+    top_colors, sub_color_lists = _generate_cluster_colors(len(non_empty), sub_counts_list, top_labels)
+
+    clusters_info = []
+    for top_id, (group, indices) in enumerate(non_empty):
+        top_label = group.get("label", f"Group {top_id + 1}")
+        top_count = len(indices)
+
+        sub_clusters_info = []
+        if top_count >= 4:
+            # K-means sub-clustering within this group
+            group_matrix = matrix[indices]
+            sub_k = _find_optimal_k(group_matrix, max_k=4, min_k=2)
+            km = KMeans(n_clusters=sub_k, n_init=3, random_state=42)
+            sub_labels = km.fit_predict(group_matrix)
+
+            # Group indices by sub-cluster
+            sub_groups: dict[int, list[int]] = {}
+            for local_i, global_i in enumerate(indices):
+                sid = int(sub_labels[local_i])
+                sub_groups.setdefault(sid, []).append(global_i)
+                opinion_mapping[global_i] = (top_id, sid)
+
+            if sub_k > 1:
+                for sid in sorted(sub_groups.keys()):
+                    sub_idxs = sub_groups[sid]
+                    sub_color = sub_color_lists[top_id][sid] if sid < len(sub_color_lists[top_id]) else top_colors[top_id]
+                    sub_clusters_info.append({
+                        "sub_cluster_id": sid,
+                        "label": f"Subgroup {sid + 1}",
+                        "color": sub_color,
+                        "count": len(sub_idxs),
+                        "percentage": round(len(sub_idxs) / total * 100, 1),
+                    })
+        else:
+            for idx in indices:
+                opinion_mapping[idx] = (top_id, 0)
+
+        clusters_info.append({
+            "cluster_id": top_id,
+            "label": top_label,
+            "color": top_colors[top_id],
+            "count": top_count,
+            "percentage": round(top_count / total * 100, 1),
+            "sub_clusters": sub_clusters_info,
+        })
+
+    points = [
+        {
+            "id": str(o.id),
+            "agent_id": str(o.agent_id),
+            "agent_name": agent_name_map.get(o.agent_id, "Agent"),
+            "x": float(coords[i, 0]),
+            "y": float(coords[i, 1]),
+            "cluster": opinion_mapping.get(i, (0, 0))[0],
+            "sub_cluster": opinion_mapping.get(i, (0, 0))[1],
+            "opinion_text": o.opinion_text,
+        }
+        for i, o in enumerate(embedded)
+    ]
+
+    return {
+        "points": points,
+        "clusters": clusters_info,
+        "total": total,
+        "deliberation_id": str(deliberation.id),
+    }
+
+
+def _compute_clusters_kmeans(
+    deliberation, embedded, matrix, coords, agent_name_map, total, db,
+) -> dict:
+    """K-means first (for scale), then LLM groups k-means clusters into positions."""
+    from sklearn.cluster import KMeans
+
+    optimal_k = _find_optimal_k(matrix)
+    km = KMeans(n_clusters=optimal_k, n_init=3, random_state=42)
+    kmeans_labels = km.fit_predict(matrix)
+
     # Build k-means cluster -> opinion texts map
     kmeans_opinions: dict[int, list[str]] = {}
-    kmeans_indices: dict[int, list[int]] = {}  # k-means cluster -> opinion indices
+    kmeans_indices: dict[int, list[int]] = {}
     for i, o in enumerate(embedded):
         cid = int(kmeans_labels[i])
         kmeans_opinions.setdefault(cid, []).append(o.opinion_text)
@@ -947,20 +1140,15 @@ def _compute_opinion_clusters(
                 f"Duplicate kmeans_ids {removed} in group '{group.get('label')}' — "
                 f"k-means clusters don't cleanly map to LLM positions. Deduplicating."
             )
-            # Also clean sub_labels
             sub_labels = group.get("sub_labels", {})
             group["sub_labels"] = {k: v for k, v in sub_labels.items() if int(k) not in removed}
         group["kmeans_ids"] = deduped
         seen_kmeans_ids.update(deduped)
 
-    # Remove any groups left with no kmeans_ids after deduplication
     hierarchy["groups"] = [g for g in hierarchy["groups"] if g.get("kmeans_ids")]
 
-    # Build mapping: opinion index -> (top_cluster_id, sub_cluster_id)
-    opinion_mapping: dict[int, tuple[int, int]] = {}  # idx -> (top_id, sub_id)
-    total = len(embedded)
+    opinion_mapping: dict[int, tuple[int, int]] = {}
 
-    # Generate colors (Yes→green, No→red, others get default hues)
     sub_counts = [len(g.get("kmeans_ids", [])) for g in hierarchy["groups"]]
     top_labels = [g.get("label", "") for g in hierarchy["groups"]]
     top_colors, sub_color_lists = _generate_cluster_colors(len(hierarchy["groups"]), sub_counts, top_labels)
@@ -971,7 +1159,6 @@ def _compute_opinion_clusters(
         kmeans_ids = group.get("kmeans_ids", [])
         sub_labels = group.get("sub_labels", {})
 
-        # Count total opinions in this top-level cluster
         top_count = sum(len(kmeans_indices.get(kid, [])) for kid in kmeans_ids)
 
         sub_clusters_info = []
