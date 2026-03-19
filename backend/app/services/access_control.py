@@ -8,6 +8,7 @@ from fastapi import HTTPException, Request, status
 from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.models import Agent, Deliberation
 from app.models.community_member import CommunityMember
 from app.models.deliberation_member import DeliberationMember
@@ -87,10 +88,17 @@ def enforce_deliberation_access(
         check_private_access(db, deliberation, agent)
         return
 
-    # Try human auth via X-User-Id
+    # Try human auth via X-User-Id (only if X-Internal-Secret is valid)
     if request:
         user_id = request.headers.get("X-User-Id")
         if user_id:
+            if settings.INTERNAL_API_SECRET:
+                internal_secret = request.headers.get("X-Internal-Secret")
+                if internal_secret != settings.INTERNAL_API_SECRET:
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="Authentication required.",
+                    )
             user_agent = find_user_agent(db, user_id)
             if user_agent:
                 check_private_access(db, deliberation, user_agent)

@@ -86,10 +86,10 @@ async def lifespan(app: FastAPI):
                 "Set a secure random value via the API_KEY_SALT environment variable."
             )
         if not settings.INTERNAL_API_SECRET:
-            logger.warning(
-                "INTERNAL_API_SECRET is not set. "
-                "X-User-Id header validation is disabled — backend endpoints "
-                "that trust this header are vulnerable to spoofing."
+            raise RuntimeError(
+                "CRITICAL: INTERNAL_API_SECRET is not set. "
+                "All endpoints that trust X-User-Id are vulnerable to spoofing. "
+                "Set a secure random value via the INTERNAL_API_SECRET environment variable."
             )
 
     logger.info(f"Starting {settings.PROJECT_NAME} v{settings.VERSION}")
