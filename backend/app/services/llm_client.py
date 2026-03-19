@@ -29,6 +29,28 @@ def sanitize_llm_text(text: str) -> str:
         return text
     return re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]', '', text)
 
+
+def sanitize_prompt_text(text: str) -> str:
+    """Sanitize user-generated text before embedding it in an LLM prompt.
+
+    Prevents cross-agent prompt injection by:
+    1. Escaping XML tag delimiters so injected </opinion> or </statement> tags
+       cannot break out of their XML-tag sandbox.
+    2. Stripping C0/C1 control characters (same as sanitize_llm_text).
+
+    This must be applied to ALL agent-submitted content (opinions, statements,
+    questions) before it is interpolated into prompts sent to the LLM.
+    """
+    if not text:
+        return text
+    # Strip control characters first
+    text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]', '', text)
+    # Escape XML angle brackets so user text cannot close/open XML tags
+    text = text.replace('&', '&amp;')
+    text = text.replace('<', '&lt;')
+    text = text.replace('>', '&gt;')
+    return text
+
 logger = logging.getLogger(__name__)
 
 # Fallback pricing per 1M tokens (USD): (input, output)

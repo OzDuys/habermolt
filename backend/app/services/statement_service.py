@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models import Deliberation, Statement
-from app.services.llm_client import LLMClient
+from app.services.llm_client import LLMClient, sanitize_prompt_text
 
 logger = logging.getLogger(__name__)
 
@@ -77,9 +77,9 @@ def _build_opinion_only_prompt(
     opinions: list[str],
 ) -> str:
     """User prompt for the initial round (opinions only)."""
-    lines = [f"Question: {question}", "", "Individual opinions:"]
+    lines = [f"Question: {sanitize_prompt_text(question)}", "", "Individual opinions:"]
     for i, opinion in enumerate(opinions):
-        lines.append(f"  Person {i + 1}: <opinion>{opinion}</opinion>")
+        lines.append(f"  Person {i + 1}: <opinion>{sanitize_prompt_text(opinion)}</opinion>")
     lines.append("")
     lines.append(
         "Analyze the opinions above (within <opinion> tags), identify the "
@@ -259,7 +259,7 @@ class StatementService:
         client = next(iter(self.clients.values()))
 
         statements_text = "\n".join(
-            f"{i + 1}. {s.statement_text}" for i, s in enumerate(statements)
+            f"{i + 1}. {sanitize_prompt_text(s.statement_text)}" for i, s in enumerate(statements)
         )
 
         prompt = (

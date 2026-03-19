@@ -32,7 +32,7 @@ from app.models.hosted_agent import HostedAgent
 from app.models.agent_session import AgentSession
 from app.services.continuous_deliberation_service import ContinuousDeliberationService
 from app.services.hosted_agent_service import track_tokens_from_latest_trace
-from app.services.llm_client import LLMClient
+from app.services.llm_client import LLMClient, sanitize_prompt_text
 
 logger = logging.getLogger(__name__)
 
@@ -294,14 +294,14 @@ def _build_full_context(db: Session, agent: Agent, deliberation: Deliberation, i
         display_name = human_name or agent_name or "Anonymous"
         is_self = opinion.agent_id == agent.id
         label = f"{display_name} (you)" if is_self else display_name
-        opinions_lines.append(f"- {label}: {opinion.opinion_text[:200]}")
+        opinions_lines.append(f"- {label}: {sanitize_prompt_text(opinion.opinion_text[:200])}")
     all_opinions_info = "\n".join(opinions_lines) if opinions_lines else "No opinions submitted yet."
 
     # Statements with social rankings
     statements_lines = []
     for s in statements:
         rank_str = f"(#{s.social_ranking})" if s.social_ranking else ""
-        statements_lines.append(f"- [{s.id}] {rank_str} {s.title or 'Untitled'}: {s.statement_text[:150]}")
+        statements_lines.append(f"- [{s.id}] {rank_str} {sanitize_prompt_text(s.title or 'Untitled')}: {sanitize_prompt_text(s.statement_text[:150])}")
     statements_info = "\n".join(statements_lines) if statements_lines else "No statements yet."
 
     # User-specific section (opinion + rankings if participating)
@@ -312,7 +312,7 @@ def _build_full_context(db: Session, agent: Agent, deliberation: Deliberation, i
             and_(Ranking.deliberation_id == deliberation.id, Ranking.agent_id == agent.id)
         ).first()
 
-        opinion_info = user_opinion.opinion_text if user_opinion else "No opinion submitted yet."
+        opinion_info = sanitize_prompt_text(user_opinion.opinion_text) if user_opinion else "No opinion submitted yet."
 
         if ranking and ranking.statement_rankings:
             stmt_map = {str(s.id): s for s in statements}
@@ -322,7 +322,7 @@ def _build_full_context(db: Session, agent: Agent, deliberation: Deliberation, i
                 s = stmt_map.get(r["statement_id"])
                 predicted = " (predicted)" if r.get("is_predicted") else ""
                 if s:
-                    rankings_lines.append(f"  {r['rank']}. [{s.id}] {s.title or 'Untitled'}: {s.statement_text[:100]}{predicted}")
+                    rankings_lines.append(f"  {r['rank']}. [{s.id}] {sanitize_prompt_text(s.title or 'Untitled')}: {sanitize_prompt_text(s.statement_text[:100])}{predicted}")
             rankings_info = "\n".join(rankings_lines) if rankings_lines else "No rankings yet."
         else:
             rankings_info = "No rankings yet."
@@ -823,7 +823,7 @@ def _do_ranking_for_agent(db: Session, agent: Agent, deliberation: Deliberation)
     profile = hosted.user_profile if hosted and hosted.user_profile else "No profile available"
 
     stmt_list = "\n".join(
-        f"- ID: {s.id} | {s.title or 'Untitled'}: {s.statement_text}"
+        f"- ID: {s.id} | {sanitize_prompt_text(s.title or 'Untitled')}: {sanitize_prompt_text(s.statement_text)}"
         for s in statements
     )
 
@@ -835,13 +835,13 @@ def _do_ranking_for_agent(db: Session, agent: Agent, deliberation: Deliberation)
     )
 
     prompt = (
-        f"Deliberation question: \"{deliberation.question}\"\n\n"
+        f"Deliberation question: \"{sanitize_prompt_text(deliberation.question)}\"\n\n"
         f"Statements to rank:\n{stmt_list}\n\n"
         f"Rank them by listing their IDs from best to worst."
     )
     response = client.sample_text(
         prompt=prompt,
-        system_prompt=RANKING_SYSTEM_PROMPT.format(profile=profile, opinion=opinion.opinion_text),
+        system_prompt=RANKING_SYSTEM_PROMPT.format(profile=profile, opinion=sanitize_prompt_text(opinion.opinion_text)),
         temperature=0.3,
     )
 
@@ -898,7 +898,7 @@ def _do_propose_for_agent(db: Session, agent: Agent, deliberation: Deliberation)
         return
 
     opinions_text = "\n".join(
-        f"- Agent {i + 1}: {o.opinion_text}" for i, o in enumerate(opinions)
+        f"- Agent {i + 1}: {sanitize_prompt_text(o.opinion_text)}" for i, o in enumerate(opinions)
     )
 
     hosted = db.query(HostedAgent).filter(HostedAgent.agent_id == agent.id).first()
@@ -912,7 +912,7 @@ def _do_propose_for_agent(db: Session, agent: Agent, deliberation: Deliberation)
     )
 
     prompt = (
-        f"Deliberation question: \"{deliberation.question}\"\n\n"
+        f"Deliberation question: \"{sanitize_prompt_text(deliberation.question)}\"\n\n"
         f"{opinions_text}\n\n"
         f"Propose a consensus statement."
     )

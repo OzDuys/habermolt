@@ -8,7 +8,7 @@ import logging
 import re
 from typing import List
 
-from app.services.llm_client import LLMClient
+from app.services.llm_client import LLMClient, sanitize_prompt_text
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -34,17 +34,17 @@ def _build_prediction_prompt(
     """Build the prompt for ranking prediction."""
     lines = [
         "Participant's opinion on the topic:",
-        f"  <opinion>{opinion}</opinion>",
+        f"  <opinion>{sanitize_prompt_text(opinion)}</opinion>",
         "",
         "Their current ranking of statements (1 = most preferred):",
     ]
     # Sort by rank
     sorted_ranking = sorted(current_ranking, key=lambda x: x["rank"])
     for entry in sorted_ranking:
-        lines.append(f"  {entry['rank']}. <statement>{entry['statement_text']}</statement>")
+        lines.append(f"  {entry['rank']}. <statement>{sanitize_prompt_text(entry['statement_text'])}</statement>")
 
     lines.append("")
-    lines.append(f"New statement to place: <statement>{new_statement}</statement>")
+    lines.append(f"New statement to place: <statement>{sanitize_prompt_text(new_statement)}</statement>")
     lines.append("")
     lines.append(
         f"At what position (1 to {len(current_ranking) + 1}) would this participant "

@@ -32,6 +32,7 @@ from app.services.hosted_agent_service import (
     track_tokens_from_latest_trace,
 )
 from app.services.continuous_deliberation_service import ContinuousDeliberationService
+from app.services.llm_client import sanitize_prompt_text
 from app.services import notification_service
 
 logger = logging.getLogger(__name__)
@@ -868,7 +869,7 @@ def _do_ranking(db: Session, hosted_agent: HostedAgent, delib_id: UUID) -> Optio
         return None
 
     stmt_list = "\n".join(
-        f"- ID: {s.id} | {s.title or 'Untitled'}: {s.statement_text}"
+        f"- ID: {s.id} | {sanitize_prompt_text(s.title or 'Untitled')}: {sanitize_prompt_text(s.statement_text)}"
         for s in statements
     )
 
@@ -880,10 +881,11 @@ def _do_ranking(db: Session, hosted_agent: HostedAgent, delib_id: UUID) -> Optio
         hosted_agent_id=hosted_agent.id,
     )
 
-    prompt = f"Deliberation question: \"{db.query(Deliberation).get(delib_id).question}\"\n\nStatements to rank:\n{stmt_list}\n\nRank them by listing their IDs from best to worst."
+    delib_question = sanitize_prompt_text(db.query(Deliberation).get(delib_id).question)
+    prompt = f"Deliberation question: \"{delib_question}\"\n\nStatements to rank:\n{stmt_list}\n\nRank them by listing their IDs from best to worst."
     response = client.sample_text(
         prompt=prompt,
-        system_prompt=RANKING_SYSTEM_PROMPT.format(profile=profile, opinion=opinion.opinion_text),
+        system_prompt=RANKING_SYSTEM_PROMPT.format(profile=profile, opinion=sanitize_prompt_text(opinion.opinion_text)),
         temperature=0.3,
     )
 
@@ -943,7 +945,7 @@ def _do_add_statement(db: Session, hosted_agent: HostedAgent, delib_id: UUID) ->
         return None
 
     opinions_text = "\n".join(
-        f"- Agent {i + 1}: {o.opinion_text}" for i, o in enumerate(opinions)
+        f"- Agent {i + 1}: {sanitize_prompt_text(o.opinion_text)}" for i, o in enumerate(opinions)
     )
 
     delib = db.query(Deliberation).get(delib_id)
@@ -956,7 +958,8 @@ def _do_add_statement(db: Session, hosted_agent: HostedAgent, delib_id: UUID) ->
         hosted_agent_id=hosted_agent.id,
     )
 
-    prompt = f"Deliberation question: \"{delib.question}\"\n\n{opinions_text}\n\nPropose a consensus statement."
+    delib_question = sanitize_prompt_text(delib.question)
+    prompt = f"Deliberation question: \"{delib_question}\"\n\n{opinions_text}\n\nPropose a consensus statement."
     response = client.sample_text(
         prompt=prompt,
         system_prompt=STATEMENT_SYSTEM_PROMPT.format(profile=profile, opinions=opinions_text),
