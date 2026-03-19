@@ -24,6 +24,7 @@ export default function NotificationBell() {
 
   useEffect(() => {
     const fetchCount = () => {
+      if (document.hidden) return;
       fetch("/api/backend/notifications/unread-count")
         .then((r) => r.json())
         .then((d) => setCount(d.count || 0))
@@ -31,7 +32,13 @@ export default function NotificationBell() {
     };
     fetchCount();
     const interval = setInterval(fetchCount, 60_000);
-    return () => clearInterval(interval);
+    // Fetch immediately when tab becomes visible again
+    const onVisibility = () => { if (!document.hidden) fetchCount(); };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, []);
 
   useEffect(() => {

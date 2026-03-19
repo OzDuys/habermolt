@@ -1030,8 +1030,13 @@ export default function DeliberationPageClient() {
       }
     };
     load();
-    const iv = setInterval(load, 10000);
-    return () => clearInterval(iv);
+    const iv = setInterval(() => { if (!document.hidden) load(); }, 15000);
+    const onVisible = () => { if (!document.hidden) load(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(iv);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [id]);
 
   // Track which snap segment we're on via IntersectionObserver
