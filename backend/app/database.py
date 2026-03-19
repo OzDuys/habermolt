@@ -15,6 +15,10 @@ engine = create_engine(
     settings.DATABASE_URL,
     pool_pre_ping=True,  # Verify connections before using them
     echo=False,  # Disabled — SQL logging can leak sensitive data
+    pool_size=10,  # Base pool connections (default was 5)
+    max_overflow=20,  # Burst connections (default was 10)
+    pool_timeout=30,  # Seconds to wait before raising an error (instead of hanging forever)
+    pool_recycle=1800,  # Recycle connections after 30 min (prevents stale connections on Railway)
 )
 
 # Session factory

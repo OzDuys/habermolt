@@ -753,119 +753,151 @@ async def _generate_seed_statements(
     )
 
 
-def _do_ranking_for_agent(db: Session, agent: Agent, deliberation: Deliberation):
-    """Programmatically rank statements using LLM."""
+def _do_ranking_for_agent(agent_id: UUID, deliberation_id: UUID):
+    """Programmatically rank statements using LLM. Uses short-lived DB sessions."""
     from app.services.hosted_agent_runner import (
         RANKING_SYSTEM_PROMPT,
         _parse_ranking_response,
     )
 
-    opinion = db.query(Opinion).filter(
-        and_(Opinion.deliberation_id == deliberation.id, Opinion.agent_id == agent.id)
-    ).order_by(Opinion.version.desc()).first()
-    if not opinion:
-        return
+    # --- Read phase: extract all data needed for LLM call ---
+    db = SessionLocal()
+    try:
+        opinion = db.query(Opinion).filter(
+            and_(Opinion.deliberation_id == deliberation_id, Opinion.agent_id == agent_id)
+        ).order_by(Opinion.version.desc()).first()
+        if not opinion:
+            return
 
-    statements = db.query(Statement).filter(
-        Statement.deliberation_id == deliberation.id
-    ).all()
-    if not statements:
-        return
+        statements = db.query(Statement).filter(
+            Statement.deliberation_id == deliberation_id
+        ).all()
+        if not statements:
+            return
 
-    hosted = db.query(HostedAgent).filter(HostedAgent.agent_id == agent.id).first()
-    profile = hosted.user_profile if hosted and hosted.user_profile else "No profile available"
+        hosted = db.query(HostedAgent).filter(HostedAgent.agent_id == agent_id).first()
+        profile = hosted.user_profile if hosted and hosted.user_profile else "No profile available"
 
+        # Extract plain data before closing session
+        opinion_text = opinion.opinion_text
+        deliberation_question = db.query(Deliberation.question).filter(Deliberation.id == deliberation_id).scalar()
+        stmt_data = [(str(s.id), s.title, s.statement_text) for s in statements]
+        client = _get_llm_client(db, db.query(Agent).get(agent_id))
+    finally:
+        db.close()
+
+    # --- LLM call: no DB connection held ---
     stmt_list = "\n".join(
-        f"- ID: {s.id} | {sanitize_prompt_text(s.title or 'Untitled')}: {sanitize_prompt_text(s.statement_text)}"
-        for s in statements
+        f"- ID: {sid} | {sanitize_prompt_text(title or 'Untitled')}: {sanitize_prompt_text(text)}"
+        for sid, title, text in stmt_data
     )
 
-    client = _get_llm_client(db, agent)
     client.set_trace_context(
         trace_type="deliberation_chat_ranking",
-        deliberation_id=deliberation.id,
-        agent_id=agent.id,
+        deliberation_id=deliberation_id,
+        agent_id=agent_id,
     )
 
     prompt = (
-        f"Deliberation question: \"{sanitize_prompt_text(deliberation.question)}\"\n\n"
+        f"Deliberation question: \"{sanitize_prompt_text(deliberation_question)}\"\n\n"
         f"Statements to rank:\n{stmt_list}\n\n"
         f"Rank them by listing their IDs from best to worst."
     )
     response = client.sample_text(
         prompt=prompt,
-        system_prompt=RANKING_SYSTEM_PROMPT.format(profile=profile, opinion=sanitize_prompt_text(opinion.opinion_text)),
+        system_prompt=RANKING_SYSTEM_PROMPT.format(profile=profile, opinion=sanitize_prompt_text(opinion_text)),
         temperature=0.3,
     )
-
-    # Track tokens
-    if hosted:
-        track_tokens_from_latest_trace(db, hosted)
 
     if not response:
         return
 
-    rankings = _parse_ranking_response(response, statements)
-    if not rankings:
-        rankings = [{"statement_id": str(s.id), "rank": i + 1} for i, s in enumerate(statements)]
-
-    service = ContinuousDeliberationService(db)
+    # --- Write phase: save results ---
+    db = SessionLocal()
     try:
-        service.submit_ranking(deliberation, agent, rankings)
-    except ValueError as e:
-        logger.warning(f"Ranking submission failed: {e}")
+        # Track tokens
+        hosted = db.query(HostedAgent).filter(HostedAgent.agent_id == agent_id).first()
+        if hosted:
+            track_tokens_from_latest_trace(db, hosted)
+
+        # Re-fetch statements for parse (needs ORM objects for ID matching)
+        statements = db.query(Statement).filter(
+            Statement.deliberation_id == deliberation_id
+        ).all()
+        rankings = _parse_ranking_response(response, statements)
+        if not rankings:
+            rankings = [{"statement_id": str(s.id), "rank": i + 1} for i, s in enumerate(statements)]
+
+        deliberation = db.query(Deliberation).get(deliberation_id)
+        agent = db.query(Agent).get(agent_id)
+        service = ContinuousDeliberationService(db)
+        try:
+            service.submit_ranking(deliberation, agent, rankings)
+        except ValueError as e:
+            logger.warning(f"Ranking submission failed: {e}")
+    finally:
+        db.close()
 
 
-def _do_propose_for_agent(db: Session, agent: Agent, deliberation: Deliberation):
-    """Programmatically propose a consensus statement using LLM."""
+def _do_propose_for_agent(agent_id: UUID, deliberation_id: UUID):
+    """Programmatically propose a consensus statement using LLM. Uses short-lived DB sessions."""
     from app.services.hosted_agent_runner import (
         STATEMENT_SYSTEM_PROMPT,
         _parse_statement_response,
     )
 
-    agent_stmt_count = db.query(Statement).filter(
-        and_(
-            Statement.deliberation_id == deliberation.id,
-            Statement.contributed_by_agent_id == agent.id,
+    # --- Read phase: extract all data needed for LLM call ---
+    db = SessionLocal()
+    try:
+        agent_stmt_count = db.query(Statement).filter(
+            and_(
+                Statement.deliberation_id == deliberation_id,
+                Statement.contributed_by_agent_id == agent_id,
+            )
+        ).count()
+        if agent_stmt_count >= settings.CONTINUOUS_MAX_STATEMENTS_PER_AGENT:
+            return
+
+        latest_ver = (
+            db.query(Opinion.agent_id, func.max(Opinion.version).label("max_v"))
+            .filter(Opinion.deliberation_id == deliberation_id)
+            .group_by(Opinion.agent_id)
+            .subquery()
         )
-    ).count()
-    if agent_stmt_count >= settings.CONTINUOUS_MAX_STATEMENTS_PER_AGENT:
-        return
+        opinions = (
+            db.query(Opinion)
+            .join(latest_ver, and_(
+                Opinion.agent_id == latest_ver.c.agent_id,
+                Opinion.version == latest_ver.c.max_v,
+            ))
+            .filter(Opinion.deliberation_id == deliberation_id)
+            .all()
+        )
+        if not opinions:
+            return
 
-    latest_ver = (
-        db.query(Opinion.agent_id, func.max(Opinion.version).label("max_v"))
-        .filter(Opinion.deliberation_id == deliberation.id)
-        .group_by(Opinion.agent_id)
-        .subquery()
-    )
-    opinions = (
-        db.query(Opinion)
-        .join(latest_ver, and_(
-            Opinion.agent_id == latest_ver.c.agent_id,
-            Opinion.version == latest_ver.c.max_v,
-        ))
-        .filter(Opinion.deliberation_id == deliberation.id)
-        .all()
-    )
-    if not opinions:
-        return
+        opinions_text = "\n".join(
+            f"- Agent {i + 1}: {sanitize_prompt_text(o.opinion_text)}" for i, o in enumerate(opinions)
+        )
 
-    opinions_text = "\n".join(
-        f"- Agent {i + 1}: {sanitize_prompt_text(o.opinion_text)}" for i, o in enumerate(opinions)
-    )
+        hosted = db.query(HostedAgent).filter(HostedAgent.agent_id == agent_id).first()
+        profile = hosted.user_profile if hosted and hosted.user_profile else "No profile available"
 
-    hosted = db.query(HostedAgent).filter(HostedAgent.agent_id == agent.id).first()
-    profile = hosted.user_profile if hosted and hosted.user_profile else "No profile available"
+        deliberation_question = db.query(Deliberation.question).filter(Deliberation.id == deliberation_id).scalar()
+        agent = db.query(Agent).get(agent_id)
+        client = _get_llm_client(db, agent)
+    finally:
+        db.close()
 
-    client = _get_llm_client(db, agent)
+    # --- LLM call: no DB connection held ---
     client.set_trace_context(
         trace_type="deliberation_chat_statement",
-        deliberation_id=deliberation.id,
-        agent_id=agent.id,
+        deliberation_id=deliberation_id,
+        agent_id=agent_id,
     )
 
     prompt = (
-        f"Deliberation question: \"{sanitize_prompt_text(deliberation.question)}\"\n\n"
+        f"Deliberation question: \"{sanitize_prompt_text(deliberation_question)}\"\n\n"
         f"{opinions_text}\n\n"
         f"Propose a consensus statement."
     )
@@ -875,10 +907,6 @@ def _do_propose_for_agent(db: Session, agent: Agent, deliberation: Deliberation)
         temperature=0.7,
     )
 
-    # Track tokens
-    if hosted:
-        track_tokens_from_latest_trace(db, hosted)
-
     if not response:
         return
 
@@ -886,48 +914,70 @@ def _do_propose_for_agent(db: Session, agent: Agent, deliberation: Deliberation)
     if not statement_text:
         return
 
+    # --- Write phase: save results (add_statement also triggers ranking predictions) ---
     import asyncio
-    service = ContinuousDeliberationService(db)
+    db = SessionLocal()
     try:
-        asyncio.run(service.add_statement(deliberation, agent, statement_text, title))
-    except ValueError as e:
-        logger.warning(f"Statement submission failed: {e}")
+        # Track tokens
+        hosted = db.query(HostedAgent).filter(HostedAgent.agent_id == agent_id).first()
+        if hosted:
+            track_tokens_from_latest_trace(db, hosted)
+
+        deliberation = db.query(Deliberation).get(deliberation_id)
+        agent = db.query(Agent).get(agent_id)
+        service = ContinuousDeliberationService(db)
+        try:
+            asyncio.run(service.add_statement(deliberation, agent, statement_text, title))
+        except ValueError as e:
+            logger.warning(f"Statement submission failed: {e}")
+    finally:
+        db.close()
 
 
 def _update_profile_from_interview(
-    db: Session,
-    session: AgentSession,
-    agent: Agent,
-    deliberation: Deliberation,
+    session_id: UUID,
+    agent_id: UUID,
+    deliberation_id: UUID,
     opinion_text: str,
 ):
     """Extract profile-worthy learnings from the interview and append to user profile.
 
-    Runs as part of the background setup after submit_opinion. Uses a single LLM call
-    to distill what was learned about the user's values beyond just this topic.
+    Runs as part of the background setup after submit_opinion. Uses short-lived DB sessions
+    to avoid holding connections during the LLM call.
     """
-    hosted = db.query(HostedAgent).filter(HostedAgent.agent_id == agent.id).first()
-    if not hosted:
-        return
+    # --- Read phase: extract data for LLM call ---
+    db = SessionLocal()
+    try:
+        hosted = db.query(HostedAgent).filter(HostedAgent.agent_id == agent_id).first()
+        if not hosted:
+            return
 
-    # Build interview transcript from session messages
-    messages = session.messages or []
-    transcript_lines = []
-    for msg in messages:
-        role = msg.get("role", "")
-        content = msg.get("content", "")
-        if role == "user" and content:
-            transcript_lines.append(f"Human: {content}")
-        elif role == "assistant" and content:
-            transcript_lines.append(f"Agent: {content}")
-    if not transcript_lines:
-        return
+        session = db.query(AgentSession).get(session_id)
+        deliberation_question = db.query(Deliberation.question).filter(Deliberation.id == deliberation_id).scalar()
 
+        # Build interview transcript from session messages
+        messages = (session.messages or []) if session else []
+        transcript_lines = []
+        for msg in messages:
+            role = msg.get("role", "")
+            content = msg.get("content", "")
+            if role == "user" and content:
+                transcript_lines.append(f"Human: {content}")
+            elif role == "assistant" and content:
+                transcript_lines.append(f"Agent: {content}")
+        if not transcript_lines:
+            return
+
+        current_profile = hosted.user_profile or ""
+        hosted_id = hosted.id
+    finally:
+        db.close()
+
+    # --- LLM call: no DB connection held ---
     transcript = "\n".join(transcript_lines)
-    current_profile = hosted.user_profile or ""
 
     prompt = f"""A user just completed a short interview about this deliberation topic:
-"{sanitize_prompt_text(deliberation.question)}"
+"{sanitize_prompt_text(deliberation_question)}"
 
 Their submitted opinion: "{sanitize_prompt_text(opinion_text)}"
 
@@ -952,24 +1002,80 @@ Rules:
     try:
         client = LLMClient()
         result = client.sample_text(prompt=prompt, temperature=0.3, max_tokens=500)
-        track_tokens_from_latest_trace(db, hosted)
 
         result = result.strip()
         if not result or result == "NO_UPDATE":
+            # Still need to track tokens
+            db = SessionLocal()
+            try:
+                hosted = db.query(HostedAgent).get(hosted_id)
+                if hosted:
+                    track_tokens_from_latest_trace(db, hosted)
+            finally:
+                db.close()
             return
 
-        # Append to profile
-        if current_profile:
-            hosted.user_profile = current_profile.rstrip() + "\n\n" + result
-        else:
-            hosted.user_profile = result
-        hosted.profile_version += 1
-        db.commit()
-        logger.info(f"Updated profile for agent {agent.id} from deliberation interview")
+        # --- Write phase: save results ---
+        db = SessionLocal()
+        try:
+            hosted = db.query(HostedAgent).get(hosted_id)
+            if hosted:
+                track_tokens_from_latest_trace(db, hosted)
+                current = hosted.user_profile or ""
+                if current:
+                    hosted.user_profile = current.rstrip() + "\n\n" + result
+                else:
+                    hosted.user_profile = result
+                hosted.profile_version += 1
+                db.commit()
+                logger.info(f"Updated profile for agent {agent_id} from deliberation interview")
+        finally:
+            db.close()
 
     except Exception as e:
-        logger.error(f"Profile update from interview failed for agent {agent.id}: {e}", exc_info=True)
+        logger.error(f"Profile update from interview failed for agent {agent_id}: {e}", exc_info=True)
         # Non-fatal — don't block the rest of setup
+
+
+def _update_setup_progress(session_id: UUID, current_step: str, completed_step: str = None):
+    """Update setup progress using a short-lived DB session."""
+    db = SessionLocal()
+    try:
+        session = db.query(AgentSession).get(session_id)
+        if not session:
+            return
+        progress = dict(session.setup_progress or {})
+        progress["current_step"] = current_step
+        progress["last_updated"] = datetime.now(timezone.utc).isoformat()
+        if completed_step:
+            steps = list(progress.get("completed_steps", []))
+            steps.append(completed_step)
+            progress["completed_steps"] = steps
+        session.setup_progress = progress
+        db.commit()
+    finally:
+        db.close()
+
+
+def _append_setup_action(session_id: UUID, action: str, description: str, detail: str = ""):
+    """Persist a background action as a message using a short-lived DB session."""
+    db = SessionLocal()
+    try:
+        session = db.query(AgentSession).get(session_id)
+        if not session:
+            return
+        msgs = list(session.messages or [])
+        msgs.append({
+            "role": "action",
+            "action": action,
+            "status": "done",
+            "description": description,
+            "detail": detail,
+        })
+        session.messages = msgs
+        db.commit()
+    finally:
+        db.close()
 
 
 def _run_setup_background(
@@ -981,99 +1087,91 @@ def _run_setup_background(
 ):
     """Background thread: generate seed statements, rank, and propose consensus.
 
+    Uses short-lived DB sessions to avoid holding connections during LLM calls.
     On completion, sets session.phase = 'participating'.
     """
 
-    db = SessionLocal()
     try:
-        session = db.query(AgentSession).get(session_id)
-        agent = db.query(Agent).get(agent_id)
-        deliberation = db.query(Deliberation).get(deliberation_id)
-
-        if not all([session, agent, deliberation]):
-            logger.error(f"Background setup: missing objects for session {session_id}")
-            return
-
-        def _update_progress(current_step: str, completed_step: str = None):
-            progress = dict(session.setup_progress or {})
-            progress["current_step"] = current_step
-            progress["last_updated"] = datetime.now(timezone.utc).isoformat()
-            if completed_step:
-                steps = list(progress.get("completed_steps", []))
-                steps.append(completed_step)
-                progress["completed_steps"] = steps
-            session.setup_progress = progress
-            db.commit()
-
-        def _append_action(action: str, description: str, detail: str = ""):
-            """Persist a background action as a message in the session."""
-            msgs = list(session.messages or [])
-            msgs.append({
-                "role": "action",
-                "action": action,
-                "status": "done",
-                "description": description,
-                "detail": detail,
-            })
-            session.messages = msgs
-            db.commit()
+        # Verify objects exist
+        db = SessionLocal()
+        try:
+            exists = all([
+                db.query(AgentSession).get(session_id),
+                db.query(Agent).get(agent_id),
+                db.query(Deliberation).get(deliberation_id),
+            ])
+            if not exists:
+                logger.error(f"Background setup: missing objects for session {session_id}")
+                return
+        finally:
+            db.close()
 
         # Record start timestamp for stale detection
-        progress = dict(session.setup_progress or {})
-        progress["last_updated"] = datetime.now(timezone.utc).isoformat()
-        session.setup_progress = progress
-        db.commit()
+        _update_setup_progress(session_id, "profile_update")
 
         # Step 0: Update user profile with learnings from the interview
-        _update_profile_from_interview(db, session, agent, deliberation, opinion_text)
+        _update_profile_from_interview(session_id, agent_id, deliberation_id, opinion_text)
 
         # Step 1: Generate seed statements (if creator)
         if needs_seed:
             try:
                 import asyncio
-                asyncio.run(_generate_seed_statements(db, deliberation, opinion_text))
-                stmt_count = db.query(Statement).filter(
-                    Statement.deliberation_id == deliberation.id
-                ).count()
-                _append_action("seed_statements", f"Generated {stmt_count} consensus statements")
+                db = SessionLocal()
+                try:
+                    deliberation = db.query(Deliberation).get(deliberation_id)
+                    asyncio.run(_generate_seed_statements(db, deliberation, opinion_text))
+                    stmt_count = db.query(Statement).filter(
+                        Statement.deliberation_id == deliberation_id
+                    ).count()
+                finally:
+                    db.close()
+                _append_setup_action(session_id, "seed_statements", f"Generated {stmt_count} consensus statements")
             except Exception as e:
                 logger.error(f"Seed statement generation failed: {e}", exc_info=True)
-            _update_progress("ranking", "seed_statements")
+            _update_setup_progress(session_id, "ranking", "seed_statements")
 
-        # Step 2: Rank statements
-        _do_ranking_for_agent(db, agent, deliberation)
-        _append_action("rank_statements", "Ranked all statements based on your opinion")
-        _update_progress("proposing", "ranking")
+        # Step 2: Rank statements (manages its own sessions)
+        _do_ranking_for_agent(agent_id, deliberation_id)
+        _append_setup_action(session_id, "rank_statements", "Ranked all statements based on your opinion")
+        _update_setup_progress(session_id, "proposing", "ranking")
 
-        # Step 3: Propose consensus
-        _do_propose_for_agent(db, agent, deliberation)
-        _append_action("propose_statement", "Proposed a consensus statement on your behalf")
-        _update_progress("completed", "proposing")
+        # Step 3: Propose consensus (manages its own sessions)
+        _do_propose_for_agent(agent_id, deliberation_id)
+        _append_setup_action(session_id, "propose_statement", "Proposed a consensus statement on your behalf")
+        _update_setup_progress(session_id, "completed", "proposing")
 
         # Mark session as participating
-        session.phase = "participating"
-        session.status = "completed"
-        progress = dict(session.setup_progress or {})
-        progress["current_step"] = "completed"
-        progress["completed_steps"] = list(progress.get("completed_steps", [])) + ["completed"]
-        session.setup_progress = progress
-        db.commit()
+        db = SessionLocal()
+        try:
+            session = db.query(AgentSession).get(session_id)
+            if session:
+                session.phase = "participating"
+                session.status = "completed"
+                progress = dict(session.setup_progress or {})
+                progress["current_step"] = "completed"
+                progress["completed_steps"] = list(progress.get("completed_steps", [])) + ["completed"]
+                session.setup_progress = progress
+                db.commit()
+        finally:
+            db.close()
 
         logger.info(f"Background setup completed for session {session_id}")
 
     except Exception as e:
         logger.error(f"Background setup failed for session {session_id}: {e}", exc_info=True)
         try:
-            session = db.query(AgentSession).get(session_id)
-            if session:
-                progress = dict(session.setup_progress or {})
-                progress["error"] = str(e)
-                session.setup_progress = progress
-                db.commit()
+            db = SessionLocal()
+            try:
+                session = db.query(AgentSession).get(session_id)
+                if session:
+                    progress = dict(session.setup_progress or {})
+                    progress["error"] = str(e)
+                    session.setup_progress = progress
+                    db.commit()
+            finally:
+                db.close()
         except Exception:
             logger.error(f"Failed to update error status for session {session_id}", exc_info=True)
-    finally:
-        db.close()
 
 
 def retry_setup(db: Session, session: AgentSession):
