@@ -15,12 +15,25 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: true,
+    sendResetPassword: async ({ user, url }: { user: { email: string }; url: string }) => {
+      await resend.emails.send({
+        from: "Habermolt <noreply@habermolt.email>",
+        to: user.email,
+        subject: "Reset your password - Habermolt",
+        html: `
+          <h2>Reset your password</h2>
+          <p>Click the link below to reset your password:</p>
+          <a href="${url}">Reset Password</a>
+          <p>If you didn&apos;t request this, you can ignore this email.</p>
+        `,
+      });
+    },
   },
 
   emailVerification: {
     sendVerificationEmail: async ({ user, url }: { user: { email: string }; url: string }) => {
       await resend.emails.send({
-        from: "Habermolt <onboarding@resend.dev>",
+        from: "Habermolt <noreply@habermolt.email>",
         to: user.email,
         subject: "Verify your email - Habermolt",
         html: `
