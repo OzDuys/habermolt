@@ -45,6 +45,8 @@ export const auth = betterAuth({
       });
     },
     sendOnSignUp: true,
+    sendOnSignIn: true,
+    autoSignInAfterVerification: true,
   },
 
   socialProviders: {

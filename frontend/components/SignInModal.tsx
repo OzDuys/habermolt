@@ -3,7 +3,7 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { signIn, signUp, authClient } from "@/lib/auth-client";
 import { trackSignIn } from "@/lib/analytics";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 
 /**
  * After sign-in, the user is redirected back. Any component can check
@@ -19,7 +19,7 @@ export function consumeSignInIntent(): string | null {
   return intent;
 }
 
-type Mode = "signin" | "signup" | "forgot" | "check-email";
+type Mode = "signin" | "signup" | "forgot" | "check-email" | "verify-email";
 
 export default function SignInModal({
   open,
@@ -37,6 +37,8 @@ export default function SignInModal({
   const [name, setName] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const cooldownRef = useRef<NodeJS.Timeout | null>(null);
 
   // Reset state when modal opens/closes
   useEffect(() => {
@@ -47,6 +49,8 @@ export default function SignInModal({
       setName("");
       setError("");
       setLoading(false);
+      setResendCooldown(0);
+      if (cooldownRef.current) clearInterval(cooldownRef.current);
     }
   }, [open]);
 
@@ -58,6 +62,35 @@ export default function SignInModal({
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
   }, [open, onClose]);
+
+  const startResendCooldown = () => {
+    setResendCooldown(60);
+    if (cooldownRef.current) clearInterval(cooldownRef.current);
+    cooldownRef.current = setInterval(() => {
+      setResendCooldown((prev) => {
+        if (prev <= 1) {
+          clearInterval(cooldownRef.current!);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  const handleResendVerification = async () => {
+    if (resendCooldown > 0) return;
+    setError("");
+    setLoading(true);
+    try {
+      // Re-attempting sign-in triggers automatic resend (sendOnSignIn: true)
+      await signIn.email({ email, password });
+    } catch {
+      // ignore - expected to fail since email isn't verified yet
+    } finally {
+      startResendCooldown();
+      setLoading(false);
+    }
+  };
 
   const handleGoogleSignIn = async () => {
     if (intent) setSignInIntent(intent);
@@ -81,7 +114,12 @@ export default function SignInModal({
         callbackURL: window.location.pathname,
       });
       if (error) {
-        setError(error.message || "Invalid email or password");
+        if (error.message?.toLowerCase().includes("email not verified")) {
+          setMode("verify-email");
+          startResendCooldown();
+        } else {
+          setError(error.message || "Invalid email or password");
+        }
       }
     } catch {
       setError("Something went wrong. Please try again.");
@@ -137,6 +175,14 @@ export default function SignInModal({
     }
   };
 
+  const emailIcon = (
+    <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-stone-100">
+      <svg className="h-6 w-6 text-stone-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
+      </svg>
+    </div>
+  );
+
   return (
     <AnimatePresence>
       {open && (
@@ -175,13 +221,40 @@ export default function SignInModal({
             </button>
 
             <div className="p-6 py-8">
-              {mode === "check-email" ? (
+              {mode === "verify-email" ? (
                 <div className="text-center">
-                  <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-stone-100">
-                    <svg className="h-6 w-6 text-stone-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
-                    </svg>
-                  </div>
+                  {emailIcon}
+                  <h2 className="mb-2 font-handwritten text-2xl tracking-tight text-stone-800">
+                    Verify your email
+                  </h2>
+                  <p className="mb-4 text-sm text-stone-500">
+                    We sent a verification link to <span className="font-medium text-stone-700">{email}</span>. Please check your inbox and click the link to continue.
+                  </p>
+                  <p className="mb-4 text-xs text-stone-400">
+                    Check your spam folder if you don&apos;t see it.
+                  </p>
+                  <button
+                    onClick={handleResendVerification}
+                    disabled={resendCooldown > 0 || loading}
+                    className="mb-3 w-full rounded-lg border border-stone-200 bg-stone-50 px-4 py-2.5 text-sm font-medium text-stone-700 transition-colors hover:bg-stone-100 disabled:opacity-50"
+                  >
+                    {loading
+                      ? "Sending..."
+                      : resendCooldown > 0
+                        ? `Resend in ${resendCooldown}s`
+                        : "Resend verification email"}
+                  </button>
+                  {error && <p className="mb-3 text-xs text-red-500">{error}</p>}
+                  <button
+                    onClick={() => { setMode("signin"); setError(""); }}
+                    className="text-sm text-stone-500 underline hover:text-stone-700"
+                  >
+                    Back to sign in
+                  </button>
+                </div>
+              ) : mode === "check-email" ? (
+                <div className="text-center">
+                  {emailIcon}
                   <h2 className="mb-2 font-handwritten text-2xl tracking-tight text-stone-800">
                     Check your email
                   </h2>
