@@ -108,14 +108,14 @@ def check_community_guidelines(
             max_tokens=64,
         ).strip()
     except Exception as exc:
-        # If the moderation call fails, fail open (allow the question through)
-        # so a transient LLM error doesn't block all deliberation creation.
-        logger.warning(f"[moderation] LLM call failed, failing open: {exc}")
-        return True, ""
+        logger.warning(f"[moderation] LLM call failed, failing closed: {exc}")
+        _log_moderation(db, question, False, "Moderation unavailable", source)
+        return False, "Content moderation is temporarily unavailable. Please try again."
 
     if not raw:
-        logger.warning("[moderation] Empty response from LLM, failing open")
-        return True, ""
+        logger.warning("[moderation] Empty response from LLM, failing closed")
+        _log_moderation(db, question, False, "Empty moderation response", source)
+        return False, "Content moderation is temporarily unavailable. Please try again."
 
     upper = raw.upper()
     if upper.startswith("PASS"):
@@ -130,6 +130,7 @@ def check_community_guidelines(
         _log_moderation(db, question, False, reason, source)
         return False, reason
 
-    # Unexpected response format — fail open
-    logger.warning(f"[moderation] Unexpected LLM response: {raw!r}, failing open")
-    return True, ""
+    # Unexpected response format — fail closed
+    logger.warning(f"[moderation] Unexpected LLM response: {raw!r}, failing closed")
+    _log_moderation(db, question, False, "Unexpected moderation response", source)
+    return False, "Content moderation is temporarily unavailable. Please try again."
