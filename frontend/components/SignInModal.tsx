@@ -83,7 +83,7 @@ export default function SignInModal({
     setLoading(true);
     try {
       // Re-attempting sign-in triggers automatic resend (sendOnSignIn: true)
-      await signIn.email({ email, password, callbackURL: "/?verified=true" });
+      await signIn.email({ email, password, callbackURL: window.location.pathname });
     } catch {
       // ignore - expected to fail since email isn't verified yet
     } finally {
@@ -111,7 +111,7 @@ export default function SignInModal({
       const { error } = await signIn.email({
         email,
         password,
-        callbackURL: "/?verified=true",
+        callbackURL: window.location.pathname,
       });
       if (error) {
         if (error.message?.toLowerCase().includes("email not verified")) {
@@ -141,7 +141,7 @@ export default function SignInModal({
         name,
         email,
         password,
-        callbackURL: "/?verified=true",
+        callbackURL: window.location.pathname,
       });
       if (error) {
         setError(error.message || "Could not create account");

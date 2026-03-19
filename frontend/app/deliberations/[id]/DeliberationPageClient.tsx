@@ -7,7 +7,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { api } from "@/lib/api";
 import { useSession } from "@/lib/auth-client";
-import SignInModal from "@/components/SignInModal";
+import SignInModal, { consumeSignInIntent } from "@/components/SignInModal";
 import type { DeliberationDetail, ClusterPoint, OpinionClusterPoint, OpinionClusterInfo } from "@/lib/types";
 import { timeAgo } from "@/lib/utils";
 import { AGENT_COLORS, getAgentColor } from "@/lib/constants";
@@ -934,6 +934,15 @@ export default function DeliberationPageClient() {
   const handleJoinDeliberation = useCallback(() => {
     chatBubbleRef.current?.triggerJoin();
   }, []);
+
+  // Auto-open chat bubble after sign-in redirect (intent was set before OAuth/email sign-in)
+  useEffect(() => {
+    if (!session?.user || !data || loading || alreadyParticipating) return;
+    const intent = consumeSignInIntent();
+    if (intent === `deliberation-${id}` && agentType === "hosted") {
+      chatBubbleRef.current?.triggerJoin();
+    }
+  }, [session?.user, data, loading, alreadyParticipating, agentType, id]);
 
   // Auto-open chat bubble when redirected from invite page (?joined=true) or create page (?created=true)
   useEffect(() => {

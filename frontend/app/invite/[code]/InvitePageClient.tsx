@@ -1,12 +1,12 @@
 "use client";
 
-import { Suspense, useState, useEffect, useCallback } from "react";
+import { Suspense, useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "@/lib/auth-client";
 import { api } from "@/lib/api";
 import { trackJoinDeliberation } from "@/lib/analytics";
 import Link from "next/link";
-import SignInModal from "@/components/SignInModal";
+import SignInModal, { consumeSignInIntent } from "@/components/SignInModal";
 import type { InviteInfo } from "@/lib/types";
 
 export default function InvitePageClient() {
@@ -37,6 +37,7 @@ function InvitePageContent() {
   const [pageState, setPageState] = useState<PageState>("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [signInOpen, setSignInOpen] = useState(false);
+  const autoJoinTriggered = useRef(false);
 
   // Load invite info
   useEffect(() => {
@@ -96,6 +97,16 @@ function InvitePageContent() {
       setPageState("error");
     }
   }, [inviteInfo, session, code, router]);
+
+  // Auto-join after sign-in redirect
+  useEffect(() => {
+    if (!session?.user || !inviteInfo || autoJoinTriggered.current) return;
+    const intent = consumeSignInIntent();
+    if (intent === `invite-${code}`) {
+      autoJoinTriggered.current = true;
+      acceptAndRedirect();
+    }
+  }, [session?.user, inviteInfo, code, acceptAndRedirect]);
 
   // Loading invite info
   if (!inviteInfo && !loadError) {
