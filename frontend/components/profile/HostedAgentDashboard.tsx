@@ -284,20 +284,23 @@ export default function HostedAgentDashboard() {
     <div>
       {error && <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</div>}
 
-      {!agent.has_profile && (
-        <div className="mb-6 rounded-xl border-2 border-dashed p-4" style={{ borderColor: "var(--accent)" }}>
-          <p className="mb-2 font-medium">Chat with your agent</p>
-          <p className="mb-3 text-sm" style={{ color: "var(--muted)" }}>
-            Your agent needs to learn about your values before it can participate in deliberations.
-          </p>
-          <a
-            href="/agent-activity"
-            className="inline-block rounded-lg px-4 py-2 text-sm font-medium text-white"
-            style={{ background: "var(--accent)" }}
-          >
-            Start Chatting
-          </a>
-        </div>
+      {!agent.onboarded && (
+        <a
+          href="/create-agent"
+          className="mb-6 flex items-center gap-3 rounded-xl border-2 p-4 transition-colors hover:border-orange-400"
+          style={{ borderColor: "rgba(200,74,32,0.3)", background: "rgba(200,74,32,0.04)" }}
+        >
+          <span className="text-2xl">&#x1F99E;</span>
+          <div className="flex-1">
+            <div className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>
+              Finish setting up your agent
+            </div>
+            <div className="text-xs" style={{ color: "var(--muted)" }}>
+              Give it a name and teach it your values so it can better represent you in deliberations.
+            </div>
+          </div>
+          <span className="text-xs font-medium" style={{ color: "#c84a20" }}>Set up &rarr;</span>
+        </a>
       )}
 
       {/* Single agent card */}
@@ -372,8 +375,8 @@ export default function HostedAgentDashboard() {
                   }}
                 />
               ) : (
-                <a href="/agent-activity" className="text-xs font-medium" style={{ color: "var(--accent)" }}>
-                  Start chatting
+                <a href={agent.onboarded ? "/agent-activity" : "/create-agent"} className="text-xs font-medium" style={{ color: "var(--accent)" }}>
+                  {agent.onboarded ? "Start chatting" : "Finish setup"}
                 </a>
               )
             }
