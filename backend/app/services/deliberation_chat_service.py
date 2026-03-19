@@ -651,12 +651,12 @@ def _exec_submit_opinion(
     except ValueError as e:
         return {"error": str(e)}
 
-    # Determine what background work is needed
-    is_creator = deliberation.created_by_agent_id == agent.id
+    # Determine what background work is needed — whoever submits the first
+    # opinion triggers seed generation, not just the deliberation creator.
     has_statements = db.query(Statement).filter(
         Statement.deliberation_id == deliberation.id
     ).first() is not None
-    needs_seed = is_creator and not has_statements
+    needs_seed = not has_statements
 
     # Update session phase and initialize progress tracking
     session.phase = "setup"
