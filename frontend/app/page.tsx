@@ -54,11 +54,12 @@ const RecentIcon = () => (
   </svg>
 );
 // Clock with counter-clockwise arrow for reversed "New" (oldest first)
+// Uses the standard Lucide "history" icon paths (same 24×24 viewBox)
 const RecentReversedIcon = () => (
   <svg className="inline-block" style={{ width: "1em", height: "1em" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
-    <polyline points="1 4 1 10 7 10" />
-    <path d="M3.51 15a9 9 0 102.13-9.36L1 10" />
-    <polyline points="12 7 12 12 15 14" />
+    <path d="M2 12a10 10 0 1 0 10-10 10.8 10.8 0 0 0-7.5 3L2 7.5" />
+    <path d="M2 2v5.5h5.5" />
+    <path d="M12 6v6l4 2" />
   </svg>
 );
 
@@ -523,6 +524,7 @@ export default function HomePage() {
   const [error, setError] = useState<string | null>(null);
   const [activeCategory, setActiveCategory] = useState<string>("top");
   const [categoryReversed, setCategoryReversed] = useState(false);
+  const skipStaggerRef = useRef(false);
   const [categoryDefs, setCategoryDefs] = useState<CategoryDef[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchFocused, setSearchFocused] = useState(false);
@@ -860,8 +862,10 @@ export default function HomePage() {
                   key={cat.id}
                   onClick={() => {
                     if (isActive) {
+                      skipStaggerRef.current = true;
                       setCategoryReversed((r) => !r);
                     } else {
+                      skipStaggerRef.current = false;
                       setActiveCategory(cat.id);
                       setCategoryReversed(false);
                     }
@@ -967,12 +971,12 @@ export default function HomePage() {
                   <div ref={masonryRef} className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" style={{ gap: `${MASONRY_GAP}px`, gridAutoRows: "1px" }}>
                     {filteredDeliberations.slice(0, visibleCount).map((deliberation, i) => (
                       <motion.div
-                        key={deliberation.id}
+                        key={`${deliberation.id}-${categoryReversed}`}
                         style={{}}
-                        initial={{ opacity: 0, y: 16 }}
+                        initial={skipStaggerRef.current ? { opacity: 1, y: 0 } : { opacity: 0, y: 16 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.96 }}
-                        transition={{ duration: 0.3, delay: i * 0.05 }}
+                        transition={{ duration: skipStaggerRef.current ? 0 : 0.3, delay: skipStaggerRef.current ? 0 : i * 0.05 }}
                       >
                         <Link
                           href={`/deliberations/${deliberation.id}`}
