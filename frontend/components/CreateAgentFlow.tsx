@@ -1010,27 +1010,37 @@ function SeedQuestionScene({
   questionIndex,
   totalQuestions,
   onAnswer,
+  onSkip,
   initialAnswer,
 }: {
   question: SeedQuestion;
   questionIndex: number;
   totalQuestions: number;
   onAnswer: (answer: SeedAnswer) => void;
+  onSkip: () => void;
   initialAnswer?: SeedAnswer;
 }) {
+  const OTHER_INDEX = question.choices.length; // virtual index for "Other"
   const [selected, setSelected] = useState<number | null>(
     initialAnswer
-      ? question.choices.findIndex(
-          (c) => c.valueStatement === initialAnswer.valueStatement
-        )
+      ? initialAnswer.valueStatement === "__other__"
+        ? OTHER_INDEX
+        : question.choices.findIndex(
+            (c) => c.valueStatement === initialAnswer.valueStatement
+          )
       : null
   );
   const [elaboration, setElaboration] = useState(
     initialAnswer?.elaboration || ""
   );
+  const [otherText, setOtherText] = useState(
+    initialAnswer?.valueStatement === "__other__" ? (initialAnswer?.elaboration || "") : ""
+  );
   const [showElaborate, setShowElaborate] = useState(
     !!initialAnswer?.elaboration
   );
+
+  const isOther = selected === OTHER_INDEX;
 
   return (
     <Scene>
@@ -1101,10 +1111,67 @@ function SeedQuestionScene({
               {choice.label}
             </motion.button>
           ))}
+          {/* Other option */}
+          <motion.button
+            onClick={() => {
+              setSelected(OTHER_INDEX);
+              setShowElaborate(false);
+            }}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            style={{
+              background:
+                isOther ? "#c84a20" : "rgba(200,74,32,0.04)",
+              color: isOther ? "white" : "#444",
+              border: `1.5px solid ${isOther ? "#c84a20" : "rgba(200,74,32,0.15)"}`,
+              borderRadius: 12,
+              padding: "14px 18px",
+              textAlign: "left",
+              cursor: "pointer",
+              fontFamily: "'DM Sans', sans-serif",
+              fontSize: 14,
+              fontWeight: isOther ? 700 : 500,
+              transition: "all 0.15s",
+            }}
+          >
+            Other
+          </motion.button>
         </div>
 
         <AnimatePresence>
-          {showElaborate && selected !== null && (
+          {isOther && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              style={{ marginBottom: 16, overflow: "hidden" }}
+            >
+              <textarea
+                value={otherText}
+                onChange={(e) => setOtherText(e.target.value)}
+                placeholder="Describe your position in your own words..."
+                rows={2}
+                autoFocus
+                style={{
+                  width: "100%",
+                  border: "1.5px solid rgba(0,0,0,0.08)",
+                  borderRadius: 10,
+                  padding: "10px 12px",
+                  fontFamily: "'DM Sans', sans-serif",
+                  fontSize: 13,
+                  resize: "none",
+                  outline: "none",
+                  background: "white",
+                  color: "#1a1a1a",
+                  boxSizing: "border-box",
+                }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {showElaborate && selected !== null && !isOther && (
             <motion.div
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
@@ -1144,16 +1211,36 @@ function SeedQuestionScene({
           )}
         </AnimatePresence>
 
-        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <button
+            onClick={onSkip}
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              fontSize: 13,
+              color: "#aaa",
+              fontFamily: "'DM Sans', sans-serif",
+              padding: "8px 0",
+            }}
+          >
+            Skip
+          </button>
           <Btn
-            onClick={() =>
-              selected !== null &&
-              onAnswer({
-                valueStatement: question.choices[selected].valueStatement,
-                elaboration: elaboration.trim() || undefined,
-              })
-            }
-            disabled={selected === null}
+            onClick={() => {
+              if (isOther && otherText.trim()) {
+                onAnswer({
+                  valueStatement: `- In my own words: "${otherText.trim()}"`,
+                  elaboration: undefined,
+                });
+              } else if (selected !== null && !isOther) {
+                onAnswer({
+                  valueStatement: question.choices[selected].valueStatement,
+                  elaboration: elaboration.trim() || undefined,
+                });
+              }
+            }}
+            disabled={selected === null || (isOther && !otherText.trim())}
           >
             Next →
           </Btn>
@@ -1616,6 +1703,24 @@ function LaunchScene({
           it to help it learn more about your values.
         </motion.p>
 
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.85 }}
+          style={{
+            fontSize: 12,
+            color: "#aaa",
+            marginBottom: 24,
+            fontFamily: "'DM Sans', sans-serif",
+            lineHeight: 1.6,
+          }}
+        >
+          We&apos;ll send you a weekly summary of your lobster&apos;s activity by email. You can change this anytime in{" "}
+          <Link href="/settings" style={{ color: "#c84a20", textDecoration: "underline", textUnderlineOffset: 2 }}>
+            Settings
+          </Link>.
+        </motion.p>
+
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -1655,7 +1760,7 @@ function loadSavedState(): SavedFlowState | null {
   return null;
 }
 
-export default function CreateAgentFlow({ isUpdate = false }: { isUpdate?: boolean }) {
+export default function CreateAgentFlow({ isUpdate = false, defaultName = "" }: { isUpdate?: boolean; defaultName?: string }) {
   const restoredRef = useRef(false);
   const saved = useRef(loadSavedState());
 
@@ -1677,8 +1782,15 @@ export default function CreateAgentFlow({ isUpdate = false }: { isUpdate?: boole
   // Editable profile (set when entering show-profile, editable by user)
   const [editedProfile, setEditedProfile] = useState(saved.current?.editedProfile ?? "");
 
-  // Agent name
-  const [agentName, setAgentName] = useState(saved.current?.agentName ?? "");
+  // Agent name — prefill from default if no saved state
+  const [agentName, setAgentName] = useState(saved.current?.agentName || defaultName);
+
+  // Sync defaultName when it arrives after mount (async API call)
+  useEffect(() => {
+    if (defaultName && !agentName && !saved.current?.agentName) {
+      setAgentName(defaultName);
+    }
+  }, [defaultName]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Launch state
   const [creating, setCreating] = useState(false);
@@ -1981,6 +2093,7 @@ export default function CreateAgentFlow({ isUpdate = false }: { isUpdate?: boole
                     handleSeedAnswer(question.id, ans);
                     setPhase(seedPhaseToNext[phase]);
                   }}
+                  onSkip={() => setPhase(seedPhaseToNext[phase])}
                 />
               </motion.div>
             );

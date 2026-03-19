@@ -23,6 +23,7 @@ function CreateAgentPageContent() {
   const router = useRouter();
   const [ready, setReady] = useState(false);
   const [isUpdate, setIsUpdate] = useState(false);
+  const [defaultName, setDefaultName] = useState("");
 
   useEffect(() => {
     if (isPending) return;
@@ -33,6 +34,9 @@ function CreateAgentPageContent() {
     // Check if agent already exists
     api.getMyHostedAgent().then((data) => {
       if (!data) {
+        // No agent yet — derive default name from user's name
+        const firstName = session.user.name?.split(" ")[0] || "";
+        if (firstName) setDefaultName(`${firstName}'s Lobster`);
         setReady(true);
         return;
       }
@@ -40,7 +44,8 @@ function CreateAgentPageContent() {
         // Agent already onboarded — no need for wizard
         router.push("/settings");
       } else {
-        // Bare agent exists but no profile — allow wizard in update mode
+        // Bare agent exists — use its current display_name as default
+        setDefaultName(data.display_name || "");
         setIsUpdate(true);
         setReady(true);
       }
@@ -52,5 +57,5 @@ function CreateAgentPageContent() {
       <div className="animate-pulse" style={{ width: 120, height: 120, borderRadius: "50%", background: "var(--surface-dim)" }} />
     </div>
   );
-  return <CreateAgentFlow isUpdate={isUpdate} />;
+  return <CreateAgentFlow isUpdate={isUpdate} defaultName={defaultName} />;
 }
