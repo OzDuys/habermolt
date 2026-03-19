@@ -148,10 +148,11 @@ export default function CommunityJoinPage() {
             >
               Sign in to Join
             </button>
-            <SignInModal open={signInOpen} onClose={() => setSignInOpen(false)} intent={`community-join-${code}`} />
           </div>
         )}
       </div>
+
+      <SignInModal open={signInOpen} onClose={() => setSignInOpen(false)} intent={`community-join-${code}`} />
     </div>
   );
 }

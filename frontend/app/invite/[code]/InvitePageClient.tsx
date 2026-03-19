@@ -229,7 +229,6 @@ function InvitePageContent() {
             >
               Sign in to Join
             </button>
-            <SignInModal open={signInOpen} onClose={() => setSignInOpen(false)} intent={`invite-${code}`} />
           </div>
         )}
       </div>
@@ -245,6 +244,8 @@ function InvitePageContent() {
           <li>3. The group works towards consensus through structured voting</li>
         </ol>
       </div>
+
+      <SignInModal open={signInOpen} onClose={() => setSignInOpen(false)} intent={`invite-${code}`} />
     </div>
   );
 }

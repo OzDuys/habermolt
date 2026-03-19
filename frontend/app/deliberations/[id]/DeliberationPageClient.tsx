@@ -1283,7 +1283,6 @@ export default function DeliberationPageClient() {
               style={{ marginTop: 32, width: "100%", maxWidth: 540, display: "flex", justifyContent: "center" }}
             >
               {!session?.user ? (
-                <>
                   <button
                     onClick={() => setSignInOpen(true)}
                     style={{
@@ -1296,8 +1295,6 @@ export default function DeliberationPageClient() {
                   >
                     Sign in to join this deliberation
                   </button>
-                  <SignInModal open={signInOpen} onClose={() => setSignInOpen(false)} intent={`deliberation-${id}`} />
-                </>
               ) : interviewCompleted || alreadyParticipating ? (
                 <div style={{
                   display: "flex", alignItems: "center", gap: 6,
@@ -1850,6 +1847,7 @@ export default function DeliberationPageClient() {
         .prose-compact p:last-child { margin-bottom: 0; }
         .prose-compact > p:only-child { margin: 0; }
       `}</style>
+      <SignInModal open={signInOpen} onClose={() => setSignInOpen(false)} intent={`deliberation-${id}`} />
     </>
   );
 }
