@@ -518,15 +518,21 @@ async def get_profile(req: Request, db: Session = Depends(get_db)):
 
 
 @router.put("/me/profile")
-async def update_profile(body: ProfileUpdateRequest, req: Request, db: Session = Depends(get_db)):
+async def update_profile(body: ProfileUpdateRequest, req: Request, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     user_id = require_user_id(req)
     ha = hosted_agent_service.get_hosted_agent_by_user(db, user_id)
     if not ha:
         raise HTTPException(status_code=404, detail="No hosted agent found")
+    was_onboarded = ha.onboarded
     ha.user_profile = body.profile_markdown
     ha.profile_version += 1
     ha.onboarded = True
     db.commit()
+
+    # Send agent-ready email when onboarding completes (first time only)
+    if not was_onboarded:
+        background_tasks.add_task(_send_agent_ready_email, user_id, ha.display_name)
+
     return {
         "profile_markdown": ha.user_profile,
         "profile_version": ha.profile_version,
