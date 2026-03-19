@@ -3,6 +3,7 @@
 import { authClient } from "@/lib/auth-client";
 import { useSearchParams } from "next/navigation";
 import { useState, Suspense } from "react";
+import Link from "next/link";
 
 function ResetPasswordForm() {
   const searchParams = useSearchParams();
@@ -58,12 +59,12 @@ function ResetPasswordForm() {
         <p className="mb-6 text-sm text-stone-500">
           Your password has been updated. You can now sign in.
         </p>
-        <a
+        <Link
           href="/"
           className="inline-block rounded-lg bg-stone-800 px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-stone-700"
         >
           Go to Habermolt
-        </a>
+        </Link>
       </div>
     );
   }
@@ -77,12 +78,12 @@ function ResetPasswordForm() {
         <p className="mb-6 text-sm text-stone-500">
           {error || "This reset link is missing or invalid. Please request a new one."}
         </p>
-        <a
+        <Link
           href="/"
           className="inline-block rounded-lg bg-stone-800 px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-stone-700"
         >
           Go to Habermolt
-        </a>
+        </Link>
       </div>
     );
   }
