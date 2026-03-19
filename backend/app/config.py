@@ -27,6 +27,14 @@ class Settings(BaseSettings):
 
     # Monitoring
     MONITORING_SECRET: str = ""  # Secret for accessing /api/monitoring/* endpoints
+    MONITORING_ALLOWED_USERS: str = ""  # Comma-separated user IDs allowed to access monitoring
+
+    @property
+    def monitoring_allowed_user_list(self) -> list[str]:
+        """Parse MONITORING_ALLOWED_USERS into a list."""
+        if self.MONITORING_ALLOWED_USERS:
+            return [u.strip() for u in self.MONITORING_ALLOWED_USERS.split(",") if u.strip()]
+        return []
 
     # Email (Resend)
     RESEND_API_KEY: str = ""  # Resend API key for transactional/marketing emails

@@ -13,7 +13,7 @@ from typing import Optional
 from uuid import UUID
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Header, Query
+from fastapi import APIRouter, Depends, HTTPException, Header, Query, Request
 from sqlalchemy import func, desc, text
 from sqlalchemy.orm import Session
 
@@ -54,8 +54,13 @@ TABLE_MAP = {
 }
 
 
-def verify_monitoring_secret(x_monitoring_secret: str = Header(...)):
-    """Verify monitoring secret from header."""
+def verify_monitoring_secret(request: Request, x_monitoring_secret: str = Header(...)):
+    """Verify monitoring secret and user allowlist.
+
+    Requires:
+    1. Valid MONITORING_SECRET header (always)
+    2. Valid session from MONITORING_ALLOWED_USERS allowlist (when configured)
+    """
     expected = settings.MONITORING_SECRET
     if not expected:
         raise HTTPException(
@@ -64,6 +69,21 @@ def verify_monitoring_secret(x_monitoring_secret: str = Header(...)):
         )
     if x_monitoring_secret != expected:
         raise HTTPException(status_code=403, detail="Invalid monitoring secret")
+
+    # If an allowlist is configured, require a valid session from an allowed user
+    allowed_users = settings.monitoring_allowed_user_list
+    if allowed_users:
+        user_id = request.headers.get("X-User-Id")
+        if not user_id:
+            raise HTTPException(status_code=403, detail="Authentication required for monitoring access")
+        # Validate the internal secret to prevent user ID forgery
+        if settings.INTERNAL_API_SECRET:
+            internal_secret = request.headers.get("X-Internal-Secret")
+            if internal_secret != settings.INTERNAL_API_SECRET:
+                raise HTTPException(status_code=403, detail="Authentication required for monitoring access")
+        if user_id not in allowed_users:
+            raise HTTPException(status_code=403, detail="Your account is not authorized for monitoring access")
+
     return True
 
 

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useSession } from "@/lib/auth-client";
 
 const NAV_ITEMS = [
   { href: "/monitoring", label: "Dashboard", icon: "◈" },
@@ -24,26 +25,28 @@ export default function MonitoringLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const { data: session, isPending: sessionLoading } = useSession();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [secret, setSecret] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
+    if (sessionLoading) return;
     const stored = localStorage.getItem("monitoring_secret");
     if (stored) {
       setSecret(stored);
       setIsAuthenticated(true);
     }
     setLoading(false);
-  }, []);
+  }, [sessionLoading]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     if (!secret.trim()) return;
 
-    // Validate secret against backend
+    // Validate secret + session against backend
     try {
       const res = await fetch("/api/backend/monitoring/config", {
         headers: { "X-Monitoring-Secret": secret.trim() },
@@ -52,7 +55,15 @@ export default function MonitoringLayout({
         localStorage.setItem("monitoring_secret", secret.trim());
         setIsAuthenticated(true);
       } else {
-        setError("Invalid secret");
+        const data = await res.json().catch(() => null);
+        const detail = data?.detail || "";
+        if (detail.includes("not authorized")) {
+          setError("Your account is not authorized for monitoring access.");
+        } else if (detail.includes("Authentication required")) {
+          setError("You must be signed in to access monitoring.");
+        } else {
+          setError("Invalid secret");
+        }
       }
     } catch {
       setError("Could not connect to backend");
@@ -65,10 +76,27 @@ export default function MonitoringLayout({
     setSecret("");
   };
 
-  if (loading) {
+  if (loading || sessionLoading) {
     return (
       <div className="full-bleed flex items-center justify-center min-h-[80vh]">
         <div className="text-sm" style={{ color: "var(--muted)" }}>Loading...</div>
+      </div>
+    );
+  }
+
+  // Must be signed in to even see the secret prompt
+  if (!session?.user) {
+    return (
+      <div className="full-bleed flex items-center justify-center min-h-[80vh]">
+        <div
+          className="w-full max-w-sm p-8 rounded-xl border text-center"
+          style={{ borderColor: "var(--border)", background: "var(--surface)" }}
+        >
+          <h1 className="text-xl font-bold mb-2">Monitoring</h1>
+          <p className="text-sm" style={{ color: "var(--muted)" }}>
+            Sign in to access the developer dashboard.
+          </p>
+        </div>
       </div>
     );
   }
