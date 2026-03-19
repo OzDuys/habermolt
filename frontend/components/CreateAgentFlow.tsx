@@ -14,10 +14,7 @@ type Phase =
   | "intro"
   | "explain-agent"
   | "pick-deliberations"
-  | "seed-q1"
-  | "seed-q2"
-  | "seed-q3"
-  | "seed-q4"
+  | "seed-questions"
   | "show-profile"
   | "explain-hlq"
   | "name-agent"
@@ -47,10 +44,7 @@ const ALL_PHASES: Phase[] = [
   "intro",
   "explain-agent",
   "pick-deliberations",
-  "seed-q1",
-  "seed-q2",
-  "seed-q3",
-  "seed-q4",
+  "seed-questions",
   "show-profile",
   "explain-hlq",
   "name-agent",
@@ -61,10 +55,7 @@ const PART_LABELS: Record<Phase, { part: number; label: string }> = {
   intro: { part: 0, label: "" },
   "explain-agent": { part: 1, label: "Meet Your Lobster" },
   "pick-deliberations": { part: 1, label: "Meet Your Lobster" },
-  "seed-q1": { part: 2, label: "Learning About You" },
-  "seed-q2": { part: 2, label: "Learning About You" },
-  "seed-q3": { part: 2, label: "Learning About You" },
-  "seed-q4": { part: 2, label: "Learning About You" },
+  "seed-questions": { part: 2, label: "Learning About You" },
   "show-profile": { part: 3, label: "Your Profile" },
   "explain-hlq": { part: 3, label: "Your Profile" },
   "name-agent": { part: 4, label: "Launch" },
@@ -74,57 +65,13 @@ const PART_LABELS: Record<Phase, { part: number; label: string }> = {
 const BACK_MAP: Partial<Record<Phase, Phase>> = {
   "explain-agent": "intro",
   "pick-deliberations": "explain-agent",
-  "seed-q1": "pick-deliberations",
-  "seed-q2": "seed-q1",
-  "seed-q3": "seed-q2",
-  "seed-q4": "seed-q3",
-  "show-profile": "seed-q4",
+  "seed-questions": "pick-deliberations",
+  "show-profile": "seed-questions",
   "explain-hlq": "show-profile",
   "name-agent": "explain-hlq",
 };
 
-// ─── Static seed questions (same for everyone) ────────────────────────────────
-
-const STATIC_SEED_QUESTIONS: SeedQuestion[] = [
-  {
-    id: "freedom_vs_collective",
-    prompt: "When individual freedom and collective wellbeing conflict, what guides you?",
-    subtext: "This is the most fundamental axis across almost every deliberation topic.",
-    choices: [
-      {
-        label: "Individual rights first",
-        valueStatement: "- I prioritize individual autonomy as the foundation for any policy — collective goals should not override fundamental freedoms without extraordinary justification",
-      },
-      {
-        label: "The collective usually wins",
-        valueStatement: "- I tend to prioritize collective wellbeing over individual preferences — societies thrive when people accept reasonable constraints for the common good",
-      },
-      {
-        label: "Depends on the stakes",
-        valueStatement: "- I weigh individual rights against collective benefit contextually — the severity, reversibility, and distribution of impacts determines where I land",
-      },
-    ],
-  },
-  {
-    id: "change_vs_caution",
-    prompt: "When facing big problems — in tech, politics, society — what's your instinct?",
-    subtext: "Your risk tolerance shapes how you evaluate bold proposals vs. incremental ones.",
-    choices: [
-      {
-        label: "Bold action beats waiting",
-        valueStatement: "- I believe decisive intervention is usually better than cautious inaction — the cost of delay or half-measures is typically underestimated",
-      },
-      {
-        label: "Careful iteration over leaps",
-        valueStatement: "- I prefer incremental, reversible change over sweeping reforms — unintended consequences from moving too fast are a serious and underappreciated risk",
-      },
-      {
-        label: "Reversibility is what matters",
-        valueStatement: "- My appetite for bold change scales with how reversible it is — I'm willing to move fast when mistakes can be corrected, and cautious when they can't",
-      },
-    ],
-  },
-];
+// Static seed questions removed — all questions are now LLM-generated from selected topics
 
 // ─── Color filter for lobster SVG ─────────────────────────────────────────────
 
@@ -864,7 +811,7 @@ function PickDeliberationsScene({
 
         <div
           style={{
-            maxHeight: 260,
+            maxHeight: "clamp(200px, 35vh, 320px)",
             overflowY: "auto",
             display: "flex",
             flexDirection: "column",
@@ -1309,7 +1256,7 @@ function ShowProfileScene({
                   borderRadius: 12,
                   padding: "16px 18px",
                   marginBottom: 16,
-                  maxHeight: 260,
+                  maxHeight: "clamp(200px, 35vh, 300px)",
                   overflowY: "auto",
                 }}
               >
@@ -1744,6 +1691,7 @@ interface SavedFlowState {
   phase: Phase;
   selectedDelibIds: string[];
   seedQuestions: SeedQuestion[];
+  seedQuestionIndex: number;
   interestsSummary: string;
   seedAnswers: Record<string, SeedAnswer>;
   editedProfile: string;
@@ -1771,8 +1719,9 @@ export default function CreateAgentFlow({ isUpdate = false, defaultName = "" }: 
   const [categoryDefs, setCategoryDefs] = useState<CategoryDef[]>([]);
   const [selectedDelibIds, setSelectedDelibIds] = useState<string[]>(saved.current?.selectedDelibIds ?? []);
 
-  // LLM-generated seed questions (2) + loading state
+  // LLM-generated seed questions (2-4) + loading state
   const [seedQuestions, setSeedQuestions] = useState<SeedQuestion[]>(saved.current?.seedQuestions ?? []);
+  const [seedQuestionIndex, setSeedQuestionIndex] = useState(saved.current?.seedQuestionIndex ?? 0);
   const [llmQuestionsLoading, setLlmQuestionsLoading] = useState(false);
   const [interestsSummary, setInterestsSummary] = useState(saved.current?.interestsSummary ?? "");
   const [seedAnswers, setSeedAnswers] = useState<Record<string, SeedAnswer>>(
@@ -1813,13 +1762,14 @@ export default function CreateAgentFlow({ isUpdate = false, defaultName = "" }: 
         phase,
         selectedDelibIds,
         seedQuestions,
+        seedQuestionIndex,
         interestsSummary,
         seedAnswers,
         editedProfile,
         agentName,
       }));
     } catch { /* ignore */ }
-  }, [phase, selectedDelibIds, seedQuestions, interestsSummary, seedAnswers, editedProfile, agentName]);
+  }, [phase, selectedDelibIds, seedQuestions, seedQuestionIndex, interestsSummary, seedAnswers, editedProfile, agentName]);
 
   // In update mode, fetch existing profile when entering show-profile so seed answers merge with it
   useEffect(() => {
@@ -1904,6 +1854,9 @@ export default function CreateAgentFlow({ isUpdate = false, defaultName = "" }: 
         });
       }
 
+      // Trigger first heartbeat so the agent participates immediately
+      fetch("/api/backend/hosted-agents/me/heartbeat", { method: "POST" }).catch(() => {});
+
       setCreating(false);
       setCreated(true);
       try { sessionStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
@@ -1914,26 +1867,15 @@ export default function CreateAgentFlow({ isUpdate = false, defaultName = "" }: 
   };
 
   const handleBack = useCallback((target: Phase) => {
+    // If going back from seed-questions and we're not on the first question, go to previous question
+    if (target === "pick-deliberations" && seedQuestionIndex > 0) {
+      setSeedQuestionIndex((prev) => prev - 1);
+      return;
+    }
     setPhase(target);
-  }, []);
+  }, [seedQuestionIndex]);
 
-  // Index into the combined allSeedQuestions array (static + LLM)
-  const seedPhaseToIndex: Record<string, number> = {
-    "seed-q1": 0,
-    "seed-q2": 1,
-    "seed-q3": 2,
-    "seed-q4": 3,
-  };
-
-  const seedPhaseToNext: Record<string, Phase> = {
-    "seed-q1": "seed-q2",
-    "seed-q2": "seed-q3",
-    "seed-q3": "seed-q4",
-    "seed-q4": "show-profile",
-  };
-
-  // Combined questions: 2 static universal + 2 LLM-generated
-  const allSeedQuestions = [...STATIC_SEED_QUESTIONS, ...seedQuestions];
+  // All questions are LLM-generated from selected topics (2-4 questions)
 
   return (
     <div
@@ -1950,8 +1892,9 @@ export default function CreateAgentFlow({ isUpdate = false, defaultName = "" }: 
         style={{
           position: "relative",
           zIndex: 1,
-          minHeight: "100vh",
+          minHeight: "100dvh",
           paddingTop: phase === "intro" ? "0" : "80px",
+          paddingBottom: "env(safe-area-inset-bottom, 16px)",
           display: "flex",
           flexDirection: "column",
         }}
@@ -1997,7 +1940,7 @@ export default function CreateAgentFlow({ isUpdate = false, defaultName = "" }: 
                 onToggle={toggleDelib}
                 categoryDefs={categoryDefs}
                 onNext={() => {
-                  // Kick off LLM generation in background while user answers static questions
+                  // Generate all seed questions from selected topics
                   setLlmQuestionsLoading(true);
                   setSeedQuestions([]);
                   fetch("/api/backend/hosted-agents/seed-questions", {
@@ -2010,29 +1953,25 @@ export default function CreateAgentFlow({ isUpdate = false, defaultName = "" }: 
                       return r.json();
                     })
                     .then((data: { questions: SeedQuestion[]; interests_summary: string }) => {
-                      setSeedQuestions(data.questions.slice(0, 2));
+                      setSeedQuestions(data.questions);
                       setInterestsSummary(data.interests_summary || "");
                       setLlmQuestionsLoading(false);
                     })
                     .catch(() => {
                       setLlmQuestionsLoading(false);
                     });
-                  setPhase("seed-q1");
+                  setSeedQuestionIndex(0);
+                  setPhase("seed-questions");
                 }}
               />
             </motion.div>
           )}
 
-          {(phase === "seed-q1" ||
-            phase === "seed-q2" ||
-            phase === "seed-q3" ||
-            phase === "seed-q4") && (() => {
-            const idx = seedPhaseToIndex[phase];
-            const question = allSeedQuestions[idx];
-            const isLlmQuestion = idx >= 2;
+          {phase === "seed-questions" && (() => {
+            const question = seedQuestions[seedQuestionIndex];
 
-            // Show loading spinner if we've reached an LLM question before it's ready
-            if (isLlmQuestion && llmQuestionsLoading) {
+            // Show loading spinner if questions aren't ready yet
+            if (llmQuestionsLoading || !question) {
               return (
                 <motion.div
                   key="llm-loading"
@@ -2074,11 +2013,18 @@ export default function CreateAgentFlow({ isUpdate = false, defaultName = "" }: 
               );
             }
 
-            if (!question) return null;
+            const isLast = seedQuestionIndex >= seedQuestions.length - 1;
+            const advanceOrFinish = () => {
+              if (isLast) {
+                setPhase("show-profile");
+              } else {
+                setSeedQuestionIndex((prev) => prev + 1);
+              }
+            };
 
             return (
               <motion.div
-                key={phase}
+                key={`seed-q-${seedQuestionIndex}`}
                 initial={{ opacity: 0, x: 40 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -40 }}
@@ -2086,14 +2032,14 @@ export default function CreateAgentFlow({ isUpdate = false, defaultName = "" }: 
               >
                 <SeedQuestionScene
                   question={question}
-                  questionIndex={idx}
-                  totalQuestions={4}
+                  questionIndex={seedQuestionIndex}
+                  totalQuestions={seedQuestions.length}
                   initialAnswer={seedAnswers[question.id]}
                   onAnswer={(ans) => {
                     handleSeedAnswer(question.id, ans);
-                    setPhase(seedPhaseToNext[phase]);
+                    advanceOrFinish();
                   }}
-                  onSkip={() => setPhase(seedPhaseToNext[phase])}
+                  onSkip={advanceOrFinish}
                 />
               </motion.div>
             );

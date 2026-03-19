@@ -179,7 +179,7 @@ async def generate_seed_questions(
     body: SeedQuestionsRequest,
     db: Session = Depends(get_db),
 ):
-    """Generate 2 seed value-mapping questions tailored to the user's selected deliberation topics."""
+    """Generate 4 seed value-mapping questions tailored to the user's selected deliberation topics."""
     if not body.deliberation_ids:
         raise HTTPException(status_code=400, detail="No deliberation IDs provided")
 
@@ -196,15 +196,22 @@ async def generate_seed_questions(
 
 {topics}
 
-Generate exactly 2 focused multiple-choice questions to reveal this user's specific positions on these topics. The agent will use these answers when participating in real deliberations on their behalf.
+Generate 2-4 focused multiple-choice questions to reveal this user's specific positions on these topics. The agent will use these answers when participating in real deliberations on their behalf.
+
+Use your judgement on the number of questions:
+- If the topics are closely related (e.g. 3 AI topics), 2 well-chosen questions may suffice
+- If topics span diverse areas, use 3-4 to cover the key fault lines
+- Never generate more than 4 — the profile gets refined through conversation later
 
 Requirements:
+- ALL questions must be grounded in the specific topics the user selected — no generic or universal value questions
 - Probe concrete tensions or tradeoffs within these specific topic areas (e.g. if topics are about AI regulation, ask about open-source vs. closed models, or liability frameworks — not generic "freedom vs safety")
+- Spread questions across the selected topics — don't cluster all questions on one topic
 - Questions must be specific enough that the answer meaningfully predicts how someone would vote on real proposals in these areas
 - 3 choices per question — each a distinct, defensible position that real people hold
 - Each choice is a value statement the agent can cite and reason from in deliberations
 - Keep prompts concise and direct (under 15 words)
-- Avoid: generic left/right framing, obvious "right answers", overlap with broad values like individual vs. collective or caution vs. bold action
+- Avoid: generic left/right framing, obvious "right answers", abstract philosophical axes (like "individual vs collective" or "bold vs cautious")
 
 Also write a 2-3 sentence summary of the specific concerns and tensions likely to matter most to this user. Be precise — name actual issues and stakeholders, not just category labels.
 
@@ -225,7 +232,7 @@ Return valid JSON only, no markdown fences:
   ]
 }}"""
 
-    result = client.sample_text(prompt=prompt, temperature=0.7, max_tokens=1500)
+    result = client.sample_text(prompt=prompt, temperature=0.7, max_tokens=3000)
 
     # Parse JSON from response (strip markdown fences if present)
     text = result.strip()
@@ -248,7 +255,7 @@ Return valid JSON only, no markdown fences:
         questions = parsed.get("questions", [])
         interests_summary = parsed.get("interests_summary", "")
 
-    return {"questions": questions[:2], "interests_summary": interests_summary}
+    return {"questions": questions[:4], "interests_summary": interests_summary}
 
 
 @router.post("", status_code=201)
