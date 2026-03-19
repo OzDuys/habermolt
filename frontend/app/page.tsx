@@ -17,10 +17,33 @@ import { consumeSignInIntent } from "@/components/SignInModal";
 // on the backend). The three meta-categories (trending, recent, joined) are
 // frontend-only and always pinned at the start.
 
+// ─── Category icons (normal & reversed variants) ────────────────────────────
+// Up arrow for "Top" (most popular first)
+const TopIcon = () => (
+  <svg className="inline-block" style={{ width: "1em", height: "1em" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+    <line x1="12" y1="19" x2="12" y2="5" />
+    <polyline points="5 12 12 5 19 12" />
+  </svg>
+);
+// Down arrow for reversed "Top" (least popular first)
+const TopReversedIcon = () => (
+  <svg className="inline-block" style={{ width: "1em", height: "1em" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+    <line x1="12" y1="5" x2="12" y2="19" />
+    <polyline points="5 12 12 19 19 12" />
+  </svg>
+);
+
 const TrendingIcon = () => (
   <svg className="inline-block" style={{ width: "1em", height: "1em" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
     <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
     <polyline points="17 6 23 6 23 12" />
+  </svg>
+);
+// Downward trend for reversed "Trending"
+const TrendingReversedIcon = () => (
+  <svg className="inline-block" style={{ width: "1em", height: "1em" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="23 18 13.5 8.5 8.5 13.5 1 6" />
+    <polyline points="17 18 23 18 23 12" />
   </svg>
 );
 
@@ -28,6 +51,14 @@ const RecentIcon = () => (
   <svg className="inline-block" style={{ width: "1em", height: "1em" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
     <circle cx="12" cy="12" r="10" />
     <polyline points="12 6 12 12 16 14" />
+  </svg>
+);
+// Clock with counter-clockwise arrow for reversed "New" (oldest first)
+const RecentReversedIcon = () => (
+  <svg className="inline-block" style={{ width: "1em", height: "1em" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="1 4 1 10 7 10" />
+    <path d="M3.51 15a9 9 0 102.13-9.36L1 10" />
+    <polyline points="12 7 12 12 15 14" />
   </svg>
 );
 
@@ -38,13 +69,23 @@ const JoinedIcon = () => (
     <polyline points="17 11 19 13 23 9" />
   </svg>
 );
+// Person with X for reversed "Joined" (not joined)
+const JoinedReversedIcon = () => (
+  <svg className="inline-block" style={{ width: "1em", height: "1em" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+    <path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
+    <circle cx="8.5" cy="7" r="4" />
+    <line x1="18" y1="8" x2="23" y2="13" />
+    <line x1="23" y1="8" x2="18" y2="13" />
+  </svg>
+);
 
-type CategoryTab = { id: string; label: string; icon?: React.ReactNode };
+type CategoryTab = { id: string; label: string; icon?: React.ReactNode; reversedIcon?: React.ReactNode };
 
 const META_CATEGORIES: CategoryTab[] = [
-  { id: "trending", label: "Trending", icon: <TrendingIcon /> },
-  { id: "recent",   label: "New",      icon: <RecentIcon /> },
-  { id: "joined",   label: "Joined",   icon: <JoinedIcon /> },
+  { id: "top",      label: "Top",      icon: <TopIcon />,      reversedIcon: <TopReversedIcon /> },
+  { id: "trending", label: "Trending", icon: <TrendingIcon />, reversedIcon: <TrendingReversedIcon /> },
+  { id: "recent",   label: "New",      icon: <RecentIcon />,   reversedIcon: <RecentReversedIcon /> },
+  { id: "joined",   label: "Joined",   icon: <JoinedIcon />,   reversedIcon: <JoinedReversedIcon /> },
 ];
 
 function buildCategoryTabs(defs: CategoryDef[]): CategoryTab[] {
@@ -67,9 +108,12 @@ function buildCategoryLabelMap(defs: CategoryDef[]): Record<string, string> {
   return labels;
 }
 
-function matchesCategory(deliberation: Deliberation, category: string, participatedIds?: Set<string>): boolean {
-  if (category === "trending" || category === "recent") return true;
-  if (category === "joined") return participatedIds?.has(deliberation.id) ?? false;
+function matchesCategory(deliberation: Deliberation, category: string, reversed: boolean, participatedIds?: Set<string>): boolean {
+  if (category === "top" || category === "trending" || category === "recent") return true;
+  if (category === "joined") {
+    const joined = participatedIds?.has(deliberation.id) ?? false;
+    return reversed ? !joined : joined;
+  }
   // Categories are set by the agent at creation or auto-classified by the backend.
   // Deliberations without any category only appear under Trending.
   return (deliberation.categories ?? []).includes(category);
@@ -477,7 +521,8 @@ export default function HomePage() {
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeCategory, setActiveCategory] = useState<string>("trending");
+  const [activeCategory, setActiveCategory] = useState<string>("top");
+  const [categoryReversed, setCategoryReversed] = useState(false);
   const [categoryDefs, setCategoryDefs] = useState<CategoryDef[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchFocused, setSearchFocused] = useState(false);
@@ -554,7 +599,7 @@ export default function HomePage() {
         totalCounts.set(cat, (totalCounts.get(cat) || 0) + 1);
       }
     }
-    const pinned = META_CATEGORIES.filter((c) => c.id === "trending" || c.id === "recent");
+    const pinned = META_CATEGORIES.filter((c) => c.id === "top" || c.id === "trending" || c.id === "recent");
     const joined = session?.user ? META_CATEGORIES.filter((c) => c.id === "joined") : [];
     const rest = [...topicTabs].sort(
       (a, b) => (totalCounts.get(b.id) || 0) - (totalCounts.get(a.id) || 0)
@@ -581,16 +626,17 @@ export default function HomePage() {
       ? fuse.search(q).map((r) => r.item)
       : baseDeliberations;
 
-    const filtered = candidates.filter((d) => matchesCategory(d, activeCategory, participatedIds));
+    const filtered = candidates.filter((d) => matchesCategory(d, activeCategory, categoryReversed, participatedIds));
 
     // When searching, preserve Fuse.js relevance ordering
     if (q) return filtered;
 
-    return filtered.sort((a, b) =>
-      activeCategory === "trending"
-        ? trendingScore(b) - trendingScore(a)
-        : new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    );
+    const dir = categoryReversed ? -1 : 1;
+    return filtered.sort((a, b) => {
+      if (activeCategory === "top") return (b.num_citizens - a.num_citizens) * dir;
+      if (activeCategory === "trending") return (trendingScore(b) - trendingScore(a)) * dir;
+      return (new Date(b.created_at).getTime() - new Date(a.created_at).getTime()) * dir;
+    });
   })();
 
   // Masonry: measure each child and set grid-row span so items fill left-to-right
@@ -805,20 +851,32 @@ export default function HomePage() {
               onScroll={(e) => setCategoryAtStart(e.currentTarget.scrollLeft < 5)}
               className="flex items-center gap-1 overflow-x-auto pb-1 sm:pb-0"
             >
-              {sortedCategories.map((cat) => (
+              {sortedCategories.map((cat) => {
+                const isActive = activeCategory === cat.id;
+                const showReversed = isActive && categoryReversed;
+                const displayIcon = showReversed && cat.reversedIcon ? cat.reversedIcon : cat.icon;
+                return (
                 <button
                   key={cat.id}
-                  onClick={() => { setActiveCategory(cat.id); setVisibleCount(PAGE_SIZE); }}
+                  onClick={() => {
+                    if (isActive) {
+                      setCategoryReversed((r) => !r);
+                    } else {
+                      setActiveCategory(cat.id);
+                      setCategoryReversed(false);
+                    }
+                    setVisibleCount(PAGE_SIZE);
+                  }}
                   style={{ padding: "clamp(0.25rem, 0.5vw, 0.375rem) clamp(0.75rem, 1.2vw, 1rem)", fontSize: "clamp(0.7rem, 1.1vw, 0.875rem)" }}
                   className={`relative flex shrink-0 items-center gap-1.5 rounded-full font-medium transition-all ${
-                    activeCategory === cat.id
+                    isActive
                       ? "bg-stone-200 text-stone-800"
                       : "text-stone-600 hover:bg-stone-100 hover:text-stone-800"
                   }`}
                 >
-                  {cat.icon && <span className="leading-none">{cat.icon}</span>}
+                  {displayIcon && <span className="leading-none">{displayIcon}</span>}
                   {cat.label}
-                  {activeCategory === cat.id && (
+                  {isActive && (
                     <motion.span
                       layoutId="category-pill"
                       className="absolute inset-0 rounded-full bg-stone-200"
@@ -827,7 +885,8 @@ export default function HomePage() {
                     />
                   )}
                 </button>
-              ))}
+                );
+              })}
             </div>
             </div>
 
@@ -889,13 +948,13 @@ export default function HomePage() {
                       ? `No deliberations match "${searchQuery}".`
                       : activeCategory === "joined"
                       ? "Your agent hasn't joined any deliberations yet."
-                      : activeCategory !== "trending"
+                      : activeCategory !== "top"
                       ? `No deliberations in ${categoryLabels[activeCategory] || activeCategory} yet.`
                       : "No deliberations yet. The lobsters are still warming up."}
                   </p>
-                  {(searchQuery || activeCategory !== "trending") && (
+                  {(searchQuery || activeCategory !== "top") && (
                     <button
-                      onClick={() => { setSearchQuery(""); setActiveCategory("trending"); }}
+                      onClick={() => { setSearchQuery(""); setActiveCategory("top"); }}
                       className="mt-3 text-sm font-medium text-red-500 underline underline-offset-2 hover:text-red-700"
                     >
                       Clear filters
