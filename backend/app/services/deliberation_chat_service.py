@@ -97,10 +97,7 @@ in your system prompt is for your background knowledge only — do not surface i
 their position (enough for 2-4 sentences), call submit_opinion.
 
 Tools:
-- **submit_opinion**: Submit the human's synthesized opinion. Call when you have enough for 2-4 sentences.
-- **update_profile**: Save what you learned about this person's values. Only call if you learned \
-something broadly useful beyond this specific topic — the system will also auto-extract learnings \
-after opinion submission."""
+- **submit_opinion**: Submit the human's synthesized opinion. Call when you have enough for 2-4 sentences."""
 
 PARTICIPATING_GUIDANCE = """\
 The user is a participant in this deliberation. You can help them:
@@ -149,26 +146,6 @@ INTERVIEW_TOOLS = [
                     },
                 },
                 "required": ["opinion_text"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "update_profile",
-            "description": (
-                "Save what you learned about this person's values beyond just this topic. "
-                "Only call if you learned something broadly useful."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "profile_text": {
-                        "type": "string",
-                        "description": "Concise markdown profile section capturing what you learned.",
-                    },
-                },
-                "required": ["profile_text"],
             },
         },
     },
@@ -622,8 +599,6 @@ def _execute_tool(
         # Interview tools (browsing/joining phase)
         if tool_name == "submit_opinion":
             return _exec_submit_opinion(db, agent, deliberation, session, arguments["opinion_text"])
-        elif tool_name == "update_profile":
-            return _exec_update_profile(db, agent, arguments["profile_text"])
         # Participating tools
         elif tool_name == "update_opinion":
             return _exec_update_opinion(db, agent, deliberation, arguments["opinion_text"])
@@ -686,30 +661,6 @@ def _exec_submit_opinion(
         "description": f"Opinion submitted for '{deliberation.question[:50]}'",
         "opinion_text": opinion_text,
         "phase": "setup",
-    }
-
-
-def _exec_update_profile(db: Session, agent: Agent, profile_text: str) -> dict:
-    """Update the user's profile."""
-    hosted = db.query(HostedAgent).filter(HostedAgent.agent_id == agent.id).first()
-    if not hosted:
-        return {
-            "action": "update_profile",
-            "description": "Profile note recorded.",
-            "detail": profile_text,
-        }
-
-    if hosted.user_profile:
-        hosted.user_profile = hosted.user_profile.rstrip() + "\n\n" + profile_text
-    else:
-        hosted.user_profile = profile_text
-    hosted.profile_version += 1
-    db.commit()
-
-    return {
-        "action": "update_profile",
-        "description": "Profile updated successfully.",
-        "detail": profile_text,
     }
 
 
