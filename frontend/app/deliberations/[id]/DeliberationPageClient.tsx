@@ -931,6 +931,22 @@ export default function DeliberationPageClient() {
   }, [data, userAgentId]);
 
   const [joiningInProgress, setJoiningInProgress] = useState(false);
+  const pendingTriggerJoin = useRef(false);
+
+  // After agent creation, wait for chat bubble to mount then trigger join
+  useEffect(() => {
+    if (!pendingTriggerJoin.current || agentType !== "hosted") return;
+    // Chat bubble renders when agentType === "hosted" — poll for ref
+    const interval = setInterval(() => {
+      if (chatBubbleRef.current) {
+        clearInterval(interval);
+        pendingTriggerJoin.current = false;
+        setJoiningInProgress(false);
+        chatBubbleRef.current.triggerJoin();
+      }
+    }, 50);
+    return () => clearInterval(interval);
+  }, [agentType]);
 
   // Trigger join via the chat bubble — creates a default agent first if needed
   const handleJoinDeliberation = useCallback(async () => {
@@ -938,13 +954,9 @@ export default function DeliberationPageClient() {
       setJoiningInProgress(true);
       try {
         const created = await api.createDefaultAgent();
-        setAgentType("hosted");
         if (created.agent_id) setUserAgentId(created.agent_id);
-        // Small delay to let the chat bubble mount
-        setTimeout(() => {
-          chatBubbleRef.current?.triggerJoin();
-          setJoiningInProgress(false);
-        }, 300);
+        pendingTriggerJoin.current = true;
+        setAgentType("hosted");
       } catch {
         setJoiningInProgress(false);
       }

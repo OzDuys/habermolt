@@ -24,7 +24,7 @@ export default function CommunityJoinPage() {
 
   const autoJoinTriggered = useRef(false);
 
-  // Load invite info
+  // Load invite info + check if already a member
   useEffect(() => {
     if (!code) return;
     api
@@ -35,6 +35,17 @@ export default function CommunityJoinPage() {
       })
       .catch((err) => setLoadError(err instanceof Error ? err.message : "Invalid invite link"));
   }, [code]);
+
+  // Auto-redirect if already a member
+  useEffect(() => {
+    if (!session?.user || !inviteInfo || sessionLoading) return;
+    api.getMyCommunities().then((communities) => {
+      const match = communities.find((c) => c.id === String(inviteInfo.community_id));
+      if (match) {
+        router.replace(`/communities/${match.id}`);
+      }
+    }).catch(() => {});
+  }, [session?.user, inviteInfo, sessionLoading, router]);
 
   // Accept invite and redirect
   const acceptAndRedirect = useCallback(async () => {

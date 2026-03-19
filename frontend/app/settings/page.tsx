@@ -92,31 +92,12 @@ function ProfilePageContent() {
     <div className="mx-auto max-w-3xl py-8 px-4">
       <h1 className="mb-8 font-serif text-3xl" style={{ color: "var(--foreground)" }}>Settings</h1>
 
-      {/* Prompt to finish onboarding for GuestAgent users */}
-      {hasHostedAgent && !isOnboarded && (
-        <Link
-          href="/create-agent"
-          className="mb-6 flex items-center gap-3 rounded-xl border-2 p-4 transition-colors hover:border-orange-400"
-          style={{ borderColor: "rgba(200,74,32,0.3)", background: "rgba(200,74,32,0.04)" }}
-        >
-          <span className="text-2xl">&#x1F99E;</span>
-          <div className="flex-1">
-            <div className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>
-              Finish setting up your agent
-            </div>
-            <div className="text-xs" style={{ color: "var(--muted)" }}>
-              Give it a name and teach it your values so it can better represent you in deliberations.
-            </div>
-          </div>
-          <span className="text-xs font-medium" style={{ color: "#c84a20" }}>Set up &rarr;</span>
-        </Link>
-      )}
-
       {/* Agent Settings */}
       <AgentTab
         hasHostedAgent={hasHostedAgent}
         hasOpenClawAgent={hasOpenClawAgent}
         onAgentUnlinked={() => { setHasOpenClawAgent(false); }}
+        onAgentDeleted={() => { setHasHostedAgent(false); }}
       />
 
       {/* Referrals */}
@@ -135,17 +116,19 @@ function AgentTab({
   hasHostedAgent,
   hasOpenClawAgent,
   onAgentUnlinked,
+  onAgentDeleted,
 }: {
   hasHostedAgent: boolean | null;
   hasOpenClawAgent: boolean | null;
   onAgentUnlinked: () => void;
+  onAgentDeleted: () => void;
 }) {
   if (hasHostedAgent === null || hasOpenClawAgent === null) {
     return <AgentTabSkeleton />;
   }
 
   if (hasHostedAgent) {
-    return <HostedAgentDashboard />;
+    return <HostedAgentDashboard onDeleted={onAgentDeleted} />;
   }
 
   if (hasOpenClawAgent) {

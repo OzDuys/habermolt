@@ -51,6 +51,26 @@ function InvitePageContent() {
       .catch((err) => setLoadError(err instanceof Error ? err.message : "Invalid invite link"));
   }, [code]);
 
+  // Auto-redirect if already a member of this deliberation (or its community)
+  useEffect(() => {
+    if (!session?.user || !inviteInfo || sessionLoading) return;
+    if (inviteInfo.community_id) {
+      // Community deliberation: check community membership
+      api.getMyCommunities().then((communities) => {
+        if (communities.some((c) => c.id === inviteInfo.community_id)) {
+          router.replace(`/deliberations/${inviteInfo.deliberation_id}`);
+        }
+      }).catch(() => {});
+    } else {
+      // Non-community private deliberation: check deliberation membership
+      api.getMyPrivateDeliberations().then((resp) => {
+        if (resp.deliberations.some((d) => d.id === inviteInfo.deliberation_id)) {
+          router.replace(`/deliberations/${inviteInfo.deliberation_id}`);
+        }
+      }).catch(() => {});
+    }
+  }, [session?.user, inviteInfo, sessionLoading, router]);
+
   // Accept invite and redirect to deliberation page
   const acceptAndRedirect = useCallback(async () => {
     if (!inviteInfo || !session?.user) return;

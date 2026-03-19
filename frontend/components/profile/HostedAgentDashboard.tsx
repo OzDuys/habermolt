@@ -21,7 +21,7 @@ const CONFIG_FREQUENCIES = [
   { value: "weekly", label: "Once a week" },
 ];
 
-export default function HostedAgentDashboard() {
+export default function HostedAgentDashboard({ onDeleted }: { onDeleted?: () => void } = {}) {
   const router = useRouter();
   const [agent, setAgent] = useState<HostedAgent | null>(null);
   const [loading, setLoading] = useState(true);
@@ -265,8 +265,9 @@ export default function HostedAgentDashboard() {
     try {
       const res = await fetch("/api/backend/hosted-agents/me", { method: "DELETE" });
       if (res.ok || res.status === 204) {
-        router.push("/settings");
-        router.refresh();
+        setAgent(null);
+        setNotFound(true);
+        onDeleted?.();
       }
     } catch {}
   };
@@ -306,7 +307,7 @@ export default function HostedAgentDashboard() {
       {/* Single agent card */}
       <div className="mb-6 rounded-xl border p-5" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
         {/* Card header */}
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-2">
+        <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <h3 className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>Your HaberAgent</h3>
             {editingName ? (
@@ -346,7 +347,7 @@ export default function HostedAgentDashboard() {
                 className="flex min-w-0 items-center gap-1.5 rounded-lg border px-2.5 py-0.5 text-sm transition-colors hover:border-stone-400"
                 style={{ color: "var(--muted)", borderColor: "var(--border)" }}
               >
-                <span className="truncate">{agent.display_name}</span>
+                <span className="truncate max-w-[150px] sm:max-w-none">{agent.display_name}</span>
                 <svg className="h-3 w-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                 </svg>
@@ -427,14 +428,14 @@ export default function HostedAgentDashboard() {
                 value={agent.model}
                 onChange={(e) => handleConfigUpdate("model", e.target.value)}
                 disabled={saving}
-                className="rounded-lg border px-2 py-1.5 text-xs"
+                className="w-full rounded-lg border px-2 py-1.5 text-xs sm:w-auto sm:max-w-[220px]"
                 style={{ borderColor: "var(--border)", background: "var(--background)" }}
               >
                 {/* Always include the agent's current model so the dropdown never lies */}
                 {!CONFIG_MODELS.includes(agent.model) && (
-                  <option value={agent.model}>{agent.model} (current)</option>
+                  <option value={agent.model}>{agent.model.split("/").pop()} (current)</option>
                 )}
-                {CONFIG_MODELS.map((m) => <option key={m} value={m}>{m}</option>)}
+                {CONFIG_MODELS.map((m) => <option key={m} value={m}>{m.split("/").pop()}</option>)}
               </select>
             }
           />
@@ -446,7 +447,7 @@ export default function HostedAgentDashboard() {
                 value={agent.participation_frequency}
                 onChange={(e) => handleConfigUpdate("participation_frequency", e.target.value)}
                 disabled={saving}
-                className="rounded-lg border px-2 py-1.5 text-xs"
+                className="w-full rounded-lg border px-2 py-1.5 text-xs sm:w-auto"
                 style={{ borderColor: "var(--border)", background: "var(--background)" }}
               >
                 {CONFIG_FREQUENCIES.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
@@ -655,7 +656,7 @@ function MemoryPreviewCard({
   return (
     <button
       onClick={onClick}
-      className="w-full rounded-lg border p-2.5 text-left transition-colors hover:opacity-80 sm:max-w-xs"
+      className="w-full rounded-lg border p-2.5 text-left transition-colors hover:opacity-80 sm:w-auto sm:max-w-xs"
       style={{ borderColor: "var(--border)", background: "var(--background)" }}
     >
       <p className="line-clamp-2 text-xs" style={{ color: "var(--foreground)" }}>
@@ -730,14 +731,14 @@ function ProfileViewModal({
             exit={{ opacity: 0 }}
           />
           <motion.div
-            className="relative flex max-h-[80vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl"
+            className="relative flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl sm:max-h-[80vh]"
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
             transition={{ duration: 0.2 }}
           >
             {/* Header */}
-            <div className="flex items-center justify-between border-b border-stone-200 px-6 py-4">
+            <div className="flex items-center justify-between border-b border-stone-200 px-4 py-3 sm:px-6 sm:py-4">
               <h2 className="font-handwritten text-xl tracking-tight text-stone-800">Agent Memory</h2>
               <button
                 onClick={onClose}
@@ -776,7 +777,7 @@ function ProfileViewModal({
             )}
 
             {/* Body */}
-            <div className="flex-1 overflow-y-auto px-6 py-4">
+            <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6">
               {proposedProfile && profileTab === "proposed" ? (
                 <textarea
                   value={proposedProfile}
@@ -801,7 +802,7 @@ function ProfileViewModal({
             </div>
 
             {/* Footer */}
-            <div className="flex items-center justify-end gap-2 border-t border-stone-200 px-6 py-3">
+            <div className="flex items-center justify-end gap-2 border-t border-stone-200 px-4 py-3 sm:px-6">
               {proposedProfile && profileTab === "proposed" ? (
                 <>
                   <button
@@ -999,14 +1000,14 @@ function DangerZone({
         Danger zone
       </button>
       {open && (
-        <div className="mt-3 flex items-center justify-between rounded-lg border border-red-200 bg-red-50 p-4">
+        <div className="mt-3 flex flex-col gap-3 rounded-lg border border-red-200 bg-red-50 p-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
           <div>
             <div className="text-sm font-medium text-red-800">Delete agent</div>
             <div className="text-xs text-red-600">Permanently removes your agent and all associated data</div>
           </div>
           <button
             onClick={onDelete}
-            className="shrink-0 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-red-700"
+            className="shrink-0 self-start rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-red-700"
           >
             Delete
           </button>
@@ -1096,8 +1097,8 @@ function ImportMemoryModal({
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
-            <div className="p-6">
-              <h2 className="mb-5 font-handwritten text-2xl tracking-tight text-stone-800">
+            <div className="p-4 sm:p-6">
+              <h2 className="mb-5 font-handwritten text-xl tracking-tight text-stone-800 sm:text-2xl">
                 Import memory to Habermolt
               </h2>
               <div className="mb-5">
@@ -1105,8 +1106,8 @@ function ImportMemoryModal({
                   <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-stone-800 text-xs font-medium text-white">1</span>
                   <span className="text-sm font-medium text-stone-700">Copy this prompt into a chat with your other AI provider</span>
                 </div>
-                <div className="relative ml-8">
-                  <div className="max-h-32 overflow-y-auto rounded-lg border border-stone-200 bg-stone-50 p-3 pr-20 text-xs leading-relaxed text-stone-600">
+                <div className="relative ml-0 sm:ml-8">
+                  <div className="max-h-32 overflow-y-auto rounded-lg border border-stone-200 bg-stone-50 p-3 pb-10 text-xs leading-relaxed text-stone-600 sm:pb-3 sm:pr-20">
                     {IMPORT_PROMPT}
                   </div>
                   <button
@@ -1137,7 +1138,7 @@ function ImportMemoryModal({
                   <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-stone-800 text-xs font-medium text-white">2</span>
                   <span className="text-sm font-medium text-stone-700">Paste results below to add to your profile</span>
                 </div>
-                <div className="ml-8">
+                <div className="ml-0 sm:ml-8">
                   <textarea
                     value={importedText}
                     onChange={(e) => setImportedText(e.target.value)}

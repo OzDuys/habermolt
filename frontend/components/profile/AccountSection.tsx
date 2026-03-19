@@ -33,7 +33,7 @@ export default function AccountSection({ session, onSignOut }: { session: { user
     <div className="rounded-xl border p-5" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
       <h3 className="mb-4 text-sm font-semibold" style={{ color: "var(--foreground)" }}>Account</h3>
       <div className="divide-y" style={{ borderColor: "var(--border)" }}>
-        <div className="flex items-center justify-between py-2.5">
+        <div className="flex flex-col gap-1 py-2.5 sm:flex-row sm:items-center sm:justify-between">
           <span className="text-sm" style={{ color: "var(--muted)" }}>Username</span>
           {editingName ? (
             <div className="flex items-center gap-2">
@@ -41,7 +41,7 @@ export default function AccountSection({ session, onSignOut }: { session: { user
                 value={nameValue}
                 onChange={(e) => setNameValue(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") handleSaveName(); if (e.key === "Escape") { setEditingName(false); setNameValue(displayName); } }}
-                className="rounded-lg border px-2 py-1 text-sm"
+                className="min-w-0 flex-1 rounded-lg border px-2 py-1 text-sm"
                 style={{ borderColor: "var(--border)", background: "var(--background)", color: "var(--foreground)" }}
                 autoFocus
               />
@@ -53,7 +53,7 @@ export default function AccountSection({ session, onSignOut }: { session: { user
               </button>
             </div>
           ) : (
-            <button onClick={() => setEditingName(true)} className="flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-sm font-medium transition-colors hover:border-stone-400" style={{ color: "var(--foreground)", borderColor: "var(--border)" }}>
+            <button onClick={() => setEditingName(true)} className="flex items-center gap-1.5 self-start rounded-lg border px-2.5 py-1 text-sm font-medium transition-colors hover:border-stone-400 sm:self-auto" style={{ color: "var(--foreground)", borderColor: "var(--border)" }}>
               {displayName || "—"}
               <svg className="h-3 w-3" style={{ color: "var(--muted)" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
@@ -61,11 +61,11 @@ export default function AccountSection({ session, onSignOut }: { session: { user
             </button>
           )}
         </div>
-        <div className="flex items-center justify-between py-2.5" style={{ borderColor: "var(--border)" }}>
+        <div className="flex flex-col gap-1 py-2.5 sm:flex-row sm:items-center sm:justify-between" style={{ borderColor: "var(--border)" }}>
           <span className="text-sm" style={{ color: "var(--muted)" }}>Email</span>
-          <span className="text-sm font-medium" style={{ color: "var(--foreground)" }}>{session.user.email}</span>
+          <span className="truncate text-sm font-medium" style={{ color: "var(--foreground)" }}>{session.user.email}</span>
         </div>
-        <div className="flex items-center justify-between py-2.5" style={{ borderColor: "var(--border)" }}>
+        <div className="flex flex-col gap-1 py-2.5 sm:flex-row sm:items-center sm:justify-between" style={{ borderColor: "var(--border)" }}>
           <span className="text-sm" style={{ color: "var(--muted)" }}>Member since</span>
           <span className="text-sm font-medium" style={{ color: "var(--foreground)" }}>
             {session.user.createdAt ? formatDate(new Date(session.user.createdAt).toISOString()) : "—"}
