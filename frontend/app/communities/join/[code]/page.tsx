@@ -24,28 +24,35 @@ export default function CommunityJoinPage() {
 
   const autoJoinTriggered = useRef(false);
 
-  // Load invite info + check if already a member
+  // Load invite info, and if signed in, check membership before showing invite card
   useEffect(() => {
-    if (!code) return;
-    api
-      .getCommunityInviteInfo(code)
-      .then((info) => {
-        setInviteInfo(info);
-        setPageState("invite");
-      })
-      .catch((err) => setLoadError(err instanceof Error ? err.message : "Invalid invite link"));
-  }, [code]);
+    if (!code || sessionLoading) return;
 
-  // Auto-redirect if already a member
-  useEffect(() => {
-    if (!session?.user || !inviteInfo || sessionLoading) return;
-    api.getMyCommunities().then((communities) => {
-      const match = communities.find((c) => c.id === String(inviteInfo.community_id));
-      if (match) {
-        router.replace(`/communities/${match.id}`);
-      }
-    }).catch(() => {});
-  }, [session?.user, inviteInfo, sessionLoading, router]);
+    const loadInvite = api.getCommunityInviteInfo(code);
+
+    if (session?.user) {
+      // Fetch invite info and membership in parallel
+      Promise.all([loadInvite, api.getMyCommunities()])
+        .then(([info, communities]) => {
+          const match = communities.find((c) => c.id === String(info.community_id));
+          if (match) {
+            router.replace(`/communities/${match.id}`);
+          } else {
+            setInviteInfo(info);
+            setPageState("invite");
+          }
+        })
+        .catch((err) => setLoadError(err instanceof Error ? err.message : "Invalid invite link"));
+    } else {
+      // Not signed in — just show invite info
+      loadInvite
+        .then((info) => {
+          setInviteInfo(info);
+          setPageState("invite");
+        })
+        .catch((err) => setLoadError(err instanceof Error ? err.message : "Invalid invite link"));
+    }
+  }, [code, session?.user, sessionLoading, router]);
 
   // Accept invite and redirect
   const acceptAndRedirect = useCallback(async () => {
@@ -71,7 +78,7 @@ export default function CommunityJoinPage() {
   }, [session?.user, inviteInfo, code, acceptAndRedirect]);
 
   // Loading
-  if (!inviteInfo && !loadError) {
+  if (pageState === "loading" && !loadError) {
     return (
       <div className="mx-auto max-w-md py-12 text-center">
         <div className="mb-4 mx-auto h-8 w-48 animate-pulse rounded" style={{ background: "var(--surface-dim)" }} />

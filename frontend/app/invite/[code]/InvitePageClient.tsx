@@ -39,37 +39,44 @@ function InvitePageContent() {
   const [signInOpen, setSignInOpen] = useState(false);
   const autoJoinTriggered = useRef(false);
 
-  // Load invite info
+  // Load invite info, and if signed in, check membership before showing invite card
   useEffect(() => {
-    if (!code) return;
-    api
-      .getInviteInfo(code)
-      .then((info) => {
-        setInviteInfo(info);
-        setPageState("invite");
-      })
-      .catch((err) => setLoadError(err instanceof Error ? err.message : "Invalid invite link"));
-  }, [code]);
+    if (!code || sessionLoading) return;
 
-  // Auto-redirect if already a member of this deliberation (or its community)
-  useEffect(() => {
-    if (!session?.user || !inviteInfo || sessionLoading) return;
-    if (inviteInfo.community_id) {
-      // Community deliberation: check community membership
-      api.getMyCommunities().then((communities) => {
-        if (communities.some((c) => c.id === inviteInfo.community_id)) {
-          router.replace(`/deliberations/${inviteInfo.deliberation_id}`);
-        }
-      }).catch(() => {});
+    const loadInvite = api.getInviteInfo(code);
+
+    if (session?.user) {
+      // Fetch invite info and membership in parallel
+      const membershipCheck = Promise.all([
+        api.getMyCommunities().catch(() => []),
+        api.getMyPrivateDeliberations().catch(() => ({ deliberations: [] })),
+      ]);
+
+      Promise.all([loadInvite, membershipCheck])
+        .then(([info, [communities, privResp]]) => {
+          // Check community membership for community deliberations
+          if (info.community_id && communities.some((c: any) => c.id === info.community_id)) {
+            router.replace(`/deliberations/${info.deliberation_id}`);
+            return;
+          }
+          // Check deliberation membership for non-community private deliberations
+          if (!info.community_id && privResp.deliberations.some((d: any) => d.id === info.deliberation_id)) {
+            router.replace(`/deliberations/${info.deliberation_id}`);
+            return;
+          }
+          setInviteInfo(info);
+          setPageState("invite");
+        })
+        .catch((err) => setLoadError(err instanceof Error ? err.message : "Invalid invite link"));
     } else {
-      // Non-community private deliberation: check deliberation membership
-      api.getMyPrivateDeliberations().then((resp) => {
-        if (resp.deliberations.some((d) => d.id === inviteInfo.deliberation_id)) {
-          router.replace(`/deliberations/${inviteInfo.deliberation_id}`);
-        }
-      }).catch(() => {});
+      loadInvite
+        .then((info) => {
+          setInviteInfo(info);
+          setPageState("invite");
+        })
+        .catch((err) => setLoadError(err instanceof Error ? err.message : "Invalid invite link"));
     }
-  }, [session?.user, inviteInfo, sessionLoading, router]);
+  }, [code, session?.user, sessionLoading, router]);
 
   // Accept invite and redirect to deliberation page
   const acceptAndRedirect = useCallback(async () => {

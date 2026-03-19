@@ -994,6 +994,8 @@ export default function DeliberationPageClient() {
   // Track opinion/statement counts to know when to refresh clusters
   const prevCountsRef = useRef({ opinions: 0, statements: 0 });
 
+  const [notFound, setNotFound] = useState(false);
+
   // Fetch data with polling (lightweight — just deliberation data)
   useEffect(() => {
     const load = async () => {
@@ -1017,8 +1019,15 @@ export default function DeliberationPageClient() {
         }
 
         prevCountsRef.current = { opinions: d.opinions.length, statements: d.statements.length };
-      } catch { /* swallow */ }
-      setLoading(false);
+        setLoading(false);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "";
+        if (msg.includes("404") || msg.toLowerCase().includes("not found") || msg.includes("must be a hex string") || msg.includes("must be at least")) {
+          setNotFound(true);
+          setLoading(false);
+        }
+        // For other errors (403, network), keep loading state so polling can retry
+      }
     };
     load();
     const iv = setInterval(load, 10000);
@@ -1162,14 +1171,16 @@ export default function DeliberationPageClient() {
     );
   }
 
-  if (!data) {
+  if (notFound || (!loading && !data)) {
     return (
       <div style={{ position: "fixed", inset: 0, zIndex: 150, background: "#faf7f0", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16 }}>
         <span style={{ fontSize: 14, color: "#999" }}>Deliberation not found</span>
-        <Link href="/monitoring/deliberations" style={{ fontSize: 12, color: "#c84a20", textDecoration: "none" }}>← Back</Link>
+        <Link href="/" style={{ fontSize: 12, color: "#c84a20", textDecoration: "none" }}>← Home</Link>
       </div>
     );
   }
+
+  if (!data) return null;
 
   const d = data.deliberation;
   const isLive = true;
