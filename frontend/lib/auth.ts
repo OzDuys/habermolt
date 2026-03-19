@@ -117,7 +117,13 @@ export const auth = betterAuth({
   },
 
   emailVerification: {
-    sendVerificationEmail: async ({ user, url }: { user: { email: string }; url: string }) => {
+    sendVerificationEmail: async ({ user, url: rawUrl }: { user: { email: string }; url: string }) => {
+      // Rewrite the callbackURL inside the verification link so the frontend
+      // can show a "verified" toast when the user lands after clicking it.
+      const url = rawUrl.replace(
+        /callbackURL=[^&]*/,
+        "callbackURL=" + encodeURIComponent("/?verified=true"),
+      );
       await resend.emails.send({
         from: FROM_ADDRESS,
         to: user.email,
