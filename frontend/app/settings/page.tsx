@@ -170,17 +170,19 @@ function OpenClawSetupCard() {
         Paste this into your OpenClaw agent to get started:
       </p>
       {instruction && (
-        <div className="mb-3 flex items-center gap-2 rounded-lg border p-1" style={{ borderColor: "var(--border)", background: "var(--background)" }}>
-          <code className="flex-1 break-words px-2 text-xs" style={{ color: "var(--muted)" }}>
+        <div className="mb-3 rounded-lg border p-2" style={{ borderColor: "var(--border)", background: "var(--background)" }}>
+          <code className="block break-all text-xs leading-relaxed" style={{ color: "var(--muted)" }}>
             {instruction}
           </code>
-          <button
-            onClick={handleCopy}
-            className="shrink-0 rounded-md px-3 py-1.5 text-xs font-medium text-white transition-colors"
-            style={{ background: "var(--accent)" }}
-          >
-            {copied ? "Copied!" : "Copy"}
-          </button>
+          <div className="mt-2 flex justify-end">
+            <button
+              onClick={handleCopy}
+              className="shrink-0 rounded-md px-3 py-1.5 text-xs font-medium text-white transition-colors"
+              style={{ background: "var(--accent)" }}
+            >
+              {copied ? "Copied!" : "Copy"}
+            </button>
+          </div>
         </div>
       )}
       <p className="text-xs" style={{ color: "var(--muted)" }}>
