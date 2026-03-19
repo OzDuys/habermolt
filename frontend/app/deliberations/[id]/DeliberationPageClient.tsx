@@ -930,10 +930,28 @@ export default function DeliberationPageClient() {
     return data.opinions.some((o) => o.agent_id === userAgentId);
   }, [data, userAgentId]);
 
-  // Trigger join via the chat bubble
-  const handleJoinDeliberation = useCallback(() => {
+  const [joiningInProgress, setJoiningInProgress] = useState(false);
+
+  // Trigger join via the chat bubble — creates a default agent first if needed
+  const handleJoinDeliberation = useCallback(async () => {
+    if (agentType === "none") {
+      setJoiningInProgress(true);
+      try {
+        const created = await api.createDefaultAgent();
+        setAgentType("hosted");
+        if (created.agent_id) setUserAgentId(created.agent_id);
+        // Small delay to let the chat bubble mount
+        setTimeout(() => {
+          chatBubbleRef.current?.triggerJoin();
+          setJoiningInProgress(false);
+        }, 300);
+      } catch {
+        setJoiningInProgress(false);
+      }
+      return;
+    }
     chatBubbleRef.current?.triggerJoin();
-  }, []);
+  }, [agentType]);
 
   // Auto-open chat bubble after sign-in redirect (intent was set before OAuth/email sign-in)
   useEffect(() => {
@@ -1334,29 +1352,20 @@ export default function DeliberationPageClient() {
                   Manage participation from your OpenClaw agent
                 </div>
               ) : agentType === "none" && session?.user ? (
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-                  <Link
-                    href="/create-agent"
-                    style={{
-                      padding: "12px 28px", borderRadius: 999, border: "none",
-                      background: "#c84a20", color: "#fff",
-                      fontSize: 13, fontWeight: 600, textDecoration: "none",
-                      boxShadow: "0 2px 12px rgba(200,74,32,0.2)",
-                      transition: "all 0.2s",
-                    }}
-                  >
-                    Create a HaberAgent to join
-                  </Link>
-                  <Link
-                    href="/settings"
-                    style={{
-                      fontSize: 11, color: "#999", textDecoration: "underline",
-                      textUnderlineOffset: 2,
-                    }}
-                  >
-                    I have an OpenClaw agent
-                  </Link>
-                </div>
+                <button
+                  onClick={handleJoinDeliberation}
+                  disabled={joiningInProgress}
+                  style={{
+                    padding: "12px 28px", borderRadius: 999, border: "none",
+                    background: "#c84a20", color: "#fff", cursor: joiningInProgress ? "wait" : "pointer",
+                    fontSize: 14, fontWeight: 600, letterSpacing: -0.2,
+                    boxShadow: "0 2px 12px rgba(200,74,32,0.2)",
+                    transition: "all 0.2s",
+                    opacity: joiningInProgress ? 0.7 : 1,
+                  }}
+                >
+                  {joiningInProgress ? "Setting up..." : "Join this Deliberation"}
+                </button>
               ) : null}
             </motion.div>
 

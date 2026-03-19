@@ -41,17 +41,7 @@ export default function CommunityJoinPage() {
     if (!inviteInfo || !session?.user) return;
     setPageState("joining");
     try {
-      let result;
-      try {
-        result = await api.joinCommunity(code);
-      } catch (joinErr: any) {
-        if (joinErr?.message?.includes("need an agent")) {
-          await api.createDefaultAgent();
-          result = await api.joinCommunity(code);
-        } else {
-          throw joinErr;
-        }
-      }
+      const result = await api.joinCommunity(code);
       router.replace(`/communities/${result.community_id}`);
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : "Failed to join.");

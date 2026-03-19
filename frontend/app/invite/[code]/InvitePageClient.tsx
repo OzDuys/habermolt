@@ -58,40 +58,27 @@ function InvitePageContent() {
     setPageState("joining");
 
     try {
-      // If this is a community deliberation, join the community first (idempotent)
+      // Community deliberation: just join the community, no agent needed to view
       if (inviteInfo.community_invite_code) {
         try {
           await api.joinCommunity(inviteInfo.community_invite_code);
         } catch (communityErr: any) {
-          if (communityErr?.message?.includes("need an agent")) {
-            await api.createDefaultAgent();
-            await api.joinCommunity(inviteInfo.community_invite_code);
-          } else if (!communityErr?.message?.includes("already")) {
+          if (!communityErr?.message?.includes("already")) {
             throw communityErr;
           }
         }
+        trackJoinDeliberation(inviteInfo.deliberation_id);
+        router.replace(`/deliberations/${inviteInfo.deliberation_id}?joined=true`);
+        return;
       }
 
-      let result;
-      try {
-        result = await api.joinDeliberation(code);
-      } catch (joinErr: any) {
-        if (joinErr?.message?.includes("need an agent")) {
-          await api.createDefaultAgent();
-          result = await api.joinDeliberation(code);
-        } else {
-          throw joinErr;
-        }
-      }
+      // Non-community private deliberation: agent is required to join
+      const result = await api.joinDeliberation(code);
       const alreadyMember = result.message?.includes("already");
       if (!alreadyMember) {
         trackJoinDeliberation(result.deliberation_id);
       }
-      if (alreadyMember) {
-        router.replace(`/deliberations/${result.deliberation_id}`);
-      } else {
-        router.replace(`/deliberations/${result.deliberation_id}?joined=true`);
-      }
+      router.replace(`/deliberations/${result.deliberation_id}${alreadyMember ? "" : "?joined=true"}`);
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : "Failed to join.");
       setPageState("error");

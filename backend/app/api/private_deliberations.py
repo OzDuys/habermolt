@@ -357,18 +357,17 @@ async def list_my_private_deliberations(
     """
     user_id = require_user_id(req)
 
+    delib_ids: set = set()
+
+    # Get private deliberations where the user's agent is a member
     agent = find_user_agent(db, user_id)
-    if not agent:
-        return PrivateDeliberationListResponse(deliberations=[])
-
-    # Get all private deliberations where the user's agent is a member
-    memberships = (
-        db.query(DeliberationMember)
-        .filter(DeliberationMember.agent_id == agent.id)
-        .all()
-    )
-
-    delib_ids = set(m.deliberation_id for m in memberships)
+    if agent:
+        memberships = (
+            db.query(DeliberationMember)
+            .filter(DeliberationMember.agent_id == agent.id)
+            .all()
+        )
+        delib_ids.update(m.deliberation_id for m in memberships)
 
     # Also include deliberations from communities the user belongs to
     user_community_ids = [
