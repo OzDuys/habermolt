@@ -81,6 +81,9 @@ export const auth = betterAuth({
   trustedOrigins: process.env.BETTER_AUTH_TRUSTED_ORIGINS?.split(",") ?? [],
   database: new Pool({
     connectionString: process.env.DATABASE_URL,
+    max: 3,  // Vercel serverless: keep pool small to avoid exhausting PG connection limit
+    idleTimeoutMillis: 20000,  // Close idle connections after 20s
+    connectionTimeoutMillis: 10000,  // Fail fast if PG is unreachable
   }),
 
   emailAndPassword: {
