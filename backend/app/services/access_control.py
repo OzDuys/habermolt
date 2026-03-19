@@ -104,6 +104,17 @@ def enforce_deliberation_access(
                 check_private_access(db, deliberation, user_agent)
                 return
 
+            # User has no agent — check community membership directly
+            if deliberation.community_id:
+                is_community_member = db.query(CommunityMember).filter(
+                    and_(
+                        CommunityMember.community_id == deliberation.community_id,
+                        CommunityMember.user_id == user_id,
+                    )
+                ).first()
+                if is_community_member:
+                    return
+
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
         detail="This is a private deliberation",
