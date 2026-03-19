@@ -98,7 +98,9 @@ their position (enough for 2-4 sentences), call submit_opinion.
 
 Tools:
 - **submit_opinion**: Submit the human's synthesized opinion. Call when you have enough for 2-4 sentences.
-- **update_profile**: Save what you learned about this person's values (optional)."""
+- **update_profile**: Save what you learned about this person's values. Only call if you learned \
+something broadly useful beyond this specific topic — the system will also auto-extract learnings \
+after opinion submission."""
 
 PARTICIPATING_GUIDANCE = """\
 The user is a participant in this deliberation. You can help them:
@@ -941,6 +943,84 @@ def _do_propose_for_agent(db: Session, agent: Agent, deliberation: Deliberation)
         logger.warning(f"Statement submission failed: {e}")
 
 
+def _update_profile_from_interview(
+    db: Session,
+    session: AgentSession,
+    agent: Agent,
+    deliberation: Deliberation,
+    opinion_text: str,
+):
+    """Extract profile-worthy learnings from the interview and append to user profile.
+
+    Runs as part of the background setup after submit_opinion. Uses a single LLM call
+    to distill what was learned about the user's values beyond just this topic.
+    """
+    hosted = db.query(HostedAgent).filter(HostedAgent.agent_id == agent.id).first()
+    if not hosted:
+        return
+
+    # Build interview transcript from session messages
+    messages = session.messages or []
+    transcript_lines = []
+    for msg in messages:
+        role = msg.get("role", "")
+        content = msg.get("content", "")
+        if role == "user" and content:
+            transcript_lines.append(f"Human: {content}")
+        elif role == "assistant" and content:
+            transcript_lines.append(f"Agent: {content}")
+    if not transcript_lines:
+        return
+
+    transcript = "\n".join(transcript_lines)
+    current_profile = hosted.user_profile or ""
+
+    prompt = f"""A user just completed a short interview about this deliberation topic:
+"{sanitize_prompt_text(deliberation.question)}"
+
+Their submitted opinion: "{sanitize_prompt_text(opinion_text)}"
+
+Interview transcript:
+{sanitize_prompt_text(transcript)}
+
+Their current profile:
+{sanitize_prompt_text(current_profile)}
+
+Extract any NEW values, preferences, or positions revealed in this interview that are NOT \
+already captured in the current profile. Focus on insights that would be useful across \
+multiple deliberation topics — not just this specific one.
+
+Rules:
+- If the interview revealed nothing new beyond the submitted opinion, respond with exactly: NO_UPDATE
+- Do NOT repeat information already in the profile
+- Do NOT just restate the opinion — extract the underlying values and reasoning
+- Write in concise bullet points starting with "- "
+- Add a markdown heading with the topic area, e.g. "## On [topic]"
+- Keep it to 2-5 bullet points maximum"""
+
+    try:
+        client = LLMClient()
+        result = client.sample_text(prompt=prompt, temperature=0.3, max_tokens=500)
+        track_tokens_from_latest_trace(db, hosted)
+
+        result = result.strip()
+        if not result or result == "NO_UPDATE":
+            return
+
+        # Append to profile
+        if current_profile:
+            hosted.user_profile = current_profile.rstrip() + "\n\n" + result
+        else:
+            hosted.user_profile = result
+        hosted.profile_version += 1
+        db.commit()
+        logger.info(f"Updated profile for agent {agent.id} from deliberation interview")
+
+    except Exception as e:
+        logger.error(f"Profile update from interview failed for agent {agent.id}: {e}", exc_info=True)
+        # Non-fatal — don't block the rest of setup
+
+
 def _run_setup_background(
     session_id: UUID,
     agent_id: UUID,
@@ -992,6 +1072,9 @@ def _run_setup_background(
         progress["last_updated"] = datetime.now(timezone.utc).isoformat()
         session.setup_progress = progress
         db.commit()
+
+        # Step 0: Update user profile with learnings from the interview
+        _update_profile_from_interview(db, session, agent, deliberation, opinion_text)
 
         # Step 1: Generate seed statements (if creator)
         if needs_seed:
