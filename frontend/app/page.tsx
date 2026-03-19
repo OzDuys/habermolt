@@ -552,14 +552,14 @@ export default function HomePage() {
 
   // Check agent type and fetch private deliberations when session is available
   useEffect(() => {
-    if (!session?.user) { setAgentType("loading"); setPrivateDelibs([]); return; }
+    if (!session?.user) { setAgentType("none"); setPrivateDelibs([]); setParticipatedIds(new Set()); return; }
     api.getMyAgentType().then(({ type, onboarded }) => {
       setAgentType(type);
       if (type === "hosted") setIsOnboarded(!!onboarded);
     }).catch(() => setAgentType("none"));
     api.getMyPrivateDeliberations().then((res) => setPrivateDelibs(res.deliberations)).catch(() => {});
     api.getMyParticipatedIds().then((ids) => setParticipatedIds(new Set(ids))).catch(() => {});
-  }, [session]);
+  }, [session?.user?.id]);
 
   // Lock hero height on mount so mobile browser chrome changes don't shift content
   useEffect(() => {
