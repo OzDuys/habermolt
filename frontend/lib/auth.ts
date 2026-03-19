@@ -79,12 +79,20 @@ export const auth = betterAuth({
   baseURL: process.env.BETTER_AUTH_URL,
   secret: process.env.BETTER_AUTH_SECRET,
   trustedOrigins: process.env.BETTER_AUTH_TRUSTED_ORIGINS?.split(",") ?? [],
-  database: new Pool({
-    connectionString: process.env.DATABASE_URL,
-    max: 3,  // Vercel serverless: keep pool small to avoid exhausting PG connection limit
-    idleTimeoutMillis: 20000,  // Close idle connections after 20s
-    connectionTimeoutMillis: 10000,  // Fail fast if PG is unreachable
-  }),
+  database: (() => {
+    const pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      max: 3,  // Vercel serverless: keep pool small to avoid exhausting PG connection limit
+      idleTimeoutMillis: 10000,  // Close idle connections after 10s (serverless functions are short-lived)
+      connectionTimeoutMillis: 10000,  // Fail fast if PG is unreachable
+    });
+    // Prevent "Connection terminated unexpectedly" from crashing the process.
+    // The pool will automatically remove the dead connection and create a new one.
+    pool.on("error", (err) => {
+      console.error("PG pool background error (non-fatal):", err.message);
+    });
+    return pool;
+  })(),
 
   emailAndPassword: {
     enabled: true,
