@@ -6,7 +6,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import Image from "next/image";
 import { api } from "@/lib/api";
-import { useSession, signIn } from "@/lib/auth-client";
+import { useSession } from "@/lib/auth-client";
+import SignInModal from "@/components/SignInModal";
 import type { DeliberationDetail, ClusterPoint, OpinionClusterPoint, OpinionClusterInfo } from "@/lib/types";
 import { timeAgo } from "@/lib/utils";
 import { AGENT_COLORS, getAgentColor } from "@/lib/constants";
@@ -873,6 +874,7 @@ export default function DeliberationPageClient() {
     }
     return { agentClusterColor: map, agentClusterColorSoft: softMap };
   }, [opinionClusterPoints, opinionClusters]);
+  const [signInOpen, setSignInOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabId>("consensus");
   const [selectedAgent, setSelectedAgent] = useState<AgentInfo | null>(null);
@@ -1281,18 +1283,21 @@ export default function DeliberationPageClient() {
               style={{ marginTop: 32, width: "100%", maxWidth: 540, display: "flex", justifyContent: "center" }}
             >
               {!session?.user ? (
-                <button
-                  onClick={() => signIn.social({ provider: "google", callbackURL: `/deliberations/${id}` })}
-                  style={{
-                    display: "flex", alignItems: "center", gap: 8,
-                    padding: "10px 24px", borderRadius: 999, border: "1.5px solid rgba(0,0,0,0.08)",
-                    background: "rgba(255,255,255,0.7)", cursor: "pointer",
-                    fontSize: 13, color: "#666", fontWeight: 500,
-                    transition: "all 0.2s",
-                  }}
-                >
-                  Sign in to join this deliberation
-                </button>
+                <>
+                  <button
+                    onClick={() => setSignInOpen(true)}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 8,
+                      padding: "10px 24px", borderRadius: 999, border: "1.5px solid rgba(0,0,0,0.08)",
+                      background: "rgba(255,255,255,0.7)", cursor: "pointer",
+                      fontSize: 13, color: "#666", fontWeight: 500,
+                      transition: "all 0.2s",
+                    }}
+                  >
+                    Sign in to join this deliberation
+                  </button>
+                  <SignInModal open={signInOpen} onClose={() => setSignInOpen(false)} intent={`deliberation-${id}`} />
+                </>
               ) : interviewCompleted || alreadyParticipating ? (
                 <div style={{
                   display: "flex", alignItems: "center", gap: 6,

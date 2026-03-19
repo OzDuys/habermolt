@@ -420,12 +420,6 @@ class APIClient {
 
   // Email preferences
 
-  async sendWelcomeEmail(): Promise<{ sent: boolean }> {
-    return this.request<{ sent: boolean }>("/api/backend/email/send-welcome", {
-      method: "POST",
-    });
-  }
-
   async getMyEmailPreferences(): Promise<{ weekly_summary: boolean; marketing: boolean }> {
     return this.request<{ weekly_summary: boolean; marketing: boolean }>(
       "/api/backend/email/preferences/me"

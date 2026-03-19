@@ -28,16 +28,6 @@ class UpdateEmailPreferenceRequest(BaseModel):
     marketing: Optional[bool] = None
 
 
-# --- Transactional email triggers ---
-
-@router.post("/send-welcome")
-async def send_welcome(req: Request, db: Session = Depends(get_db)):
-    """Send welcome email to current user (idempotent)."""
-    user_id = require_user_id(req)
-    sent = email_service.send_welcome_email(db, user_id)
-    return {"sent": sent}
-
-
 # --- Authenticated preference endpoints (for Settings page) ---
 
 @router.get("/preferences/me", response_model=EmailPreferenceResponse)

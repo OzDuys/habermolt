@@ -5,7 +5,6 @@ import Navbar from "@/components/Navbar";
 import { DM_Sans, Instrument_Serif } from "next/font/google";
 import { Analytics } from "@vercel/analytics/react";
 import ReferralCapture from "@/components/ReferralCapture";
-import WelcomeEmailTrigger from "@/components/WelcomeEmailTrigger";
 import VerifiedEmailToast from "@/components/VerifiedEmailToast";
 import { Suspense } from "react";
 import "./globals.css";
@@ -88,7 +87,6 @@ export default function RootLayout({
             </div>
           </footer>
         <ReferralCapture />
-        <WelcomeEmailTrigger />
         <Suspense><VerifiedEmailToast /></Suspense>
         <Analytics />
       </body>
