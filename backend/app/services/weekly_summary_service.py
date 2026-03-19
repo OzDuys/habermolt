@@ -1,0 +1,93 @@
+"""
+Weekly summary aggregation for hosted agents.
+
+Collects agent activity over the past 7 days for the weekly summary email.
+"""
+
+import logging
+from datetime import datetime, timedelta
+
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+
+from app.models.deliberation import Deliberation
+from app.models.opinion import Opinion
+from app.models.ranking import Ranking
+from app.models.statement import Statement
+
+logger = logging.getLogger(__name__)
+
+
+def get_weekly_summary(db: Session, agent_id: str) -> dict:
+    """Aggregate agent activity for the past 7 days.
+
+    Returns a dict with:
+      - deliberations_joined: list of {question, deliberation_id}
+      - opinions_count: int
+      - rankings_count: int
+      - statements_proposed: int
+      - consensus_wins: list of {question, statement_title}
+      - is_empty: bool
+    """
+    cutoff = datetime.utcnow() - timedelta(days=7)
+
+    # Deliberations joined (opinions submitted in the period)
+    opinions = (
+        db.query(Opinion.deliberation_id, Deliberation.question)
+        .join(Deliberation, Deliberation.id == Opinion.deliberation_id)
+        .filter(Opinion.agent_id == agent_id, Opinion.submitted_at >= cutoff)
+        .all()
+    )
+    deliberations_joined = [
+        {"deliberation_id": str(o.deliberation_id), "question": o.question}
+        for o in opinions
+    ]
+    opinions_count = len(opinions)
+
+    # Rankings submitted/updated
+    rankings_count = (
+        db.query(func.count(Ranking.id))
+        .filter(Ranking.agent_id == agent_id, Ranking.submitted_at >= cutoff)
+        .scalar()
+    ) or 0
+
+    # Statements proposed
+    statements_proposed = (
+        db.query(func.count(Statement.id))
+        .filter(
+            Statement.contributed_by_agent_id == agent_id,
+            Statement.generated_at >= cutoff,
+        )
+        .scalar()
+    ) or 0
+
+    # Consensus wins (agent's statements currently ranked #1)
+    wins = (
+        db.query(Statement.title, Deliberation.question)
+        .join(Deliberation, Deliberation.id == Statement.deliberation_id)
+        .filter(
+            Statement.contributed_by_agent_id == agent_id,
+            Statement.social_ranking == 1,
+        )
+        .all()
+    )
+    consensus_wins = [
+        {"statement_title": w.title, "question": w.question}
+        for w in wins
+    ]
+
+    is_empty = (
+        opinions_count == 0
+        and rankings_count == 0
+        and statements_proposed == 0
+        and len(consensus_wins) == 0
+    )
+
+    return {
+        "deliberations_joined": deliberations_joined,
+        "opinions_count": opinions_count,
+        "rankings_count": rankings_count,
+        "statements_proposed": statements_proposed,
+        "consensus_wins": consensus_wins,
+        "is_empty": is_empty,
+    }

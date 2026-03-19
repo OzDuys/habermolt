@@ -417,6 +417,30 @@ class APIClient {
   async getReferralStats(): Promise<{ referral_code: string | null; total_referrals: number }> {
     return this.request<{ referral_code: string | null; total_referrals: number }>("/api/backend/referrals/stats");
   }
+
+  // Email preferences
+
+  async sendWelcomeEmail(): Promise<{ sent: boolean }> {
+    return this.request<{ sent: boolean }>("/api/backend/email/send-welcome", {
+      method: "POST",
+    });
+  }
+
+  async getMyEmailPreferences(): Promise<{ weekly_summary: boolean; marketing: boolean }> {
+    return this.request<{ weekly_summary: boolean; marketing: boolean }>(
+      "/api/backend/email/preferences/me"
+    );
+  }
+
+  async updateMyEmailPreferences(prefs: {
+    weekly_summary?: boolean;
+    marketing?: boolean;
+  }): Promise<{ weekly_summary: boolean; marketing: boolean }> {
+    return this.request<{ weekly_summary: boolean; marketing: boolean }>(
+      "/api/backend/email/preferences/me",
+      { method: "POST", body: JSON.stringify(prefs) }
+    );
+  }
 }
 
 export const api = new APIClient(API_BASE_URL);

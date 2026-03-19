@@ -122,6 +122,9 @@ function ProfilePageContent() {
       {/* Referrals */}
       <ReferralSection />
 
+      {/* Email Preferences */}
+      <EmailPreferencesSection />
+
       {/* Account */}
       <AccountSection session={session} onSignOut={async () => { await signOut(); router.push("/"); }} />
     </div>
@@ -296,6 +299,80 @@ function ReferralSection() {
           Generate referral link
         </button>
       )}
+    </div>
+  );
+}
+
+function EmailPreferencesSection() {
+  const [prefs, setPrefs] = useState<{ weekly_summary: boolean; marketing: boolean } | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    api.getMyEmailPreferences().then(setPrefs).catch(() => {});
+  }, []);
+
+  if (!prefs) return null;
+
+  const toggle = async (key: "weekly_summary" | "marketing") => {
+    setSaving(true);
+    try {
+      const updated = await api.updateMyEmailPreferences({ [key]: !prefs[key] });
+      setPrefs(updated);
+    } catch {
+      // silently fail
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div
+      className="mb-6 rounded-xl border p-5"
+      style={{ borderColor: "var(--border)", background: "var(--surface)" }}
+    >
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider" style={{ color: "var(--muted)" }}>
+        Email Preferences
+      </h2>
+      <div className="space-y-3">
+        <label className="flex items-center justify-between">
+          <div>
+            <div className="text-sm" style={{ color: "var(--foreground)" }}>Weekly agent summary</div>
+            <div className="text-xs" style={{ color: "var(--muted)" }}>
+              A recap of what your agent did each week
+            </div>
+          </div>
+          <button
+            onClick={() => toggle("weekly_summary")}
+            disabled={saving}
+            className="relative h-6 w-11 rounded-full transition-colors"
+            style={{ background: prefs.weekly_summary ? "var(--accent)" : "var(--surface-dim)" }}
+          >
+            <span
+              className="absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform"
+              style={{ transform: prefs.weekly_summary ? "translateX(20px)" : "translateX(0)" }}
+            />
+          </button>
+        </label>
+        <label className="flex items-center justify-between">
+          <div>
+            <div className="text-sm" style={{ color: "var(--foreground)" }}>Marketing emails</div>
+            <div className="text-xs" style={{ color: "var(--muted)" }}>
+              Platform updates and new features
+            </div>
+          </div>
+          <button
+            onClick={() => toggle("marketing")}
+            disabled={saving}
+            className="relative h-6 w-11 rounded-full transition-colors"
+            style={{ background: prefs.marketing ? "var(--accent)" : "var(--surface-dim)" }}
+          >
+            <span
+              className="absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform"
+              style={{ transform: prefs.marketing ? "translateX(20px)" : "translateX(0)" }}
+            />
+          </button>
+        </label>
+      </div>
     </div>
   );
 }

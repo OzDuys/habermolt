@@ -23,6 +23,7 @@ from app.models.moderation_log import ModerationLog
 from app.models.community import Community
 from app.models.community_member import CommunityMember
 from app.models.referral import ReferralCode, Referral
+from app.models.email_preference import EmailPreference
 
 __all__ = [
     "Agent",
@@ -46,4 +47,5 @@ __all__ = [
     "CommunityMember",
     "ReferralCode",
     "Referral",
+    "EmailPreference",
 ]

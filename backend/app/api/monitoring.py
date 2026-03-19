@@ -960,3 +960,102 @@ async def get_moderation_logs(
         "page": page,
         "page_size": page_size,
     }
+
+
+# ─── Email Management ────────────────────────────────────────────────────────
+
+
+@router.post("/send-weekly-summaries", dependencies=[Depends(verify_monitoring_secret)])
+async def send_weekly_summaries(
+    db: Session = Depends(get_db),
+    user_ids: Optional[list[str]] = None,
+):
+    """Send weekly summary emails to opted-in users (or specific user_ids)."""
+    from app.models.email_preference import EmailPreference
+    from app.services.email_service import get_or_create_email_preference, send_weekly_summary_email
+    from app.services.weekly_summary_service import get_weekly_summary
+    import time
+
+    # Get all hosted agents (optionally filtered by user_ids)
+    query = db.query(HostedAgent).filter(HostedAgent.is_active == True)
+    if user_ids:
+        query = query.filter(HostedAgent.user_id.in_(user_ids))
+    hosted_agents = query.all()
+
+    sent = 0
+    skipped = 0
+    errors = 0
+    details = []
+
+    for ha in hosted_agents:
+        try:
+            # Check email preference
+            pref = get_or_create_email_preference(db, ha.user_id)
+            db.commit()
+            if not pref.weekly_summary:
+                skipped += 1
+                details.append({"user_id": ha.user_id, "agent": ha.display_name, "status": "opted_out"})
+                continue
+
+            # Get summary
+            summary = get_weekly_summary(db, str(ha.agent_id))
+            if summary["is_empty"]:
+                skipped += 1
+                details.append({"user_id": ha.user_id, "agent": ha.display_name, "status": "empty"})
+                continue
+
+            # Get user email
+            row = db.execute(
+                text('SELECT name, email FROM "user" WHERE id = :uid'),
+                {"uid": ha.user_id},
+            ).fetchone()
+            if not row or not row[1]:
+                skipped += 1
+                details.append({"user_id": ha.user_id, "agent": ha.display_name, "status": "no_email"})
+                continue
+
+            ok = send_weekly_summary_email(
+                db, row[1], row[0] or "there", ha.display_name, summary, pref.unsubscribe_token,
+            )
+            if ok:
+                sent += 1
+                details.append({"user_id": ha.user_id, "agent": ha.display_name, "status": "sent"})
+            else:
+                errors += 1
+                details.append({"user_id": ha.user_id, "agent": ha.display_name, "status": "error"})
+
+            # Brief delay to respect Resend rate limits
+            time.sleep(0.2)
+        except Exception as e:
+            errors += 1
+            details.append({"user_id": ha.user_id, "agent": ha.display_name, "status": "error", "error": str(e)})
+
+    return {"sent": sent, "skipped": skipped, "errors": errors, "total": len(hosted_agents), "details": details}
+
+
+@router.post("/preview-weekly-summary", dependencies=[Depends(verify_monitoring_secret)])
+async def preview_weekly_summary(
+    user_id: str,
+    db: Session = Depends(get_db),
+):
+    """Preview weekly summary data for a specific user (dry run, no email sent)."""
+    from app.services.weekly_summary_service import get_weekly_summary
+
+    ha = db.query(HostedAgent).filter(HostedAgent.user_id == user_id).first()
+    if not ha:
+        raise HTTPException(status_code=404, detail="No hosted agent for this user")
+
+    summary = get_weekly_summary(db, str(ha.agent_id))
+
+    row = db.execute(
+        text('SELECT name, email FROM "user" WHERE id = :uid'),
+        {"uid": user_id},
+    ).fetchone()
+
+    return {
+        "user_id": user_id,
+        "user_name": row[0] if row else None,
+        "user_email": row[1] if row else None,
+        "agent_name": ha.display_name,
+        "summary": summary,
+    }

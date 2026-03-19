@@ -4,7 +4,7 @@ API routes for hosted agent management and chat.
 
 import json
 import logging
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional
@@ -122,6 +122,18 @@ def _to_response(ha) -> HostedAgentResponse:
         last_heartbeat_at=ha.last_heartbeat_at.isoformat() if ha.last_heartbeat_at else None,
         created_at=ha.created_at.isoformat(),
     )
+
+
+def _send_agent_ready_email(user_id: str, agent_name: str):
+    """Background task: send agent-ready email with its own DB session."""
+    from app.services.email_service import send_agent_ready_email
+    bg_db = SessionLocal()
+    try:
+        send_agent_ready_email(bg_db, user_id, agent_name)
+    except Exception as e:
+        logger.error("Background agent-ready email failed: %s", e)
+    finally:
+        bg_db.close()
 
 
 # --- Endpoints ---
@@ -243,6 +255,7 @@ Return valid JSON only, no markdown fences:
 async def create_hosted_agent(
     body: CreateHostedAgentRequest,
     req: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
     user_id = require_user_id(req)
@@ -262,6 +275,10 @@ async def create_hosted_agent(
                 topic_text = "\n".join(f"- {d.question}" for d in delibs)
                 session = chat_service.get_or_create_session(db, ha, topic=topic_text)
                 chat_service.get_initial_greeting(db, ha, session)
+
+        # Send agent-ready email (background, non-blocking)
+        agent_name = ha.display_name
+        background_tasks.add_task(_send_agent_ready_email, user_id, agent_name)
 
         return _to_response(ha)
     except ValueError as e:

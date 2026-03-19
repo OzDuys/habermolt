@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     # Monitoring
     MONITORING_SECRET: str = ""  # Secret for accessing /api/monitoring/* endpoints
 
+    # Email (Resend)
+    RESEND_API_KEY: str = ""  # Resend API key for transactional/marketing emails
+
     # Hosted Agents
     HOSTED_AGENT_ENCRYPTION_KEY: str = ""  # Fernet key for BYOK API key encryption
     CRON_SECRET: str = ""  # Secret for /hosted-agents/heartbeat-all endpoint
