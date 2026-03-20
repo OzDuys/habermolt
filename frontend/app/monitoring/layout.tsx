@@ -14,6 +14,7 @@ const NAV_ITEMS = [
   { href: "/monitoring/skill-files", label: "Skill Files", icon: "◉" },
   { href: "/monitoring/moderation", label: "Moderation", icon: "⊘" },
   { href: "/monitoring/feedback", label: "Feedback", icon: "◫" },
+  { href: "/monitoring/token-usage", label: "Token Usage", icon: "⊛" },
   { href: "/monitoring/referrals", label: "Referrals", icon: "⊸" },
   { href: "/monitoring/emails", label: "Emails", icon: "✉" },
   { href: "/monitoring/database", label: "Database", icon: "▤" },

@@ -1079,3 +1079,79 @@ async def preview_weekly_summary(
         "agent_name": ha.display_name,
         "summary": summary,
     }
+
+
+# ─── Token Usage ─────────────────────────────────────────────────────────────
+
+
+@router.get("/token-usage")
+async def get_token_usage(
+    db: Session = Depends(get_db),
+    _auth: bool = Depends(verify_monitoring_secret),
+):
+    """Token usage breakdown for all hosted agents.
+
+    Shows per-agent usage by trace type, duplicate heartbeat detection,
+    and comparison of tracked (tokens_used_period) vs actual (sum of traces).
+    """
+    from app.services.hosted_agent_service import TOKEN_LIMITS
+
+    tokens_col = func.coalesce(LLMTrace.tokens_in, 0) + func.coalesce(LLMTrace.tokens_out, 0)
+
+    # Per-agent breakdown by trace type (since their billing period start)
+    agents = (
+        db.query(HostedAgent)
+        .filter(HostedAgent.user_profile.isnot(None))
+        .order_by(desc(HostedAgent.tokens_used_period))
+        .all()
+    )
+
+    results = []
+    for ha in agents:
+        # Trace breakdown since billing period
+        rows = (
+            db.query(LLMTrace.trace_type, func.count().label("count"), func.sum(tokens_col).label("total"))
+            .filter(
+                LLMTrace.hosted_agent_id == ha.id,
+                LLMTrace.created_at >= ha.billing_period_start,
+            )
+            .group_by(LLMTrace.trace_type)
+            .all()
+        )
+        breakdown = {r.trace_type: {"count": r.count, "tokens": int(r.total or 0)} for r in rows}
+        trace_total = sum(v["tokens"] for v in breakdown.values())
+
+        # Duplicate heartbeat detection (< 60s apart) in current period
+        hb_rows = (
+            db.query(LLMTrace.created_at)
+            .filter(
+                LLMTrace.hosted_agent_id == ha.id,
+                LLMTrace.trace_type == "hosted_agent_heartbeat",
+                LLMTrace.created_at >= ha.billing_period_start,
+            )
+            .order_by(LLMTrace.created_at)
+            .all()
+        )
+        dupe_count = 0
+        for i in range(1, len(hb_rows)):
+            if (hb_rows[i][0] - hb_rows[i - 1][0]).total_seconds() < 60:
+                dupe_count += 1
+
+        limit = TOKEN_LIMITS.get(ha.pricing_tier)
+        results.append({
+            "id": str(ha.id),
+            "display_name": ha.display_name,
+            "pricing_tier": ha.pricing_tier,
+            "is_active": ha.is_active,
+            "paused_reason": ha.paused_reason,
+            "tokens_used_period": ha.tokens_used_period,
+            "token_limit": limit,
+            "trace_total": trace_total,
+            "drift": ha.tokens_used_period - trace_total,
+            "billing_period_start": ha.billing_period_start.isoformat(),
+            "breakdown": breakdown,
+            "duplicate_heartbeats": dupe_count,
+            "total_heartbeats": len(hb_rows),
+        })
+
+    return {"agents": results}
