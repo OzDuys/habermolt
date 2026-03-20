@@ -729,28 +729,46 @@ async def _generate_seed_statements(
     """Generate seed statements for a shell deliberation after the first opinion."""
     service = ContinuousDeliberationService(db)
 
-    seed_opinions = await service._generate_seed_opinions(
-        deliberation.question, creator_opinion=initial_opinion
-    )
-    if initial_opinion.strip() not in seed_opinions:
-        seed_opinions.insert(0, initial_opinion.strip())
+    try:
+        seed_opinions = await service._generate_seed_opinions(
+            deliberation.question, creator_opinion=initial_opinion
+        )
+        if initial_opinion.strip() not in seed_opinions:
+            seed_opinions.insert(0, initial_opinion.strip())
 
-    logger.info(
-        f"Generating seed statements from {len(seed_opinions)} opinions "
-        f"for deliberation {deliberation.id}"
-    )
+        logger.info(
+            f"Generating seed statements from {len(seed_opinions)} opinions "
+            f"for deliberation {deliberation.id}"
+        )
 
-    from app.services.statement_service import statement_service
-    seed_statements = await statement_service.generate_statements(
-        db, deliberation, seed_opinions,
-    )
-    for stmt in seed_statements:
-        stmt.is_seed = True
-    db.commit()
+        from app.services.statement_service import statement_service
+        seed_statements = []
+        for attempt in range(2):
+            seed_statements = await statement_service.generate_statements(
+                db, deliberation, seed_opinions,
+            )
+            if seed_statements:
+                break
+            logger.warning(
+                f"Seed statement generation attempt {attempt + 1}/2 returned empty "
+                f"for deliberation {deliberation.id}"
+            )
 
-    logger.info(
-        f"Generated {len(seed_statements)} seed statements for deliberation {deliberation.id}"
-    )
+        for stmt in seed_statements:
+            stmt.is_seed = True
+        db.commit()
+
+        logger.info(
+            f"Generated {len(seed_statements)} seed statements for deliberation {deliberation.id}"
+        )
+    except Exception as e:
+        logger.error(
+            f"Seed generation failed for deliberation {deliberation.id}: {e}",
+            exc_info=True,
+        )
+
+    # Ensure at least one seed statement exists
+    service._create_fallback_seed(deliberation, initial_opinion)
 
 
 def _do_ranking_for_agent(agent_id: UUID, deliberation_id: UUID):

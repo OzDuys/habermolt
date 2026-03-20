@@ -70,8 +70,31 @@ class ContinuousDeliberationService:
         # Submit creator's opinion before generating seed statements
         self.submit_opinion(deliberation, creator_agent, initial_opinion, source="creation")
 
+        # Generate seeds — wrapped so a failure never leaves a deliberation without statements
+        try:
+            await self._generate_seeds(deliberation, initial_opinion)
+        except Exception as e:
+            logger.error(
+                f"Seed generation failed for deliberation {deliberation.id}: {e}",
+                exc_info=True,
+            )
+            # Ensure the deliberation has at least one seed statement
+            self._create_fallback_seed(deliberation, initial_opinion)
+
+        logger.info(
+            f"Created continuous deliberation {deliberation.id} with "
+            f"{self.db.query(Statement).filter(Statement.deliberation_id == deliberation.id).count()} seed statements"
+        )
+        return deliberation
+
+    async def _generate_seeds(self, deliberation: Deliberation, initial_opinion: str) -> None:
+        """Generate seed opinions and seed statements. Retries on failure."""
+        question = deliberation.question
+
         # Generate seed opinions (synthetic diverse perspectives)
-        seed_opinions = await self._generate_seed_opinions(question, creator_opinion=initial_opinion, deliberation_id=deliberation.id)
+        seed_opinions = await self._generate_seed_opinions(
+            question, creator_opinion=initial_opinion, deliberation_id=deliberation.id
+        )
 
         # Always include the creator's real opinion so the LLM has substantive input
         if initial_opinion.strip() not in seed_opinions:
@@ -88,43 +111,54 @@ class ContinuousDeliberationService:
             f"for deliberation {deliberation.id}"
         )
 
-        # Generate seed statements from the synthetic opinions
-        seed_statements = await statement_service.generate_statements(
-            self.db,
-            deliberation,
-            seed_opinions,
-            seed_opinions=seed_opinions,
-        )
-
-        if not seed_statements:
-            logger.error(
-                f"Failed to generate any seed statements for deliberation "
-                f"{deliberation.id} — all LLM candidates returned empty. "
-                f"Retrying once with fresh attempt..."
-            )
+        # Generate seed statements — retry up to 2 times
+        seed_statements = []
+        for attempt in range(2):
             seed_statements = await statement_service.generate_statements(
                 self.db,
                 deliberation,
                 seed_opinions,
                 seed_opinions=seed_opinions,
             )
+            if seed_statements:
+                break
+            logger.warning(
+                f"Seed statement generation attempt {attempt + 1}/2 returned empty "
+                f"for deliberation {deliberation.id}"
+            )
 
         if not seed_statements:
             logger.error(
-                f"Second attempt also failed to generate seed statements for "
-                f"deliberation {deliberation.id}. Deliberation created without statements."
+                f"All seed statement generation attempts failed for "
+                f"deliberation {deliberation.id}. Using fallback."
             )
+            self._create_fallback_seed(deliberation, initial_opinion)
+            return
 
         # Mark them as seeds
         for stmt in seed_statements:
             stmt.is_seed = True
         self.db.commit()
 
-        logger.info(
-            f"Created continuous deliberation {deliberation.id} with "
-            f"{len(seed_statements)} seed statements"
+    def _create_fallback_seed(self, deliberation: Deliberation, opinion_text: str) -> None:
+        """Create a minimal seed statement from the creator's opinion so the deliberation isn't stuck."""
+        existing = self.db.query(Statement).filter(
+            Statement.deliberation_id == deliberation.id
+        ).count()
+        if existing > 0:
+            return  # Already has statements, no fallback needed
+
+        stmt = Statement(
+            deliberation_id=deliberation.id,
+            title="Initial perspective",
+            statement_text=opinion_text.strip(),
+            is_seed=True,
         )
-        return deliberation
+        self.db.add(stmt)
+        self.db.commit()
+        logger.info(
+            f"Created fallback seed statement for deliberation {deliberation.id}"
+        )
 
     async def create_deliberation_without_agent(
         self,
