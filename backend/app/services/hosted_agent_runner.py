@@ -29,7 +29,7 @@ from app.models.hosted_agent import HostedAgent
 from app.services.hosted_agent_service import (
     get_llm_client,
     check_token_limit,
-    track_tokens_from_latest_trace,
+    track_untracked_tokens,
 )
 from app.services.continuous_deliberation_service import ContinuousDeliberationService
 from app.services.llm_client import sanitize_prompt_text
@@ -351,7 +351,9 @@ def run_single_hosted_agent(db: Session, hosted_agent: HostedAgent) -> dict:
     session.messages = messages_list
 
     hosted_agent.last_heartbeat_at = datetime.utcnow()
-    db.commit()
+
+    # Track all tokens from this heartbeat cycle (orchestration + tool calls)
+    track_untracked_tokens(db, hosted_agent)
 
     _create_action_notifications(db, hosted_agent, structured_actions)
 
@@ -496,7 +498,9 @@ def run_single_hosted_agent_stream(db: Session, hosted_agent: HostedAgent):
     session.messages = messages
 
     hosted_agent.last_heartbeat_at = datetime.utcnow()
-    db.commit()
+
+    # Track all tokens from this heartbeat cycle (orchestration + tool calls)
+    track_untracked_tokens(db, hosted_agent)
 
     _create_action_notifications(db, hosted_agent, structured_actions)
 
@@ -690,7 +694,6 @@ def run_correction_cycle(db: Session, hosted_agent: HostedAgent, notification) -
             continue
         break
 
-    track_tokens_from_latest_trace(db, hosted_agent)
     return {"status": "corrected", "notification_id": str(notification.id)}
 
 
@@ -833,9 +836,6 @@ def _join_deliberation(db: Session, hosted_agent: HostedAgent, delib_id: UUID) -
     except ValueError:
         return None
 
-    # Track tokens
-    track_tokens_from_latest_trace(db, hosted_agent)
-
     # Immediately rank statements
     _do_ranking(db, hosted_agent, delib.id)
 
@@ -909,7 +909,6 @@ def _do_ranking(db: Session, hosted_agent: HostedAgent, delib_id: UUID) -> Optio
         logger.warning(f"Ranking submission failed: {e}")
         return None
 
-    track_tokens_from_latest_trace(db, hosted_agent)
     return rankings
 
 
@@ -982,7 +981,6 @@ def _do_add_statement(db: Session, hosted_agent: HostedAgent, delib_id: UUID) ->
         logger.warning(f"Statement submission failed: {e}")
         return None
 
-    track_tokens_from_latest_trace(db, hosted_agent)
     return {"title": title, "text": statement_text}
 
 
@@ -1039,7 +1037,6 @@ def _revisit_opinion(db: Session, hosted_agent: HostedAgent, delib_id: UUID) -> 
     except ValueError:
         return None
 
-    track_tokens_from_latest_trace(db, hosted_agent)
     return opinion_text
 
 
@@ -1135,7 +1132,6 @@ def _do_create_deliberation(db: Session, hosted_agent: HostedAgent) -> Optional[
         logger.error(f"Hosted agent {hosted_agent.id}: LLM returned empty opinion for new deliberation")
         return None
 
-    track_tokens_from_latest_trace(db, hosted_agent)
 
     # Create deliberation via service
     import asyncio

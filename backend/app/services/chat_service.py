@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.models.hosted_agent import HostedAgent
 from app.models.agent_session import AgentSession
-from app.services.hosted_agent_service import get_llm_client, track_tokens_from_latest_trace
+from app.services.hosted_agent_service import get_llm_client, track_untracked_tokens
 from app.services.agent_tools import get_chat_tool_schemas, execute_tool
 
 logger = logging.getLogger(__name__)
@@ -208,7 +208,6 @@ def add_user_message(
         )
 
         result = client.chat(messages=llm_messages, temperature=0.7, tools=tools)
-        track_tokens_from_latest_trace(db, hosted_agent)
 
         if result.content:
             response_parts.append(result.content)
@@ -246,7 +245,7 @@ def add_user_message(
     messages.append({"role": "assistant", "content": response_text})
     session.messages = messages
     hosted_agent.last_chatted_at = datetime.utcnow()
-    db.commit()
+    track_untracked_tokens(db, hosted_agent)
 
     return response_text
 
@@ -300,7 +299,6 @@ def stream_user_message(
                     tool_calls_this_turn.append(event_data)
 
             text_this_turn = "".join(accumulated_text)
-            track_tokens_from_latest_trace(db, hosted_agent)
 
             if not tool_calls_this_turn:
                 # No tool calls — LLM is done, flush buffered text
@@ -383,7 +381,7 @@ def stream_user_message(
         messages.append({"role": "assistant", "content": response_text})
         session.messages = messages
         hosted_agent.last_chatted_at = datetime.utcnow()
-        db.commit()
+        track_untracked_tokens(db, hosted_agent)
 
 
 def _extract_tool_detail(tool_name: str, result: dict) -> str:
@@ -512,7 +510,6 @@ def get_initial_greeting(
         messages=llm_messages,
         temperature=0.7,
     ).content or ""
-    track_tokens_from_latest_trace(db, hosted_agent)
 
     if not response:
         response = (
@@ -522,6 +519,6 @@ def get_initial_greeting(
         )
 
     session.messages = [{"role": "assistant", "content": response}]
-    db.commit()
+    track_untracked_tokens(db, hosted_agent)
 
     return response

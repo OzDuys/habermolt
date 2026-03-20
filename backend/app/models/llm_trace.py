@@ -8,7 +8,7 @@ enabling LangSmith-style trace inspection and debugging.
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Column, String, Integer, Float, Text, DateTime, ForeignKey
+from sqlalchemy import Boolean, Column, String, Integer, Float, Text, DateTime, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 
 from app.database import Base
@@ -54,6 +54,9 @@ class LLMTrace(Base):
 
     # Error information
     error_message = Column(Text, nullable=True)
+
+    # Token tracking — whether this trace's tokens have been counted against the hosted agent's usage
+    tokens_tracked = Column(Boolean, default=False, nullable=False, server_default="false")
 
     # Timestamp
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)

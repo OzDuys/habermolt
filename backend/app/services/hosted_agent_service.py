@@ -194,18 +194,34 @@ def check_token_limit(hosted_agent: HostedAgent) -> bool:
     return under_limit
 
 
-def track_tokens_from_latest_trace(db: Session, hosted_agent: HostedAgent) -> None:
-    """Look up the most recent LLM trace for this hosted agent and record its token usage."""
+def track_untracked_tokens(db: Session, hosted_agent: HostedAgent) -> int:
+    """Find all untracked LLM traces for this hosted agent, mark them tracked,
+    and add their tokens to the usage counter. Returns total new tokens tracked.
+
+    Idempotent: each trace is counted exactly once via the tokens_tracked flag.
+    """
     from app.models.llm_trace import LLMTrace
 
-    trace = (
+    traces = (
         db.query(LLMTrace)
-        .filter(LLMTrace.hosted_agent_id == hosted_agent.id)
-        .order_by(LLMTrace.created_at.desc())
-        .first()
+        .filter(
+            LLMTrace.hosted_agent_id == hosted_agent.id,
+            LLMTrace.tokens_tracked == False,  # noqa: E712
+            LLMTrace.tokens_in.isnot(None),
+            LLMTrace.tokens_out.isnot(None),
+        )
+        .all()
     )
-    if trace and trace.tokens_in is not None and trace.tokens_out is not None:
-        record_token_usage(db, hosted_agent, trace.tokens_in + trace.tokens_out)
+
+    total = 0
+    for trace in traces:
+        total += trace.tokens_in + trace.tokens_out
+        trace.tokens_tracked = True
+
+    if total > 0:
+        record_token_usage(db, hosted_agent, total)
+
+    return total
 
 
 def record_token_usage(db: Session, hosted_agent: HostedAgent, tokens: int) -> None:

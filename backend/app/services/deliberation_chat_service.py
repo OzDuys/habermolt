@@ -31,7 +31,7 @@ from app.models import Agent, Deliberation, Opinion, Statement, Ranking
 from app.models.hosted_agent import HostedAgent
 from app.models.agent_session import AgentSession
 from app.services.continuous_deliberation_service import ContinuousDeliberationService
-from app.services.hosted_agent_service import track_tokens_from_latest_trace
+from app.services.hosted_agent_service import track_untracked_tokens
 from app.services.llm_client import LLMClient, sanitize_prompt_text
 
 logger = logging.getLogger(__name__)
@@ -404,7 +404,7 @@ def generate_greeting(db: Session, agent: Agent, deliberation: Deliberation, pha
     # Track tokens
     hosted = db.query(HostedAgent).filter(HostedAgent.agent_id == agent.id).first()
     if hosted:
-        track_tokens_from_latest_trace(db, hosted)
+        track_untracked_tokens(db, hosted)
 
     if not greeting:
         if is_participating:
@@ -550,7 +550,7 @@ def stream_message(
         # Track token usage
         hosted = db.query(HostedAgent).filter(HostedAgent.agent_id == agent.id).first()
         if hosted:
-            track_tokens_from_latest_trace(db, hosted)
+            track_untracked_tokens(db, hosted)
 
         response_text = "".join(full_response_parts)
         if not response_text:
@@ -818,7 +818,7 @@ def _do_ranking_for_agent(agent_id: UUID, deliberation_id: UUID):
         # Track tokens
         hosted = db.query(HostedAgent).filter(HostedAgent.agent_id == agent_id).first()
         if hosted:
-            track_tokens_from_latest_trace(db, hosted)
+            track_untracked_tokens(db, hosted)
 
         # Re-fetch statements for parse (needs ORM objects for ID matching)
         statements = db.query(Statement).filter(
@@ -921,7 +921,7 @@ def _do_propose_for_agent(agent_id: UUID, deliberation_id: UUID):
         # Track tokens
         hosted = db.query(HostedAgent).filter(HostedAgent.agent_id == agent_id).first()
         if hosted:
-            track_tokens_from_latest_trace(db, hosted)
+            track_untracked_tokens(db, hosted)
 
         deliberation = db.query(Deliberation).get(deliberation_id)
         agent = db.query(Agent).get(agent_id)
@@ -1010,7 +1010,7 @@ Rules:
             try:
                 hosted = db.query(HostedAgent).get(hosted_id)
                 if hosted:
-                    track_tokens_from_latest_trace(db, hosted)
+                    track_untracked_tokens(db, hosted)
             finally:
                 db.close()
             return
@@ -1020,7 +1020,7 @@ Rules:
         try:
             hosted = db.query(HostedAgent).get(hosted_id)
             if hosted:
-                track_tokens_from_latest_trace(db, hosted)
+                track_untracked_tokens(db, hosted)
                 current = hosted.user_profile or ""
                 if current:
                     hosted.user_profile = current.rstrip() + "\n\n" + result
