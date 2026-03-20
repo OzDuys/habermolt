@@ -41,11 +41,34 @@ cors_origins = [o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()
 HEARTBEAT_CHECK_INTERVAL_SECONDS = 5 * 60  # 5 minutes
 
 
-async def _heartbeat_loop():
-    """Periodically run heartbeats for all eligible hosted agents."""
+HEARTBEAT_ADVISORY_LOCK_ID = 8675309  # Arbitrary unique ID for pg_try_advisory_lock
+
+
+def _run_heartbeats_with_lock() -> dict | None:
+    """Run heartbeats if we can acquire the advisory lock. Returns None if another worker holds it."""
     from app.database import SessionLocal
     from app.services.hosted_agent_runner import run_all_hosted_agents
+    from sqlalchemy import text
 
+    db = SessionLocal()
+    try:
+        # Try to acquire a session-level advisory lock — returns immediately (no blocking).
+        # Only one worker across all processes can hold this lock at a time.
+        locked = db.execute(text(f"SELECT pg_try_advisory_lock({HEARTBEAT_ADVISORY_LOCK_ID})")).scalar()
+        if not locked:
+            return None  # Another worker is already running heartbeats
+
+        try:
+            return run_all_hosted_agents(db)
+        finally:
+            db.execute(text(f"SELECT pg_advisory_unlock({HEARTBEAT_ADVISORY_LOCK_ID})"))
+            db.commit()
+    finally:
+        db.close()
+
+
+async def _heartbeat_loop():
+    """Periodically run heartbeats for all eligible hosted agents."""
     logger.info("Heartbeat background loop started (interval=%ds)", HEARTBEAT_CHECK_INTERVAL_SECONDS)
 
     # Let the server finish starting up before the first run
@@ -53,15 +76,14 @@ async def _heartbeat_loop():
 
     while True:
         try:
-            db = SessionLocal()
-            try:
-                results = await asyncio.to_thread(run_all_hosted_agents, db)
+            results = await asyncio.to_thread(_run_heartbeats_with_lock)
+            if results is None:
+                logger.debug("Heartbeat loop: skipped (another worker holds the lock)")
+            else:
                 logger.info(
                     "Heartbeat loop: %d ran, %d skipped, %d errors (of %d total)",
                     results["ran"], results["skipped"], results["errors"], results["total"],
                 )
-            finally:
-                db.close()
         except Exception as e:
             logger.error("Heartbeat loop error: %s", e, exc_info=True)
 
