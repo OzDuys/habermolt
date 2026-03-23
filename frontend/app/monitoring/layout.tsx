@@ -15,6 +15,7 @@ const NAV_ITEMS = [
   { href: "/monitoring/moderation", label: "Moderation", icon: "⊘" },
   { href: "/monitoring/feedback", label: "Feedback", icon: "◫" },
   { href: "/monitoring/token-usage", label: "Token Usage", icon: "⊛" },
+  { href: "/monitoring/user-behavior", label: "User Behavior", icon: "⊕" },
   { href: "/monitoring/referrals", label: "Referrals", icon: "⊸" },
   { href: "/monitoring/emails", label: "Emails", icon: "✉" },
   { href: "/monitoring/database", label: "Database", icon: "▤" },

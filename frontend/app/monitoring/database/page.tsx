@@ -40,6 +40,8 @@ export default function DatabasePage() {
   const [copiedCell, setCopiedCell] = useState<string | null>(null);
   const [searchColumn, setSearchColumn] = useState<string>("__all__");
   const [searchQuery, setSearchQuery] = useState<string>("");
+  const [sortColumn, setSortColumn] = useState<string | null>(null);
+  const [sortDesc, setSortDesc] = useState(false);
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
   const resizing = useRef<{ col: string; startX: number; startW: number } | null>(null);
 
@@ -85,6 +87,16 @@ export default function DatabasePage() {
       })
     : [];
 
+  const handleColumnSort = (col: string) => {
+    if (sortColumn === col) {
+      setSortDesc(!sortDesc);
+    } else {
+      setSortColumn(col);
+      setSortDesc(false);
+    }
+    setPage(1);
+  };
+
   const copyCell = (value: unknown, key: string) => {
     const text = value === null || value === undefined ? "" : typeof value === "object" ? JSON.stringify(value) : String(value);
     navigator.clipboard.writeText(text).then(() => {
@@ -118,8 +130,13 @@ export default function DatabasePage() {
     try {
       const ps = isSearching ? 200 : 30;
       const pg = isSearching ? 1 : page;
+      const params = new URLSearchParams({ page: String(pg), page_size: String(ps) });
+      if (sortColumn) {
+        params.set("sort_by", sortColumn);
+        params.set("sort_dir", sortDesc ? "desc" : "asc");
+      }
       const res = await fetch(
-        `/api/backend/monitoring/tables/${selectedTable}?page=${pg}&page_size=${ps}`,
+        `/api/backend/monitoring/tables/${selectedTable}?${params}`,
         { headers: headers() }
       );
       const data = await res.json();
@@ -129,7 +146,7 @@ export default function DatabasePage() {
     } finally {
       setTableLoading(false);
     }
-  }, [selectedTable, page, isSearching]);
+  }, [selectedTable, page, isSearching, sortColumn, sortDesc]);
 
   useEffect(() => {
     fetchTableData();
@@ -262,6 +279,8 @@ export default function DatabasePage() {
               setSearchQuery("");
               setSearchColumn("__all__");
               setColumnWidths({});
+              setSortColumn(null);
+              setSortDesc(false);
             }}
             className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${
               selectedTable === t.name ? "" : "hover:opacity-80"
@@ -323,14 +342,18 @@ export default function DatabasePage() {
                     {tableData.columns.map((col) => (
                       <th
                         key={col}
-                        className="px-2.5 py-2 text-left font-medium whitespace-nowrap relative overflow-hidden"
+                        className="px-2.5 py-2 text-left font-medium whitespace-nowrap relative overflow-hidden cursor-pointer select-none"
                         style={{
-                          color: "var(--muted)",
+                          color: sortColumn === col ? "var(--foreground)" : "var(--muted)",
                           width: `${columnWidths[col] || 150}px`,
                           minWidth: "50px",
                         }}
+                        onClick={() => handleColumnSort(col)}
                       >
                         {col}
+                        {sortColumn === col && (
+                          <span className="ml-1 text-[10px]">{sortDesc ? "▼" : "▲"}</span>
+                        )}
                         <span
                           onMouseDown={(e) => onResizeStart(col, e)}
                           className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-blue-400/50"

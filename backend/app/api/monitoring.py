@@ -585,6 +585,8 @@ async def get_table_rows(
     table_name: str,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
+    sort_by: Optional[str] = Query(None),
+    sort_dir: str = Query("desc", regex="^(asc|desc)$"),
     db: Session = Depends(get_db),
     _auth: bool = Depends(verify_monitoring_secret),
 ):
@@ -604,7 +606,10 @@ async def get_table_rows(
         columns = [c.name for c in model.__table__.columns]
 
         query = db.query(model)
-        if hasattr(model, 'created_at'):
+        if sort_by and sort_by in columns:
+            col_attr = getattr(model, sort_by)
+            query = query.order_by(desc(col_attr) if sort_dir == "desc" else col_attr)
+        elif hasattr(model, 'created_at'):
             query = query.order_by(desc(model.created_at))
         elif hasattr(model, 'submitted_at'):
             query = query.order_by(desc(model.submitted_at))
@@ -645,7 +650,10 @@ async def get_table_rows(
         columns = [row[0] for row in col_result]
 
         # Determine ordering column
-        if "created_at" in columns:
+        if sort_by and sort_by in columns:
+            order_col = sort_by
+            order_dir = sort_dir.upper()
+        elif "created_at" in columns:
             order_col = "created_at"
             order_dir = "DESC"
         elif "submitted_at" in columns:
@@ -1155,3 +1163,288 @@ async def get_token_usage(
         })
 
     return {"agents": results}
+
+
+# ─── User Behavior Analytics ────────────────────────────────────────────────
+
+
+@router.get("/user-behavior")
+async def get_user_behavior(
+    db: Session = Depends(get_db),
+    _auth: bool = Depends(verify_monitoring_secret),
+):
+    """Comprehensive user behavior analytics.
+
+    Answers: how many people are using the platform, how deeply, and are they coming back?
+    """
+    # ── 1. All users from better-auth user table ──
+    all_users = db.execute(
+        text("""
+            SELECT u.id, u.name, u.email, u."createdAt",
+                   ha.id AS hosted_agent_id,
+                   ha.display_name,
+                   ha.onboarded,
+                   ha.is_active AS agent_is_active,
+                   ha.created_at AS agent_created_at,
+                   ha.last_heartbeat_at,
+                   ha.last_chatted_at,
+                   ha.tokens_used_period,
+                   ha.pricing_tier,
+                   a.id AS agent_id,
+                   a.last_active_at AS agent_last_active
+            FROM "user" u
+            LEFT JOIN hosted_agents ha ON ha.user_id = u.id
+            LEFT JOIN agents a ON a.user_id = u.id
+            ORDER BY u."createdAt" DESC
+        """)
+    ).fetchall()
+
+    # ── 2. Per-agent participation stats ──
+    # Opinions per agent (with source breakdown)
+    opinion_stats = db.execute(
+        text("""
+            SELECT o.agent_id,
+                   COUNT(*) AS total_opinions,
+                   COUNT(DISTINCT o.deliberation_id) AS deliberations_with_opinion,
+                   COUNT(*) FILTER (WHERE o.source = 'autonomous') AS autonomous_opinions,
+                   COUNT(*) FILTER (WHERE o.source = 'topic_interview') AS interview_opinions,
+                   COUNT(*) FILTER (WHERE o.source = 'chat_tool') AS chat_tool_opinions,
+                   COUNT(*) FILTER (WHERE o.source = 'api') AS api_opinions,
+                   COUNT(*) FILTER (WHERE o.source = 'creation') AS creation_opinions
+            FROM opinions o
+            GROUP BY o.agent_id
+        """)
+    ).fetchall()
+    opinion_map = {str(r.agent_id): r for r in opinion_stats}
+
+    # Rankings per agent
+    ranking_stats = db.execute(
+        text("""
+            SELECT r.agent_id,
+                   COUNT(*) AS total_rankings,
+                   COUNT(*) FILTER (WHERE NOT EXISTS (
+                       SELECT 1 FROM jsonb_array_elements(r.statement_rankings) elem
+                       WHERE (elem->>'is_predicted')::boolean = true
+                   )) AS fully_manual_rankings
+            FROM rankings r
+            GROUP BY r.agent_id
+        """)
+    ).fetchall()
+    ranking_map = {str(r.agent_id): r for r in ranking_stats}
+
+    # Statements contributed per agent (non-seed)
+    statement_stats = db.execute(
+        text("""
+            SELECT contributed_by_agent_id AS agent_id,
+                   COUNT(*) AS statements_proposed
+            FROM statements
+            WHERE contributed_by_agent_id IS NOT NULL AND NOT is_seed
+            GROUP BY contributed_by_agent_id
+        """)
+    ).fetchall()
+    statement_map = {str(r.agent_id): r.statements_proposed for r in statement_stats}
+
+    # Deliberations created per agent
+    delib_created = db.execute(
+        text("""
+            SELECT created_by_agent_id AS agent_id,
+                   COUNT(*) AS deliberations_created
+            FROM deliberations
+            WHERE created_by_agent_id IS NOT NULL
+            GROUP BY created_by_agent_id
+        """)
+    ).fetchall()
+    delib_created_map = {str(r.agent_id): r.deliberations_created for r in delib_created}
+
+    # Chat sessions per user
+    chat_sessions = db.execute(
+        text("""
+            SELECT user_id,
+                   COUNT(*) AS total_sessions,
+                   COUNT(*) FILTER (WHERE session_type = 'deliberation') AS deliberation_sessions,
+                   COUNT(*) FILTER (WHERE session_type = 'general') AS general_sessions,
+                   MAX(created_at) AS last_session_at
+            FROM agent_sessions
+            WHERE user_id IS NOT NULL
+            GROUP BY user_id
+        """)
+    ).fetchall()
+    chat_map = {r.user_id: r for r in chat_sessions}
+
+    # Notifications per user (feedback engagement)
+    notification_stats = db.execute(
+        text("""
+            SELECT user_id,
+                   COUNT(*) AS total_notifications,
+                   COUNT(*) FILTER (WHERE approval_status IS NOT NULL) AS reviewed_notifications,
+                   COUNT(*) FILTER (WHERE approval_status = 'approved') AS approved,
+                   COUNT(*) FILTER (WHERE approval_status = 'disapproved') AS disapproved
+            FROM notifications
+            WHERE type = 'agent_action'
+            GROUP BY user_id
+        """)
+    ).fetchall()
+    notif_map = {r.user_id: r for r in notification_stats}
+
+    # Consensus ratings per user
+    consensus_rating_stats = db.execute(
+        text("""
+            SELECT user_id,
+                   COUNT(*) AS total_ratings,
+                   COUNT(*) FILTER (WHERE thumb_vote = 'up') AS thumbs_up,
+                   COUNT(*) FILTER (WHERE thumb_vote = 'down') AS thumbs_down
+            FROM consensus_ratings
+            GROUP BY user_id
+        """)
+    ).fetchall()
+    consensus_map = {r.user_id: r for r in consensus_rating_stats}
+
+    # LLM trace activity per hosted agent (for last-active tracking)
+    llm_activity = db.execute(
+        text("""
+            SELECT hosted_agent_id,
+                   COUNT(*) AS total_traces,
+                   MAX(created_at) AS last_trace_at,
+                   MIN(created_at) AS first_trace_at
+            FROM llm_traces
+            WHERE hosted_agent_id IS NOT NULL
+            GROUP BY hosted_agent_id
+        """)
+    ).fetchall()
+    llm_map = {str(r.hosted_agent_id): r for r in llm_activity}
+
+    # ── 3. Build per-user rows ──
+    users = []
+    for u in all_users:
+        agent_id = str(u.agent_id) if u.agent_id else None
+        hosted_agent_id = str(u.hosted_agent_id) if u.hosted_agent_id else None
+
+        op = opinion_map.get(agent_id) if agent_id else None
+        rk = ranking_map.get(agent_id) if agent_id else None
+        ch = chat_map.get(u.id)
+        nt = notif_map.get(u.id)
+        cr = consensus_map.get(u.id)
+        st_count = statement_map.get(agent_id, 0) if agent_id else 0
+        dc_count = delib_created_map.get(agent_id, 0) if agent_id else 0
+        llm = llm_map.get(hosted_agent_id) if hosted_agent_id else None
+
+        # Determine last meaningful activity
+        activity_dates = []
+        if u.agent_last_active:
+            activity_dates.append(u.agent_last_active)
+        if u.last_heartbeat_at:
+            activity_dates.append(u.last_heartbeat_at)
+        if u.last_chatted_at:
+            activity_dates.append(u.last_chatted_at)
+        if ch and ch.last_session_at:
+            activity_dates.append(ch.last_session_at)
+        if llm and llm.last_trace_at:
+            activity_dates.append(llm.last_trace_at)
+        last_active = max(activity_dates).isoformat() if activity_dates else None
+
+        deliberations_participated = (op.deliberations_with_opinion if op else 0)
+
+        users.append({
+            "user_id": u.id,
+            "name": u.name,
+            "email": u.email,
+            "signed_up_at": u.createdAt.isoformat() if u.createdAt else None,
+            "has_agent": agent_id is not None,
+            "has_hosted_agent": hosted_agent_id is not None,
+            "agent_name": u.display_name,
+            "onboarded": bool(u.onboarded) if u.onboarded is not None else False,
+            "agent_is_active": bool(u.agent_is_active) if u.agent_is_active is not None else False,
+            "pricing_tier": u.pricing_tier,
+            "last_active": last_active,
+            "deliberations_participated": deliberations_participated,
+            "deliberations_created": dc_count,
+            "total_opinions": op.total_opinions if op else 0,
+            "autonomous_opinions": op.autonomous_opinions if op else 0,
+            "interview_opinions": op.interview_opinions if op else 0,
+            "chat_tool_opinions": op.chat_tool_opinions if op else 0,
+            "total_rankings": rk.total_rankings if rk else 0,
+            "statements_proposed": st_count,
+            "chat_sessions": ch.total_sessions if ch else 0,
+            "deliberation_chat_sessions": ch.deliberation_sessions if ch else 0,
+            "notifications_reviewed": nt.reviewed_notifications if nt else 0,
+            "notifications_total": nt.total_notifications if nt else 0,
+            "consensus_ratings": cr.total_ratings if cr else 0,
+        })
+
+    # ── 4. Funnel stats ──
+    total_users = len(all_users)
+    users_with_agent = sum(1 for u in users if u["has_agent"])
+    users_with_hosted_agent = sum(1 for u in users if u["has_hosted_agent"])
+    users_onboarded = sum(1 for u in users if u["onboarded"])
+    users_participated = sum(1 for u in users if u["deliberations_participated"] > 0)
+    users_multi_delib = sum(1 for u in users if u["deliberations_participated"] > 1)
+    users_created_delib = sum(1 for u in users if u["deliberations_created"] > 0)
+    users_chatted = sum(1 for u in users if u["chat_sessions"] > 0)
+    users_reviewed_actions = sum(1 for u in users if u["notifications_reviewed"] > 0)
+    users_rated_consensus = sum(1 for u in users if u["consensus_ratings"] > 0)
+
+    # Retention: active in last 7 days, last 30 days
+    from datetime import timezone
+    now = datetime.now(timezone.utc)
+    users_active_7d = sum(
+        1 for u in users
+        if u["last_active"] and datetime.fromisoformat(u["last_active"]) > now - timedelta(days=7)
+    )
+    users_active_30d = sum(
+        1 for u in users
+        if u["last_active"] and datetime.fromisoformat(u["last_active"]) > now - timedelta(days=30)
+    )
+
+    # Engagement depth distribution
+    engagement_buckets = {"0_deliberations": 0, "1_deliberation": 0, "2_to_5": 0, "6_plus": 0}
+    for u in users:
+        n = u["deliberations_participated"]
+        if n == 0:
+            engagement_buckets["0_deliberations"] += 1
+        elif n == 1:
+            engagement_buckets["1_deliberation"] += 1
+        elif n <= 5:
+            engagement_buckets["2_to_5"] += 1
+        else:
+            engagement_buckets["6_plus"] += 1
+
+    # Signup cohorts (by week)
+    cohorts = {}
+    for u in users:
+        if u["signed_up_at"]:
+            dt = datetime.fromisoformat(u["signed_up_at"])
+            week_start = (dt - timedelta(days=dt.weekday())).strftime("%Y-%m-%d")
+            if week_start not in cohorts:
+                cohorts[week_start] = {"signed_up": 0, "onboarded": 0, "participated": 0, "returned": 0}
+            cohorts[week_start]["signed_up"] += 1
+            if u["onboarded"]:
+                cohorts[week_start]["onboarded"] += 1
+            if u["deliberations_participated"] > 0:
+                cohorts[week_start]["participated"] += 1
+            if u["last_active"] and datetime.fromisoformat(u["last_active"]) > now - timedelta(days=7):
+                cohorts[week_start]["returned"] += 1
+
+    # Sort cohorts by week
+    sorted_cohorts = dict(sorted(cohorts.items()))
+
+    return {
+        "funnel": {
+            "total_users": total_users,
+            "users_with_agent": users_with_agent,
+            "users_with_hosted_agent": users_with_hosted_agent,
+            "users_onboarded": users_onboarded,
+            "users_participated": users_participated,
+            "users_multi_delib": users_multi_delib,
+            "users_created_delib": users_created_delib,
+            "users_chatted": users_chatted,
+            "users_reviewed_actions": users_reviewed_actions,
+            "users_rated_consensus": users_rated_consensus,
+        },
+        "retention": {
+            "active_7d": users_active_7d,
+            "active_30d": users_active_30d,
+        },
+        "engagement_buckets": engagement_buckets,
+        "cohorts": sorted_cohorts,
+        "users": users,
+    }
