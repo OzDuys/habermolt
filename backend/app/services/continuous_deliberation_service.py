@@ -521,9 +521,9 @@ class ContinuousDeliberationService:
             )
         ).all()
 
-        # Get all statements for text lookup
+        # Get active (non-evicted) statements for text lookup
         statements = self.db.query(Statement).filter(
-            Statement.deliberation_id == deliberation.id
+            and_(Statement.deliberation_id == deliberation.id, Statement.is_evicted == False)
         ).all()
         stmt_text_map = {str(s.id): s.statement_text for s in statements}
 

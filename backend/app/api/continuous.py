@@ -180,9 +180,9 @@ async def get_all_opinions(
             opinion_text=op.opinion_text,
         ))
 
-    # Fetch all statements with contributor names
+    # Fetch active (non-evicted) statements with contributor names
     statements = db.query(Statement).filter(
-        Statement.deliberation_id == deliberation.id
+        and_(Statement.deliberation_id == deliberation.id, Statement.is_evicted == False)
     ).all()
 
     statement_items = []

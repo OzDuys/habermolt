@@ -235,9 +235,9 @@ def _get_profile_context(db: Session, agent: Agent) -> str:
 
 def _build_full_context(db: Session, agent: Agent, deliberation: Deliberation, is_participating: bool) -> dict:
     """Build the full deliberation context for both browsing and participating prompts."""
-    # Get all statements
+    # Get active (non-evicted) statements
     statements = db.query(Statement).filter(
-        Statement.deliberation_id == deliberation.id
+        and_(Statement.deliberation_id == deliberation.id, Statement.is_evicted == False)
     ).order_by(Statement.social_ranking.nulls_last()).all()
 
     # Get latest opinion per agent (subquery for latest version)
@@ -776,6 +776,7 @@ def _do_ranking_for_agent(agent_id: UUID, deliberation_id: UUID):
     from app.services.hosted_agent_runner import (
         RANKING_SYSTEM_PROMPT,
         _parse_ranking_response,
+        _generate_short_codes,
     )
 
     # --- Read phase: extract all data needed for LLM call ---
@@ -788,7 +789,7 @@ def _do_ranking_for_agent(agent_id: UUID, deliberation_id: UUID):
             return
 
         statements = db.query(Statement).filter(
-            Statement.deliberation_id == deliberation_id
+            and_(Statement.deliberation_id == deliberation_id, Statement.is_evicted == False)
         ).all()
         if not statements:
             return
@@ -800,13 +801,14 @@ def _do_ranking_for_agent(agent_id: UUID, deliberation_id: UUID):
         opinion_text = opinion.opinion_text
         deliberation_question = db.query(Deliberation.question).filter(Deliberation.id == deliberation_id).scalar()
         stmt_data = [(str(s.id), s.title, s.statement_text) for s in statements]
+        code_to_id, id_to_code = _generate_short_codes(statements)
         client = _get_llm_client(db, db.query(Agent).get(agent_id))
     finally:
         db.close()
 
     # --- LLM call: no DB connection held ---
     stmt_list = "\n".join(
-        f"- ID: {sid} | {sanitize_prompt_text(title or 'Untitled')}: {sanitize_prompt_text(text)}"
+        f"- [{id_to_code[sid]}] {sanitize_prompt_text(title or 'Untitled')}: {sanitize_prompt_text(text)}"
         for sid, title, text in stmt_data
     )
 
@@ -819,7 +821,7 @@ def _do_ranking_for_agent(agent_id: UUID, deliberation_id: UUID):
     prompt = (
         f"Deliberation question: \"{sanitize_prompt_text(deliberation_question)}\"\n\n"
         f"Statements to rank:\n{stmt_list}\n\n"
-        f"Rank them by listing their IDs from best to worst."
+        f"Rank them by listing their codes from best to worst."
     )
     response = client.sample_text(
         prompt=prompt,
@@ -838,11 +840,11 @@ def _do_ranking_for_agent(agent_id: UUID, deliberation_id: UUID):
         if hosted:
             track_untracked_tokens(db, hosted)
 
-        # Re-fetch statements for parse (needs ORM objects for ID matching)
+        # Re-fetch active statements for parse (needs ORM objects for ID matching)
         statements = db.query(Statement).filter(
-            Statement.deliberation_id == deliberation_id
+            and_(Statement.deliberation_id == deliberation_id, Statement.is_evicted == False)
         ).all()
-        rankings = _parse_ranking_response(response, statements)
+        rankings = _parse_ranking_response(response, statements, code_to_id)
         if not rankings:
             rankings = [{"statement_id": str(s.id), "rank": i + 1} for i, s in enumerate(statements)]
 

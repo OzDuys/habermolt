@@ -85,8 +85,8 @@ well each one aligns with your human's values and preferences.
 2. **Relevance** — Does it address the actual question?
 3. **Actionability** — Does it take a clear position? Rank vague statements LOW.
 
-Respond with ONLY a comma-separated list of statement IDs from best (rank 1) to worst.
-Example: stmt_a, stmt_b, stmt_c"""
+Respond with ONLY a comma-separated list of statement codes from best (rank 1) to worst.
+Example: A7K2, M3PX, R9BJ"""
 
 STATEMENT_SYSTEM_PROMPT = """\
 You represent a human in democratic deliberations. Read all the opinions below and propose \
@@ -730,12 +730,12 @@ def _compute_agent_actions(db: Session, agent: Agent) -> tuple[list[dict], list[
             continue
 
         if not ranking:
-            has_statements = db.query(Statement).filter(Statement.deliberation_id == delib.id).count() > 0
+            has_statements = db.query(Statement).filter(and_(Statement.deliberation_id == delib.id, Statement.is_evicted == False)).count() > 0
             if has_statements:
                 actions.append({"deliberation_id": delib.id, "question": delib.question, "action": "rank_statements"})
             continue
 
-        current_count = db.query(Statement).filter(Statement.deliberation_id == delib.id).count()
+        current_count = db.query(Statement).filter(and_(Statement.deliberation_id == delib.id, Statement.is_evicted == False)).count()
         ranked_count = len(ranking.statement_rankings)
         new_count = current_count - ranked_count
 
@@ -747,7 +747,7 @@ def _compute_agent_actions(db: Session, agent: Agent) -> tuple[list[dict], list[
             actions.append({"deliberation_id": delib.id, "question": delib.question, "action": "update_rankings"})
         else:
             agent_stmt_count = db.query(Statement).filter(
-                and_(Statement.deliberation_id == delib.id, Statement.contributed_by_agent_id == agent.id)
+                and_(Statement.deliberation_id == delib.id, Statement.contributed_by_agent_id == agent.id, Statement.is_evicted == False)
             ).count()
             if agent_stmt_count == 0 and agent_stmt_count < settings.CONTINUOUS_MAX_STATEMENTS_PER_AGENT and current_count < settings.CONTINUOUS_MAX_STATEMENTS:
                 actions.append({"deliberation_id": delib.id, "question": delib.question, "action": "add_statement"})
@@ -863,13 +863,16 @@ def _do_ranking(db: Session, hosted_agent: HostedAgent, delib_id: UUID) -> Optio
     if not opinion:
         return None
 
-    # Get statements
-    statements = db.query(Statement).filter(Statement.deliberation_id == delib_id).all()
+    # Get active (non-evicted) statements
+    statements = db.query(Statement).filter(and_(Statement.deliberation_id == delib_id, Statement.is_evicted == False)).all()
     if not statements:
         return None
 
+    # Generate short codes for each statement (random 4-char alphanumeric, no ordering bias)
+    code_to_id, id_to_code = _generate_short_codes(statements)
+
     stmt_list = "\n".join(
-        f"- ID: {s.id} | {sanitize_prompt_text(s.title or 'Untitled')}: {sanitize_prompt_text(s.statement_text)}"
+        f"- [{id_to_code[str(s.id)]}] {sanitize_prompt_text(s.title or 'Untitled')}: {sanitize_prompt_text(s.statement_text)}"
         for s in statements
     )
 
@@ -882,7 +885,7 @@ def _do_ranking(db: Session, hosted_agent: HostedAgent, delib_id: UUID) -> Optio
     )
 
     delib_question = sanitize_prompt_text(db.query(Deliberation).get(delib_id).question)
-    prompt = f"Deliberation question: \"{delib_question}\"\n\nStatements to rank:\n{stmt_list}\n\nRank them by listing their IDs from best to worst."
+    prompt = f"Deliberation question: \"{delib_question}\"\n\nStatements to rank:\n{stmt_list}\n\nRank them by listing their codes from best to worst."
     response = client.sample_text(
         prompt=prompt,
         system_prompt=RANKING_SYSTEM_PROMPT.format(profile=profile, opinion=sanitize_prompt_text(opinion.opinion_text)),
@@ -892,8 +895,8 @@ def _do_ranking(db: Session, hosted_agent: HostedAgent, delib_id: UUID) -> Optio
     if not response:
         return None
 
-    # Parse ranking from response — extract UUIDs in order
-    rankings = _parse_ranking_response(response, statements)
+    # Parse ranking from response — match short codes
+    rankings = _parse_ranking_response(response, statements, code_to_id)
     if not rankings:
         # Fallback: rank by statement order
         rankings = [{"statement_id": str(s.id), "rank": i + 1} for i, s in enumerate(statements)]
@@ -919,7 +922,7 @@ def _do_add_statement(db: Session, hosted_agent: HostedAgent, delib_id: UUID) ->
 
     # Check if we can add
     agent_stmt_count = db.query(Statement).filter(
-        and_(Statement.deliberation_id == delib_id, Statement.contributed_by_agent_id == agent.id)
+        and_(Statement.deliberation_id == delib_id, Statement.contributed_by_agent_id == agent.id, Statement.is_evicted == False)
     ).count()
     if agent_stmt_count >= settings.CONTINUOUS_MAX_STATEMENTS_PER_AGENT:
         return None
@@ -999,6 +1002,7 @@ def _revisit_opinion(db: Session, hosted_agent: HostedAgent, delib_id: UUID) -> 
     new_statements = db.query(Statement).filter(
         and_(
             Statement.deliberation_id == delib_id,
+            Statement.is_evicted == False,
             Statement.generated_at > latest_opinion.submitted_at,
         )
     ).all()
@@ -1153,25 +1157,53 @@ def _do_create_deliberation(db: Session, hosted_agent: HostedAgent) -> Optional[
     }
 
 
-def _parse_ranking_response(response: str, statements: list) -> list[dict]:
-    """Parse LLM ranking response into a list of {statement_id, rank} dicts."""
+def _generate_short_codes(statements: list) -> tuple[dict, dict]:
+    """Generate random 4-char alphanumeric codes for statements.
+    Returns (code_to_stmt_id, stmt_id_to_code) mappings."""
+    import random
+    import string
+    chars = string.ascii_uppercase + string.digits
+    used = set()
+    code_to_id = {}
+    id_to_code = {}
+    for s in statements:
+        while True:
+            code = ''.join(random.choices(chars, k=4))
+            if code not in used:
+                break
+        used.add(code)
+        sid = str(s.id)
+        code_to_id[code] = sid
+        id_to_code[sid] = code
+    return code_to_id, id_to_code
+
+
+def _parse_ranking_response(response: str, statements: list, code_to_id: dict = None) -> list[dict]:
+    """Parse LLM ranking response into a list of {statement_id, rank} dicts.
+    If code_to_id is provided, matches short codes. Otherwise falls back to UUID matching."""
     import re
 
-    # Extract UUIDs or UUID prefixes from the response
-    stmt_ids = {str(s.id): s for s in statements}
+    stmt_ids = {str(s.id) for s in statements}
     found_order = []
 
-    # Try to find UUIDs in order
-    uuid_pattern = re.compile(r'[0-9a-f]{4,}(?:-[0-9a-f-]+)?', re.IGNORECASE)
-    matches = uuid_pattern.findall(response)
-
-    for match in matches:
-        match_lower = match.lower()
-        for sid in stmt_ids:
-            if sid.startswith(match_lower) or match_lower.startswith(sid[:8]):
-                if sid not in found_order:
-                    found_order.append(sid)
-                break
+    if code_to_id:
+        # Match short codes (4-char alphanumeric tokens)
+        token_pattern = re.compile(r'[A-Z0-9]{4}')
+        for match in token_pattern.findall(response.upper()):
+            sid = code_to_id.get(match)
+            if sid and sid not in found_order:
+                found_order.append(sid)
+    else:
+        # Legacy: match UUIDs or UUID prefixes
+        uuid_pattern = re.compile(r'[0-9a-f]{4,}(?:-[0-9a-f-]+)?', re.IGNORECASE)
+        matches = uuid_pattern.findall(response)
+        for match in matches:
+            match_lower = match.lower()
+            for sid in stmt_ids:
+                if sid.startswith(match_lower) or match_lower.startswith(sid[:8]):
+                    if sid not in found_order:
+                        found_order.append(sid)
+                    break
 
     if len(found_order) < len(statements) // 2:
         return []

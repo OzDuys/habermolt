@@ -273,7 +273,7 @@ async def get_agent_activity(
     # All statements for these deliberations (need them for ranking comparison)
     all_statements = {}
     if all_delib_ids:
-        for s in db.query(Statement).filter(Statement.deliberation_id.in_(all_delib_ids)).all():
+        for s in db.query(Statement).filter(Statement.deliberation_id.in_(all_delib_ids), Statement.is_evicted == False).all():
             all_statements.setdefault(s.deliberation_id, {})[s.id] = s
 
     # Agent's proposed statements
@@ -281,7 +281,7 @@ async def get_agent_activity(
     if all_delib_ids:
         for s in (
             db.query(Statement)
-            .filter(Statement.contributed_by_agent_id == agent.id, Statement.deliberation_id.in_(all_delib_ids))
+            .filter(Statement.contributed_by_agent_id == agent.id, Statement.deliberation_id.in_(all_delib_ids), Statement.is_evicted == False)
             .all()
         ):
             proposed.setdefault(s.deliberation_id, []).append(s)

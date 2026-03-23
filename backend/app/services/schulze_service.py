@@ -204,6 +204,12 @@ class SchulzeService:
                 if col is not None:
                     matrix[agent_idx, col] = entry["rank"] - 1  # Convert 1-indexed to 0-indexed
 
+        # Normalize each row to remove gaps (e.g. [0,1,14,15] -> [0,1,2,3])
+        # This is a safety net: pairwise results are identical, but _check_rankings
+        # requires consecutive ranks.
+        for i in range(num_agents):
+            matrix[i] = _normalize_ranking(matrix[i])
+
         # Run Schulze
         _, untied = self.aggregate(matrix, seed=42)
 

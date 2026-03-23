@@ -157,7 +157,7 @@ async def get_agent_status(
         if not ranking:
             # Only prompt for ranking if statements exist
             has_statements = db.query(Statement).filter(
-                Statement.deliberation_id == delib.id,
+                and_(Statement.deliberation_id == delib.id, Statement.is_evicted == False),
             ).count() > 0
             if has_statements:
                 c_id, c_name = _community_info()
@@ -173,7 +173,7 @@ async def get_agent_status(
 
         # Has ranking — check for new statements since last ranking
         current_statement_count = db.query(Statement).filter(
-            Statement.deliberation_id == delib.id,
+            and_(Statement.deliberation_id == delib.id, Statement.is_evicted == False),
         ).count()
         ranked_statement_count = len(ranking.statement_rankings)
 
@@ -212,6 +212,7 @@ async def get_agent_status(
                 and_(
                     Statement.deliberation_id == delib.id,
                     Statement.contributed_by_agent_id == agent.id,
+                    Statement.is_evicted == False,
                 )
             ).count()
 
