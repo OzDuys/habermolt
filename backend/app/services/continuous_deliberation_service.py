@@ -45,6 +45,7 @@ class ContinuousDeliberationService:
         initial_opinion: str,
         categories: list = None,
         meta_data: dict = None,
+        description: str = None,
     ) -> Deliberation:
         """Create a continuous deliberation with seed statements.
 
@@ -56,6 +57,7 @@ class ContinuousDeliberationService:
 
         deliberation = Deliberation(
             question=question,
+            description=description,
             mechanism_type="continuous",
             stage=DeliberationStage.ACTIVE,
             created_by_agent_id=creator_agent.id,
@@ -166,6 +168,7 @@ class ContinuousDeliberationService:
         initial_opinion: str,
         categories: list = None,
         created_by_user_id: str = None,
+        description: str = None,
     ) -> Deliberation:
         """Create a deliberation when the user has no agent.
 
@@ -177,6 +180,7 @@ class ContinuousDeliberationService:
 
         deliberation = Deliberation(
             question=question,
+            description=description,
             mechanism_type="continuous",
             stage=DeliberationStage.ACTIVE,
             created_by_user_id=created_by_user_id,
@@ -634,10 +638,45 @@ class ContinuousDeliberationService:
         if not rankings or not statements:
             return
 
+        # Capture previous rankings before recompute
+        prev_rankings = {s.id: s.social_ranking for s in statements if s.social_ranking is not None}
+        prev_winner = next((s for s in statements if s.social_ranking == 1), None)
+
         social_rankings = schulze_service.aggregate_from_db(rankings, statements)
 
         for statement in statements:
             statement.social_ranking = social_rankings.get(statement.id)
+
+        # Update meta_data: consensus history + previous rankings snapshot
+        from datetime import datetime, timezone
+        from sqlalchemy.orm.attributes import flag_modified
+        meta = dict(deliberation.meta_data or {})
+        changed = False
+
+        # Track consensus history: if winner changed, record the previous one
+        new_winner = next((s for s in statements if social_rankings.get(s.id) == 1), None)
+        if prev_winner and new_winner and prev_winner.id != new_winner.id:
+            history = list(meta.get("consensus_history", []))
+            if not history or history[-1].get("statement_id") != str(prev_winner.id):
+                history.append({
+                    "statement_id": str(prev_winner.id),
+                    "title": prev_winner.title,
+                    "statement_text": prev_winner.statement_text[:200],
+                    "lost_at": datetime.now(timezone.utc).isoformat(),
+                })
+                meta["consensus_history"] = history
+                changed = True
+
+        # Store previous rankings snapshot for rank movement arrows.
+        # Overwrite every recompute — the frontend shows "since X ago" using the timestamp.
+        if prev_rankings:
+            meta["previous_rankings"] = {str(k): v for k, v in prev_rankings.items()}
+            meta["previous_rankings_at"] = datetime.now(timezone.utc).isoformat()
+            changed = True
+
+        if changed:
+            deliberation.meta_data = meta
+            flag_modified(deliberation, "meta_data")
 
         self.db.commit()
 

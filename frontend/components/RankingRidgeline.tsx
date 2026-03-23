@@ -9,6 +9,8 @@ interface RankingRidgelineProps {
   rankings: Ranking[];
   /** Map from agent_id to cluster color — used to color each statement by its contributor */
   agentClusterColor?: Record<string, string>;
+  /** Fired when user clicks on a statement row */
+  onStatementClick?: (statementId: string) => void;
 }
 
 const WIDTH = 600;
@@ -42,7 +44,7 @@ function kernelDensity(data: number[], domain: [number, number], bandwidth: numb
   return pts;
 }
 
-export default function RankingRidgeline({ statements, rankings, agentClusterColor }: RankingRidgelineProps) {
+export default function RankingRidgeline({ statements, rankings, agentClusterColor, onStatementClick }: RankingRidgelineProps) {
   const [hovered, setHovered] = useState<string | null>(null);
 
   const { rows, maxRank, maxDensity } = useMemo(() => {
@@ -135,6 +137,7 @@ export default function RankingRidgeline({ statements, rankings, agentClusterCol
               key={row.statement.id}
               transform={`translate(${PAD_LEFT}, ${yOffset})`}
               onMouseEnter={() => setHovered(row.statement.id)}
+              onClick={() => onStatementClick?.(row.statement.id)}
               style={{ cursor: "pointer" }}
             >
               {/* Baseline */}

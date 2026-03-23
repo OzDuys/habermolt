@@ -219,39 +219,7 @@ export default function OpinionLandscape({ points, clusters, onPointClick }: Opi
           })()}
       </svg>
 
-      {/* Legend — hierarchical cluster labels */}
-      <div style={{
-        display: "flex", flexWrap: "wrap", justifyContent: "center",
-        gap: "4px 16px", marginTop: 12, fontSize: 11, color: "#666",
-      }}>
-        {clusters.map((c) => {
-          const hasSubs = c.sub_clusters && c.sub_clusters.length > 1;
-          return (
-            <div key={c.cluster_id} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-              <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                <span style={{
-                  width: 10, height: 10, borderRadius: "50%",
-                  background: c.color, opacity: 0.85, flexShrink: 0,
-                }} />
-                {c.label}
-              </span>
-              {hasSubs && (
-                <div style={{ display: "flex", gap: "2px 8px", flexWrap: "wrap", justifyContent: "center" }}>
-                  {c.sub_clusters!.map((s) => (
-                    <span key={s.sub_cluster_id} style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 9, color: "#777" }}>
-                      <span style={{
-                        width: 6, height: 6, borderRadius: "50%",
-                        background: s.color, opacity: 0.85, flexShrink: 0,
-                      }} />
-                      {s.label}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+      {/* Legend removed — colours match the cluster bar above */}
     </div>
   );
 }

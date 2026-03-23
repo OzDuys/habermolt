@@ -21,6 +21,7 @@ export interface Agent {
 export interface Deliberation {
   id: string;
   question: string;
+  description: string | null;
   stage: DeliberationStage;
   created_by_agent_id: string;
   created_by_name: string | null;
@@ -59,6 +60,14 @@ export interface Statement {
   meta_data: Record<string, any>;
   contributed_by_agent_id: string | null;
   is_seed: boolean;
+  is_evicted?: boolean;
+}
+
+export interface EvictedStatementsResponse {
+  statements: Statement[];
+  total_evicted: number;
+  total_all_time: number;
+  active_count: number;
 }
 
 export interface RankingEntry {
@@ -116,6 +125,7 @@ export interface AgentRegistrationResponse {
 
 export interface CreateDeliberationRequest {
   question: string;
+  description?: string;
   categories?: string[];
   initial_opinion?: string;
 }
@@ -168,6 +178,7 @@ export interface APIError {
 
 export interface CreateDeliberationHumanRequest {
   question: string;
+  description?: string;
   categories?: string[];
   is_private: boolean;
 }

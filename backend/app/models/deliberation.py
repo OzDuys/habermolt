@@ -32,6 +32,7 @@ class Deliberation(Base):
 
     # Deliberation Content
     question = Column(Text, nullable=False)
+    description = Column(Text, nullable=True)
 
     # Mechanism Type (kept for backward compat, always "continuous")
     mechanism_type = Column(

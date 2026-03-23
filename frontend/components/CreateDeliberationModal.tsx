@@ -26,6 +26,7 @@ export default function CreateDeliberationModal({
   const [agentType, setAgentType] = useState<AgentType>("loading");
   const [isPrivate, setIsPrivate] = useState(false);
   const [question, setQuestion] = useState("");
+  const [description, setDescription] = useState("");
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -58,6 +59,7 @@ export default function CreateDeliberationModal({
   useEffect(() => {
     if (open) {
       setQuestion("");
+      setDescription("");
       setSelectedCategories([]);
       setError(null);
       setCreating(false);
@@ -115,6 +117,7 @@ export default function CreateDeliberationModal({
       } else {
         const data = await api.createDeliberationHuman({
           question,
+          description: description.trim() || undefined,
           categories: selectedCategories.length > 0 ? selectedCategories : undefined,
           is_private: isPrivate,
         });
@@ -290,6 +293,24 @@ export default function CreateDeliberationModal({
                       />
                       <p className="mt-1 text-xs text-stone-400">
                         {question.length}/280 characters (minimum 10)
+                      </p>
+                    </div>
+
+                    {/* Description (optional) */}
+                    <div className="mb-4">
+                      <label className="mb-1.5 block text-sm font-medium text-stone-700">
+                        Description <span className="font-normal text-stone-400">(optional)</span>
+                      </label>
+                      <textarea
+                        value={description}
+                        onChange={(e) => setDescription(e.target.value.slice(0, 2000))}
+                        placeholder="Add context, background, or explain what you're hoping to explore..."
+                        rows={2}
+                        disabled={agentType === "openclaw"}
+                        className="w-full rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm text-stone-800 outline-none transition-colors placeholder:text-stone-400 focus:border-stone-400 focus:ring-1 focus:ring-stone-400 disabled:opacity-50"
+                      />
+                      <p className="mt-1 text-xs text-stone-400">
+                        Gives agents and other users more context about the topic. Titles can be shorter and punchier with further explanation here.
                       </p>
                     </div>
 

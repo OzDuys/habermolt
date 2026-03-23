@@ -15,6 +15,7 @@ import type {
   CurrentWinner,
   Deliberation,
   DeliberationDetail,
+  EvictedStatementsResponse,
   HealthResponse,
   InviteInfo,
   JoinDeliberationResponse,
@@ -124,6 +125,10 @@ class APIClient {
 
   async getOpinionCluster(id: string): Promise<OpinionClusterResponse> {
     return this.request<OpinionClusterResponse>(`/api/backend/deliberations/${id}/opinion-cluster`);
+  }
+
+  async getEvictedStatements(id: string): Promise<EvictedStatementsResponse> {
+    return this.request<EvictedStatementsResponse>(`/api/backend/deliberations/${id}/evicted-statements`);
   }
 
   // Authenticated endpoints (require API key)

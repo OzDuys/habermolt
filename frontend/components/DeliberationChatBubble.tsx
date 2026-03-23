@@ -354,8 +354,8 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
       : "Chat About This Topic";
 
     const placeholder = phase === "participating"
-      ? "Discuss the deliberation, update your rankings, or propose a statement..."
-      : "Ask about this topic or say 'join' to participate...";
+      ? "Update rankings, propose a statement..."
+      : "Ask about this topic or say 'join'...";
 
     return (
       <>
@@ -386,26 +386,38 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
           )}
         </AnimatePresence>
 
+        {/* Backdrop when expanded/centered */}
+        <AnimatePresence>
+          {open && expanded && (
+            <motion.div
+              key="delib-backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setExpanded(false)}
+              style={{
+                position: "fixed", inset: 0, zIndex: 139,
+                background: "rgba(0,0,0,0.3)", backdropFilter: "blur(4px)",
+              }}
+            />
+          )}
+        </AnimatePresence>
+
         {/* Chat panel */}
         <AnimatePresence>
           {open && (
             <motion.div
               key="delib-panel"
-              className="delib-chat-panel"
-              initial={{ opacity: 0, y: 40, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 40, scale: 0.95 }}
+              className={`delib-chat-panel${expanded ? " delib-chat-expanded" : ""}`}
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
               transition={{ type: "spring", stiffness: 400, damping: 30 }}
               style={{
-                position: "fixed", bottom: 0, right: 0, zIndex: 140,
-                width: expanded ? "min(480px, 100vw)" : "min(370px, 100vw)",
-                height: expanded ? "min(600px, 100dvh)" : "min(520px, 100dvh)",
-                borderRadius: "16px 16px 0 0",
+                position: "fixed", zIndex: 140,
                 background: "#fff", border: "1px solid rgba(0,0,0,0.1)",
-                boxShadow: "0 8px 32px rgba(0,0,0,0.15)",
+                boxShadow: expanded ? "0 16px 64px rgba(0,0,0,0.2)" : "0 8px 32px rgba(0,0,0,0.15)",
                 display: "flex", flexDirection: "column", overflow: "hidden",
-                transformOrigin: "bottom right",
-                transition: "width 0.3s ease, height 0.3s ease",
               }}
             >
             {/* Header */}
@@ -463,7 +475,7 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
               )}
               {messages.map((msg, i) =>
                 msg.role === "action" ? (
-                  <div key={i} style={{
+                  <div key={i} className="chat-action" style={{
                     display: "flex", alignItems: "center", gap: 6,
                     padding: "6px 10px", borderRadius: 8,
                     background: msg.status === "error" ? "#fee" : "#1a8a5010",
@@ -475,6 +487,7 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
                 ) : (
                   <div
                     key={i}
+                    className="chat-msg"
                     style={{
                       alignSelf: msg.role === "user" ? "flex-end" : "flex-start",
                       maxWidth: "85%",
@@ -589,6 +602,7 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
             }}>
               <textarea
                 ref={inputRef}
+                className="chat-input"
                 value={input}
                 onChange={(e) => {
                   setInput(e.target.value);
@@ -608,6 +622,7 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
                   }}
                 />
               <button
+                className="chat-send"
                 onClick={sendMessage}
                 disabled={sending || !input.trim() || !sessionId || phase === "setup"}
                 style={{
@@ -643,13 +658,48 @@ const DeliberationChatBubble = forwardRef<DeliberationChatBubbleHandle, Delibera
           .chat-markdown a { color: #c84a20; text-decoration: underline; }
           .chat-markdown h1, .chat-markdown h2, .chat-markdown h3 { font-size: 13px; font-weight: 700; margin: 8px 0 4px; }
           .chat-markdown blockquote { border-left: 2px solid rgba(0,0,0,0.15); padding-left: 8px; margin: 4px 0; color: #666; }
+          .delib-chat-panel {
+            bottom: 0;
+            right: 0;
+            width: min(400px, 100vw);
+            height: min(560px, 100dvh);
+            border-radius: 16px 16px 0 0;
+            transition: width 0.3s ease, height 0.3s ease, border-radius 0.3s ease, inset 0.3s ease;
+          }
+          .delib-chat-expanded {
+            top: 50% !important;
+            left: 50% !important;
+            bottom: auto !important;
+            right: auto !important;
+            translate: -50% -50%;
+            width: min(640px, calc(100vw - 32px)) !important;
+            height: min(720px, calc(100dvh - 100px)) !important;
+            border-radius: 20px !important;
+          }
+          .delib-chat-expanded .chat-msg { font-size: 15px !important; line-height: 1.6 !important; }
+          .delib-chat-expanded .chat-markdown h1,
+          .delib-chat-expanded .chat-markdown h2,
+          .delib-chat-expanded .chat-markdown h3 { font-size: 15px !important; }
+          .delib-chat-expanded .chat-markdown code { font-size: 14px !important; }
+          .delib-chat-expanded .chat-action { font-size: 13px !important; }
+          .delib-chat-expanded .chat-input { font-size: 15px !important; }
+          .delib-chat-expanded .chat-send { font-size: 15px !important; }
           @media (max-width: 640px) {
             .delib-chat-panel {
               width: calc(100vw - 16px) !important;
-              max-height: 70dvh !important;
+              max-height: 80dvh !important;
               bottom: 8px !important;
               right: 8px !important;
               border-radius: 16px !important;
+            }
+            .delib-chat-expanded {
+              top: auto !important;
+              left: 8px !important;
+              bottom: 8px !important;
+              right: 8px !important;
+              translate: none;
+              width: calc(100vw - 16px) !important;
+              height: 85dvh !important;
             }
           }
         `}</style>

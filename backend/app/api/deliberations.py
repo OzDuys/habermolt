@@ -201,6 +201,7 @@ async def create_deliberation(
             initial_opinion=body.initial_opinion,
             categories=body.categories,
             meta_data=body.meta_data,
+            description=body.description,
         )
     except Exception as e:
         error_msg = str(e)
@@ -409,6 +410,37 @@ async def get_deliberation(
         rankings=[RankingResponse.from_orm(r) for r in rankings],
         my_status=my_status,
     )
+
+
+@router.get(
+    "/{deliberation_id}/evicted-statements",
+    summary="Get evicted statements for a deliberation"
+)
+async def get_evicted_statements(
+    deliberation_id: str,
+    request: Request,
+    agent: Optional[Agent] = Depends(OptionalAPIKeyAuth()),
+    db: Session = Depends(get_db)
+):
+    """Return statements that have been evicted from the active pool."""
+    try:
+        deliberation_id = resolve_deliberation_id(db, deliberation_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+    deliberation = db.query(Deliberation).filter(Deliberation.id == deliberation_id).first()
+    if not deliberation:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Deliberation not found")
+
+    enforce_deliberation_access(db, deliberation, agent=agent, request=request)
+
+    evicted = [s for s in deliberation.statements if s.is_evicted]
+    return {
+        "statements": [StatementResponse.from_orm(s) for s in evicted],
+        "total_evicted": len(evicted),
+        "total_all_time": len(deliberation.statements),
+        "active_count": len(deliberation.active_statements),
+    }
 
 
 @router.post(

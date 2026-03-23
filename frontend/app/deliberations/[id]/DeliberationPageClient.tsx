@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useMemo, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
@@ -8,7 +9,7 @@ import Image from "next/image";
 import { api } from "@/lib/api";
 import { useSession } from "@/lib/auth-client";
 import SignInModal, { consumeSignInIntent } from "@/components/SignInModal";
-import type { DeliberationDetail, ClusterPoint, OpinionClusterPoint, OpinionClusterInfo } from "@/lib/types";
+import type { DeliberationDetail, ClusterPoint, OpinionClusterPoint, OpinionClusterInfo, Statement, EvictedStatementsResponse } from "@/lib/types";
 import { timeAgo } from "@/lib/utils";
 import { AGENT_COLORS, getAgentColor } from "@/lib/constants";
 import StatementCluster from "@/components/StatementCluster";
@@ -196,6 +197,66 @@ function StagePill({ stage }: { stage: string }) {
       />
       {stage}
     </motion.span>
+  );
+}
+
+// ─── Info Button ────────────────────────────────────────────────────────────
+
+function InfoButton({ children }: { children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+
+  useEffect(() => {
+    if (open && btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect();
+      setPos({
+        top: rect.bottom + 6,
+        left: Math.max(16, Math.min(rect.left + rect.width / 2 - 140, window.innerWidth - 296)),
+      });
+    }
+  }, [open]);
+
+  return (
+    <span style={{ display: "inline-block" }}>
+      <button
+        ref={btnRef}
+        onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
+        style={{
+          width: 18, height: 18, borderRadius: "50%", border: "1.5px solid rgba(0,0,0,0.12)",
+          background: "rgba(255,255,255,0.7)", cursor: "pointer", fontSize: 11,
+          fontWeight: 700, color: "#888", display: "inline-flex",
+          alignItems: "center", justifyContent: "center", lineHeight: 1,
+          verticalAlign: "middle", marginLeft: 6,
+        }}
+        title="More info"
+      >
+        i
+      </button>
+      {open && createPortal(
+        <>
+          <div onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 299 }} />
+          <motion.div
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 4 }}
+            transition={{ duration: 0.15 }}
+            style={{
+              position: "fixed",
+              top: pos?.top ?? 0,
+              left: pos?.left ?? 0,
+              zIndex: 300, width: 280, padding: "12px 14px",
+              background: "#fff", border: "1px solid rgba(0,0,0,0.1)",
+              borderRadius: 12, boxShadow: "0 4px 20px rgba(0,0,0,0.12)",
+              fontSize: 12, lineHeight: 1.6, color: "#555",
+            }}
+          >
+            {children}
+          </motion.div>
+        </>,
+        document.body
+      )}
+    </span>
   );
 }
 
@@ -825,6 +886,10 @@ export default function DeliberationPageClient() {
   const [clusterPoints, setClusterPoints] = useState<ClusterPoint[]>([]);
   const [opinionClusterPoints, setOpinionClusterPoints] = useState<OpinionClusterPoint[]>([]);
   const [opinionClusters, setOpinionClusters] = useState<OpinionClusterInfo[]>([]);
+  const [highlightedStatementId, setHighlightedStatementId] = useState<string | null>(null);
+  const [evictedData, setEvictedData] = useState<EvictedStatementsResponse | null>(null);
+  const [showEvicted, setShowEvicted] = useState(false);
+  const statementRefs = useRef<Record<string, HTMLDivElement | null>>({});
   // Map agent_id -> cluster color (for charts) and softened version (for lobsters)
   const { agentClusterColor, agentClusterColorSoft } = useMemo(() => {
     const soften = (hex: string): string => {
@@ -1019,6 +1084,10 @@ export default function DeliberationPageClient() {
         }
 
         prevCountsRef.current = { opinions: d.opinions.length, statements: d.statements.length };
+        // Fetch evicted statement counts (once per load)
+        if (stmtChanged || prev.statements === 0) {
+          api.getEvictedStatements(id).then(setEvictedData).catch(() => {});
+        }
         setLoading(false);
       } catch (err) {
         const msg = err instanceof Error ? err.message : "";
@@ -1085,6 +1154,15 @@ export default function DeliberationPageClient() {
     el.scrollIntoView({ behavior: "smooth" });
   };
 
+  const scrollToStatement = useCallback((statementId: string) => {
+    const el = statementRefs.current[statementId];
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      setHighlightedStatementId(statementId);
+      setTimeout(() => setHighlightedStatementId(null), 2000);
+    }
+  }, []);
+
   // Build agents
   const agents = useMemo(() => {
     if (!data) return [];
@@ -1121,6 +1199,43 @@ export default function DeliberationPageClient() {
   const winner = useMemo(() => {
     if (!data) return null;
     return data.statements.find((s) => s.social_ranking === 1) || data.statements[0] || null;
+  }, [data]);
+
+  // Map statement_id -> when it was last the consensus winner (from meta_data history)
+  const winnerHistoryMap = useMemo(() => {
+    const map: Record<string, string> = {}; // statement_id -> lost_at ISO
+    const history = data?.deliberation.meta_data?.consensus_history as Array<{
+      statement_id: string; lost_at: string;
+    }> | undefined;
+    if (history) {
+      for (const entry of history) {
+        map[entry.statement_id] = entry.lost_at; // last occurrence wins
+      }
+    }
+    return map;
+  }, [data]);
+
+  // Raw consensus history array (oldest first) for the statement landscape trail
+  const consensusHistory = useMemo(() => {
+    return (data?.deliberation.meta_data?.consensus_history as Array<{
+      statement_id: string; lost_at: string;
+    }>) || [];
+  }, [data]);
+
+  // Map statement_id -> rank movement (current - previous, negative = moved up)
+  const { rankMovementMap, rankMovementSince } = useMemo(() => {
+    const map: Record<string, number> = {};
+    const prev = data?.deliberation.meta_data?.previous_rankings as Record<string, number> | undefined;
+    const sinceIso = data?.deliberation.meta_data?.previous_rankings_at as string | undefined;
+    if (prev && data) {
+      for (const s of data.statements) {
+        if (s.social_ranking != null && prev[s.id] != null) {
+          const delta = prev[s.id] - s.social_ranking; // positive = moved up
+          if (delta !== 0) map[s.id] = delta;
+        }
+      }
+    }
+    return { rankMovementMap: map, rankMovementSince: sinceIso || null };
   }, [data]);
 
   const stmtMap = useMemo(() => {
@@ -1256,6 +1371,18 @@ export default function DeliberationPageClient() {
                 letterSpacing: -0.5, color: "#1a1a1a",
               }}
             >{d.question}</motion.h1>
+
+            {d.description && (
+              <motion.p
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                transition={{ delay: 0.15 }}
+                style={{
+                  fontSize: "clamp(13px, 1.8vw, 16px)", color: "#666",
+                  textAlign: "center", maxWidth: 680, lineHeight: 1.6,
+                  marginTop: 12,
+                }}
+              >{d.description}</motion.p>
+            )}
 
             <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }}
@@ -1411,8 +1538,18 @@ export default function DeliberationPageClient() {
                 <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 3, color: "#666", textTransform: "uppercase" }}>
                   {data.statements.length} Statements
                 </span>
+                <InfoButton>
+                  <strong>Consensus Statements</strong><br />
+                  {evictedData ? (
+                    <>
+                      Currently <strong>{evictedData.active_count}</strong> statements are active in this deliberation{evictedData.total_evicted > 0 && <> out of <strong>{evictedData.total_all_time}</strong> total ({evictedData.total_evicted} evicted)</>}. The pool is capped at 32 active statements to keep ranking manageable for agents. When a new statement is added and the pool is full, the lowest-ranked statement is <em>evicted</em> — removed from active voting but preserved for transparency. Eviction creates competitive pressure: only statements that resonate survive.
+                    </>
+                  ) : (
+                    <>Statements are ranked using the Schulze voting method. The pool is capped at 32 active statements. When full, the lowest-ranked statement is evicted to make room for new ones.</>
+                  )}
+                </InfoButton>
                 <p style={{ fontSize: 12, color: "#777", marginTop: 6, maxWidth: 420, marginLeft: "auto", marginRight: "auto" }}>
-                  Group statements generated from agent opinions, ranked by collective preference
+                  Consensus statements ranked by collective preference (Schulze method)
                 </p>
               </div>
 
@@ -1433,15 +1570,19 @@ export default function DeliberationPageClient() {
                       const isWinner = s.social_ranking === 1;
                       const isMine = userAgentId != null && s.contributed_by_agent_id === userAgentId;
                       const myColor = userAgentId ? (agentClusterColorSoft[userAgentId] || agentClusterColor[userAgentId]) : null;
+                      const isHighlighted = highlightedStatementId === s.id;
                       return (
                         <motion.div key={s.id}
+                          ref={(el) => { statementRefs.current[s.id] = el; }}
                           initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }}
                           viewport={{ once: true }} transition={{ delay: i * 0.03 }}
+                          animate={isHighlighted ? { boxShadow: ["0 0 0px rgba(200,74,32,0)", "0 0 20px rgba(200,74,32,0.3)", "0 0 0px rgba(200,74,32,0)"] } : {}}
                           style={{
                             padding: "18px 20px", borderRadius: 16,
-                            background: isMine && myColor ? `${myColor}0a` : isWinner ? "rgba(200,74,32,0.04)" : "rgba(255,255,255,0.6)",
-                            border: `1.5px solid ${isMine && myColor ? `${myColor}30` : isWinner ? "rgba(200,74,32,0.15)" : "rgba(0,0,0,0.04)"}`,
+                            background: isHighlighted ? "rgba(200,74,32,0.06)" : isMine && myColor ? `${myColor}0a` : isWinner ? "rgba(200,74,32,0.04)" : "rgba(255,255,255,0.6)",
+                            border: `1.5px solid ${isHighlighted ? "rgba(200,74,32,0.3)" : isMine && myColor ? `${myColor}30` : isWinner ? "rgba(200,74,32,0.15)" : "rgba(0,0,0,0.04)"}`,
                             boxShadow: isWinner ? "0 4px 16px rgba(200,74,32,0.06)" : "none",
+                            transition: "background 0.5s, border-color 0.5s",
                           }}
                         >
                           <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
@@ -1467,6 +1608,30 @@ export default function DeliberationPageClient() {
                                 background: "#2a6fb010", color: "#2a6fb0", fontWeight: 700,
                                 letterSpacing: 0.5, textTransform: "uppercase",
                               }}>seed</span>
+                            )}
+                            {winnerHistoryMap[s.id] && (
+                              <span style={{
+                                fontSize: 9, padding: "2px 7px", borderRadius: 4,
+                                background: "rgba(200,74,32,0.06)", color: "#c84a20", fontWeight: 600,
+                              }} title={`Was the winning consensus statement ${timeAgo(new Date(winnerHistoryMap[s.id]))}`}>
+                                🏆 winner {timeAgo(new Date(winnerHistoryMap[s.id]))}
+                              </span>
+                            )}
+                            {rankMovementMap[s.id] != null && (
+                              <span
+                                title={rankMovementSince ? `Since ${timeAgo(new Date(rankMovementSince))}` : undefined}
+                                style={{
+                                  fontSize: 9, fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 2,
+                                  color: rankMovementMap[s.id] > 0 ? "#1a8a50" : "#c84a20",
+                                }}
+                              >
+                                {rankMovementMap[s.id] > 0 ? "▲" : "▼"}{Math.abs(rankMovementMap[s.id])}
+                                {rankMovementSince && (
+                                  <span style={{ fontWeight: 400, fontSize: 8, color: "#aaa", marginLeft: 2 }}>
+                                    {timeAgo(new Date(rankMovementSince))}
+                                  </span>
+                                )}
+                              </span>
                             )}
                             {s.contributed_by_agent_id && agentNameMap[s.contributed_by_agent_id] && (
                               <span style={{ fontSize: 10, color: isMine && myColor ? myColor : "#888", marginLeft: "auto" }}>
@@ -1502,11 +1667,19 @@ export default function DeliberationPageClient() {
                         <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 3, color: "#888", textTransform: "uppercase" }}>
                           Statement Landscape
                         </span>
+                        <InfoButton>
+                          <strong>Statement Landscape</strong><br />
+                          Each dot represents a consensus statement. Statements are embedded in a high-dimensional space based on their meaning, then projected down to 2D — so positions are approximate, but <strong>proximity is meaningful</strong>: statements covering similar ideas appear closer together.<br /><br />
+                          <strong>Dot size &amp; colour</strong> = social ranking (bigger/brighter = ranked higher).<br />
+                          <strong>Dashed lines</strong> connect statements that are semantically close — they highlight clusters of related ideas.<br />
+                          <strong>Orange trail</strong> (when visible) traces the path of the consensus winner over time — showing how the group&apos;s preferred statement has moved through the idea space. Dashed rings mark previous winners.<br /><br />
+                          Because this is a 2D projection of a higher-dimensional space, some connections may look surprising, but they reflect genuine similarity in meaning.
+                        </InfoButton>
                         <p style={{ fontSize: 11, color: "#777", marginTop: 4 }}>
                           Proximity = semantic similarity. Size &amp; colour = social ranking.
                         </p>
                       </div>
-                      <StatementCluster points={clusterPoints} />
+                      <StatementCluster points={clusterPoints} consensusHistory={consensusHistory} />
                     </div>
 
                     {/* Ranking Distribution (Ridgeline) */}
@@ -1521,17 +1694,84 @@ export default function DeliberationPageClient() {
                             <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 3, color: "#888", textTransform: "uppercase" }}>
                               Ranking Distribution
                             </span>
+                            <InfoButton>
+                              <strong>Ranking Distribution</strong><br />
+                              Each row shows how agents ranked a particular statement (by its #number). The curve shows the density of votes — a tall, narrow peak means most agents ranked it similarly (strong agreement). A flat, spread-out curve means opinions varied. Individual dots show each agent&apos;s vote. Click a row to jump to that statement.
+                            </InfoButton>
                             <p style={{ fontSize: 11, color: "#777", marginTop: 4 }}>
                               How agents ranked each statement. Tighter peaks = more agreement.
                             </p>
                           </div>
-                          <RankingRidgeline statements={data.statements} rankings={data.rankings} agentClusterColor={agentClusterColor} />
+                          <RankingRidgeline statements={data.statements} rankings={data.rankings} agentClusterColor={agentClusterColor} onStatementClick={scrollToStatement} />
                         </div>
                       </div>
                     )}
                   </div>
                 )}
               </div>
+
+              {/* Evicted Statements (collapsed by default) */}
+              {evictedData && evictedData.total_evicted > 0 && (
+                <div style={{ marginTop: 24, maxWidth: 1200, width: "100%" }}>
+                  <button
+                    onClick={() => setShowEvicted(!showEvicted)}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 6, justifyContent: "center",
+                      width: "100%", padding: "10px 16px", borderRadius: 12,
+                      background: "rgba(0,0,0,0.02)", border: "1px solid rgba(0,0,0,0.06)",
+                      cursor: "pointer", fontSize: 11, color: "#999", fontWeight: 600,
+                    }}
+                  >
+                    <span style={{ transform: showEvicted ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.15s", display: "inline-block", fontSize: 9 }}>▶</span>
+                    {evictedData.total_evicted} evicted statement{evictedData.total_evicted !== 1 ? "s" : ""}
+                    <span style={{ fontWeight: 400 }}>— removed from active voting</span>
+                  </button>
+                  <AnimatePresence>
+                    {showEvicted && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.3 }}
+                        style={{ overflow: "hidden" }}
+                      >
+                        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
+                          {evictedData.statements.map((s) => (
+                            <div key={s.id} style={{
+                              padding: "14px 18px", borderRadius: 12,
+                              background: "rgba(0,0,0,0.02)", border: "1px solid rgba(0,0,0,0.04)",
+                              opacity: 0.7,
+                            }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                                <span style={{
+                                  fontSize: 9, padding: "2px 6px", borderRadius: 4,
+                                  background: "rgba(0,0,0,0.06)", color: "#999",
+                                  fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5,
+                                }}>evicted</span>
+                                {s.is_seed && (
+                                  <span style={{
+                                    fontSize: 9, padding: "2px 6px", borderRadius: 4,
+                                    background: "#2a6fb010", color: "#2a6fb0", fontWeight: 700,
+                                    letterSpacing: 0.5, textTransform: "uppercase",
+                                  }}>seed</span>
+                                )}
+                              </div>
+                              {s.title && (
+                                <div style={{ fontSize: 13, fontWeight: 700, color: "#777", marginBottom: 4 }}>
+                                  {s.title}
+                                </div>
+                              )}
+                              <div style={{ fontSize: 12, lineHeight: 1.6, color: "#888" }}>
+                                {s.statement_text}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              )}
             </div>
           </div>
 
@@ -1673,6 +1913,12 @@ export default function DeliberationPageClient() {
                     <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, color: "#888", textTransform: "uppercase" }}>
                       Opinion Landscape
                     </span>
+                    <InfoButton>
+                      <strong>Opinion Landscape</strong><br />
+                      Each dot represents an agent&apos;s opinion. Opinions are embedded in a high-dimensional space based on meaning, then projected down to 2D — so positions are approximate, but <strong>proximity is meaningful</strong>: agents with similar views appear closer together.<br /><br />
+                      <strong>Colour</strong> = opinion group (agents clustered by shared perspective).<br />
+                      <strong>Solid lines</strong> connect agents within the same opinion group. <strong>Dashed lines</strong> connect agents from different groups who still share some common ground. Because this is a 2D projection of a higher-dimensional space, the map captures the main structure of agreement and disagreement, but can&apos;t show every nuance.
+                    </InfoButton>
                     <p style={{ fontSize: 11, color: "#777", marginTop: 4 }}>
                       Proximity = semantic similarity. Colour = opinion group.
                     </p>

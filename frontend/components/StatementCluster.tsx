@@ -5,8 +5,15 @@ import { motion, AnimatePresence } from "framer-motion";
 import * as d3 from "d3";
 import type { ClusterPoint } from "@/lib/types";
 
+interface ConsensusHistoryEntry {
+  statement_id: string;
+  lost_at: string;
+}
+
 interface StatementClusterProps {
   points: ClusterPoint[];
+  /** Ordered list of previous consensus winners (oldest first) */
+  consensusHistory?: ConsensusHistoryEntry[];
 }
 
 const WIDTH = 720;
@@ -62,7 +69,7 @@ function computeEdges(
   return edges;
 }
 
-export default function StatementCluster({ points }: StatementClusterProps) {
+export default function StatementCluster({ points, consensusHistory = [] }: StatementClusterProps) {
   const [tooltip, setTooltip] = useState<{
     point: ClusterPoint;
     svgX: number;
@@ -94,6 +101,37 @@ export default function StatementCluster({ points }: StatementClusterProps) {
     if (!xScale || !yScale) return [];
     return computeEdges(points, xScale, yScale, 140);
   }, [points, xScale, yScale]);
+
+  // Build consensus trail: ordered coordinates of historical winners + current winner
+  const consensusTrail = useMemo(() => {
+    if (!xScale || !yScale || consensusHistory.length === 0) return [];
+    const pointMap = new Map(points.map((p) => [p.id, p]));
+    const trail: { x: number; y: number; id: string; isCurrent: boolean }[] = [];
+
+    // Historical winners in chronological order (oldest first)
+    for (const entry of consensusHistory) {
+      const pt = pointMap.get(entry.statement_id);
+      if (pt) trail.push({ x: xScale(pt.x), y: yScale(pt.y), id: pt.id, isCurrent: false });
+    }
+
+    // Current winner
+    const currentWinner = points.find((p) => p.social_ranking === 1);
+    if (currentWinner) {
+      // Don't duplicate if current winner is also the last history entry
+      if (!trail.length || trail[trail.length - 1].id !== currentWinner.id) {
+        trail.push({ x: xScale(currentWinner.x), y: yScale(currentWinner.y), id: currentWinner.id, isCurrent: true });
+      } else {
+        trail[trail.length - 1].isCurrent = true;
+      }
+    }
+
+    return trail;
+  }, [points, consensusHistory, xScale, yScale]);
+
+  // Set of historical winner IDs for styling
+  const historicalWinnerIds = useMemo(() => {
+    return new Set(consensusHistory.map((e) => e.statement_id));
+  }, [consensusHistory]);
 
   if (points.length < 2 || !xScale || !yScale) return null;
 
@@ -136,6 +174,11 @@ export default function StatementCluster({ points }: StatementClusterProps) {
             <stop offset="0%" stopColor="rgba(200,74,32,0.03)" />
             <stop offset="100%" stopColor="rgba(200,74,32,0)" />
           </radialGradient>
+          {/* Gradient for consensus trail line */}
+          <linearGradient id="trail-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="rgba(200,74,32,0.15)" />
+            <stop offset="100%" stopColor="rgba(200,74,32,0.5)" />
+          </linearGradient>
         </defs>
 
         {/* Background gradient */}
@@ -164,6 +207,48 @@ export default function StatementCluster({ points }: StatementClusterProps) {
             strokeDasharray="3,4"
           />
         ))}
+
+        {/* Consensus trail — path through historical winners to current */}
+        {consensusTrail.length >= 2 && (
+          <g>
+            {/* Trail line */}
+            <polyline
+              points={consensusTrail.map((t) => `${t.x},${t.y}`).join(" ")}
+              fill="none"
+              stroke="url(#trail-gradient)"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            {/* Directional dots along segments */}
+            {consensusTrail.slice(0, -1).map((t, i) => {
+              const next = consensusTrail[i + 1];
+              const mx = (t.x + next.x) / 2;
+              const my = (t.y + next.y) / 2;
+              return (
+                <circle
+                  key={`trail-mid-${i}`}
+                  cx={mx} cy={my} r={2}
+                  fill="#c84a20"
+                  opacity={0.25 + (i / consensusTrail.length) * 0.35}
+                />
+              );
+            })}
+            {/* Historical winner markers (not current) */}
+            {consensusTrail.filter((t) => !t.isCurrent).map((t, i) => (
+              <g key={`trail-marker-${i}`}>
+                <circle
+                  cx={t.x} cy={t.y} r={12}
+                  fill="none"
+                  stroke="#c84a20"
+                  strokeWidth={1.5}
+                  strokeDasharray="3,2"
+                  opacity={0.3 + (i / consensusTrail.length) * 0.3}
+                />
+              </g>
+            ))}
+          </g>
+        )}
 
         {/* Points */}
         {sorted.map((p, i) => {
@@ -289,6 +374,15 @@ export default function StatementCluster({ points }: StatementClusterProps) {
             {item.label}
           </span>
         ))}
+        {consensusTrail.length >= 2 && (
+          <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
+            <span style={{
+              width: 20, height: 2, background: "#c84a20", opacity: 0.4,
+              borderRadius: 1, flexShrink: 0,
+            }} />
+            consensus trail
+          </span>
+        )}
       </div>
     </div>
   );

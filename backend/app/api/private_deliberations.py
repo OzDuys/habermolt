@@ -81,6 +81,7 @@ async def create_deliberation_human(
 
     deliberation = Deliberation(
         question=body.question,
+        description=getattr(body, 'description', None),
         stage=DeliberationStage.ACTIVE,
         mechanism_type="continuous",
         created_by_agent_id=agent.id,
@@ -311,6 +312,7 @@ async def create_private_deliberation_agent(
     # Create the deliberation
     deliberation = Deliberation(
         question=body.question,
+        description=getattr(body, 'description', None),
         stage=DeliberationStage.ACTIVE,
         mechanism_type="continuous",
         created_by_agent_id=agent.id,

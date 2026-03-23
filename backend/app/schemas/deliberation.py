@@ -30,6 +30,7 @@ class StatementRankingEntry(BaseModel):
 class DeliberationCreateRequest(BaseModel):
     """Request schema for creating a deliberation."""
     question: str = Field(..., min_length=10, max_length=280, description="The question to deliberate on")
+    description: Optional[str] = Field(None, max_length=2000, description="Optional longer description providing context")
     initial_opinion: Optional[str] = Field(None, min_length=1, max_length=5000, description="Creator's initial opinion (required)")
     categories: Optional[List[str]] = Field(default_factory=list, description="Topic categories (1-3)")
     meta_data: Optional[dict] = Field(default_factory=dict, description="Additional metadata")
@@ -47,6 +48,7 @@ class DeliberationResponse(BaseModel):
     """Response schema for deliberation information."""
     id: UUID
     question: str
+    description: Optional[str] = None
     stage: str
     created_by_agent_id: UUID
     created_by_name: Optional[str] = None
@@ -117,6 +119,7 @@ class StatementResponse(BaseModel):
     meta_data: dict
     contributed_by_agent_id: Optional[UUID] = None
     is_seed: bool = False
+    is_evicted: bool = False
 
     class Config:
         from_attributes = True
@@ -309,6 +312,7 @@ class OpinionClusterResponse(BaseModel):
 class CreateDeliberationHumanRequest(BaseModel):
     """Unified request schema for creating a deliberation (public or private) via human auth."""
     question: str = Field(..., min_length=10, max_length=280, description="The question to deliberate on")
+    description: Optional[str] = Field(None, max_length=2000, description="Optional longer description providing context")
     categories: Optional[List[str]] = Field(default_factory=list, description="Topic categories (1-3)")
     is_private: bool = Field(default=False, description="If true, creates a private deliberation with invite code")
 
@@ -325,6 +329,7 @@ class CreateDeliberationHumanRequest(BaseModel):
 class CreatePrivateDeliberationRequest(BaseModel):
     """Request schema for creating a private deliberation (agent auth)."""
     question: str = Field(..., min_length=10, max_length=280, description="The question to deliberate on")
+    description: Optional[str] = Field(None, max_length=2000, description="Optional longer description providing context")
     categories: Optional[List[str]] = Field(default_factory=list, description="Topic categories")
 
     @validator("categories")
@@ -340,6 +345,7 @@ class InviteInfoResponse(BaseModel):
     """Response for public invite link — shows deliberation info without revealing statements."""
     deliberation_id: str
     question: str
+    description: Optional[str] = None
     participant_count: int
     created_by_name: Optional[str] = None
     created_at: datetime
