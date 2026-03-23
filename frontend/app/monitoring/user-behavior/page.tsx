@@ -402,6 +402,137 @@ export default function UserBehaviorPage() {
         </div>
       </div>
 
+      {/* Distributions */}
+      <h2 className="text-lg font-bold mb-3">Distributions</h2>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        {/* 1. Retention Curve */}
+        <Histogram
+          title="Retention Curve"
+          subtitle="When were users last active?"
+          data={(() => {
+            const now = Date.now();
+            const buckets = [
+              { label: "Today", min: 0, max: 1 },
+              { label: "1-3d", min: 1, max: 3 },
+              { label: "3-7d", min: 3, max: 7 },
+              { label: "1-2w", min: 7, max: 14 },
+              { label: "2-4w", min: 14, max: 28 },
+              { label: "1-2mo", min: 28, max: 60 },
+              { label: "2mo+", min: 60, max: Infinity },
+              { label: "Never", min: -1, max: -1 },
+            ];
+            return buckets.map((b) => ({
+              label: b.label,
+              count: users.filter((u) => {
+                if (b.min === -1) return !u.last_active;
+                if (!u.last_active) return false;
+                const days = (now - new Date(u.last_active).getTime()) / 86400000;
+                return days >= b.min && days < b.max;
+              }).length,
+            }));
+          })()}
+          color="#3b82f6"
+        />
+
+        {/* 2. Autonomy Spectrum */}
+        <Histogram
+          title="Autonomy Spectrum"
+          subtitle="% of opinions generated autonomously per user"
+          data={(() => {
+            const buckets = [
+              { label: "0%", min: 0, max: 0.001 },
+              { label: "1-20%", min: 0.001, max: 0.2 },
+              { label: "20-40%", min: 0.2, max: 0.4 },
+              { label: "40-60%", min: 0.4, max: 0.6 },
+              { label: "60-80%", min: 0.6, max: 0.8 },
+              { label: "80-99%", min: 0.8, max: 1.0 },
+              { label: "100%", min: 1.0, max: 1.001 },
+              { label: "N/A", min: -1, max: -1 },
+            ];
+            return buckets.map((b) => ({
+              label: b.label,
+              count: users.filter((u) => {
+                if (b.min === -1) return u.total_opinions === 0;
+                if (u.total_opinions === 0) return false;
+                const ratio = u.autonomous_opinions / u.total_opinions;
+                return ratio >= b.min && ratio < b.max;
+              }).length,
+            }));
+          })()}
+          color="#8b5cf6"
+        />
+
+        {/* 3. Profile Size Distribution */}
+        <Histogram
+          title="Profile Size"
+          subtitle="How many words in each user's preference file?"
+          data={(() => {
+            const buckets = [
+              { label: "None", min: 0, max: 1 },
+              { label: "1-50", min: 1, max: 51 },
+              { label: "51-200", min: 51, max: 201 },
+              { label: "201-500", min: 201, max: 501 },
+              { label: "501-1k", min: 501, max: 1001 },
+              { label: "1k-2k", min: 1001, max: 2001 },
+              { label: "2k+", min: 2001, max: Infinity },
+            ];
+            return buckets.map((b) => ({
+              label: b.label,
+              count: users.filter((u) => u.profile_words >= b.min && u.profile_words < b.max).length,
+            }));
+          })()}
+          color="#10b981"
+        />
+
+        {/* 4. Interview Depth */}
+        <Histogram
+          title="Interview Depth"
+          subtitle="Total interview messages per user"
+          data={(() => {
+            const buckets = [
+              { label: "0", min: 0, max: 1 },
+              { label: "1-10", min: 1, max: 11 },
+              { label: "11-30", min: 11, max: 31 },
+              { label: "31-60", min: 31, max: 61 },
+              { label: "61-100", min: 61, max: 101 },
+              { label: "101-200", min: 101, max: 201 },
+              { label: "200+", min: 201, max: Infinity },
+            ];
+            return buckets.map((b) => ({
+              label: b.label,
+              count: users.filter((u) => u.interview_messages >= b.min && u.interview_messages < b.max).length,
+            }));
+          })()}
+          color="#06b6d4"
+        />
+
+        {/* 5. Deliberation Participation (granular) */}
+        <Histogram
+          title="Deliberation Participation"
+          subtitle="How many deliberations has each user participated in?"
+          data={(() => {
+            const maxDelibs = Math.max(...users.map((u) => u.deliberations_participated), 0);
+            const cutoff = Math.min(maxDelibs, 15);
+            const bars: { label: string; count: number }[] = [];
+            for (let i = 0; i <= cutoff; i++) {
+              bars.push({
+                label: String(i),
+                count: users.filter((u) => u.deliberations_participated === i).length,
+              });
+            }
+            if (maxDelibs > cutoff) {
+              bars.push({
+                label: `${cutoff + 1}+`,
+                count: users.filter((u) => u.deliberations_participated > cutoff).length,
+              });
+            }
+            return bars;
+          })()}
+          color="var(--foreground)"
+          opacity={0.5}
+        />
+      </div>
+
       {/* User Table */}
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-lg font-bold">
@@ -685,6 +816,58 @@ function SortHeader({
     >
       {label} {active ? (desc ? "v" : "^") : ""}
     </th>
+  );
+}
+
+function Histogram({
+  title,
+  subtitle,
+  data,
+  color,
+  opacity = 0.7,
+}: {
+  title: string;
+  subtitle: string;
+  data: { label: string; count: number }[];
+  color: string;
+  opacity?: number;
+}) {
+  const max = Math.max(...data.map((d) => d.count), 1);
+
+  return (
+    <div
+      className="p-5 rounded-xl border"
+      style={{ borderColor: "var(--border)", background: "var(--surface)" }}
+    >
+      <h3 className="text-sm font-bold mb-0.5">{title}</h3>
+      <p className="text-[10px] mb-3" style={{ color: "var(--muted)" }}>{subtitle}</p>
+      <div className="flex items-end gap-1" style={{ height: 100 }}>
+        {data.map((d) => (
+          <div key={d.label} className="flex-1 flex flex-col items-center gap-0.5 min-w-0">
+            <span
+              className="text-[9px] font-bold tabular-nums"
+              style={{ color: d.count > 0 ? "var(--foreground)" : "var(--muted)" }}
+            >
+              {d.count}
+            </span>
+            <div
+              className="w-full rounded-t"
+              style={{
+                height: `${Math.max((d.count / max) * 80, d.count > 0 ? 2 : 0)}px`,
+                background: color,
+                opacity: d.count > 0 ? opacity : 0.15,
+              }}
+            />
+            <span
+              className="text-[9px] truncate w-full text-center"
+              style={{ color: "var(--muted)" }}
+            >
+              {d.label}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
