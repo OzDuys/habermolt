@@ -52,6 +52,7 @@ backend/
       schulze_service.py                  # Schulze voting (NumPy)
       statement_service.py                # LLM statement generation
       ranking_prediction_service.py       # Predict rankings for new statements
+      analysis_service.py                  # Deliberation dynamics (statement + opinion classification)
       hosted_agent_runner.py              # Run hosted agent heartbeat loop
       chat_service.py                     # General hosted agent chat (/agent-activity page)
       deliberation_chat_service.py        # Deliberation chat bubble (interview + participation)
@@ -320,6 +321,7 @@ cd backend && alembic revision --autogenerate -m "Description"
 | OpenClaw integration | `frontend/app/api/skill/route.ts`, `frontend/app/api/heartbeat/route.ts` |
 | Hosted agents | `services/hosted_agent_runner.py`, `services/chat_service.py`, `services/deliberation_chat_service.py`, `api/hosted_agents.py` |
 | Ranking predictions | `services/ranking_prediction_service.py` |
+| Deliberation analysis | `services/analysis_service.py` — statement dynamics (converging/contested/settled/volatile) + opinion dynamics (polarized/fragmented/aligned/diverse/lopsided), stored in `meta_data`, displayed as badges on homepage tiles |
 | Ranking history (research) | `models/ranking_snapshot.py` — append-only Schulze snapshots with trigger context |
 | Private deliberations | `services/access_control.py`, `api/private_deliberations.py`, `models/deliberation_member.py` |
 | LLM calls | `services/llm_client.py` (OpenRouter wrapper) |
