@@ -283,6 +283,44 @@ async def get_monitoring_stats(
         for src, count in src_base.group_by(Opinion.source).all()
     }
 
+    # Average token usage by trace type
+    avg_tok_base = db.query(
+        LLMTrace.trace_type,
+        func.avg(LLMTrace.tokens_in),
+        func.avg(LLMTrace.tokens_out),
+        func.avg(LLMTrace.tokens_in + LLMTrace.tokens_out),
+    ).filter(LLMTrace.tokens_in.isnot(None), LLMTrace.tokens_out.isnot(None))
+    if cutoff:
+        avg_tok_base = avg_tok_base.filter(LLMTrace.created_at >= cutoff)
+    avg_tokens_by_type = {
+        trace_type: {
+            "avg_in": round(float(avg_in or 0)),
+            "avg_out": round(float(avg_out or 0)),
+            "avg_total": round(float(avg_total or 0)),
+        }
+        for trace_type, avg_in, avg_out, avg_total
+        in avg_tok_base.group_by(LLMTrace.trace_type).all()
+    }
+
+    # Total token usage by trace type
+    sum_tok_base = db.query(
+        LLMTrace.trace_type,
+        func.coalesce(func.sum(LLMTrace.tokens_in), 0),
+        func.coalesce(func.sum(LLMTrace.tokens_out), 0),
+        func.coalesce(func.sum(LLMTrace.tokens_in + LLMTrace.tokens_out), 0),
+    ).filter(LLMTrace.tokens_in.isnot(None), LLMTrace.tokens_out.isnot(None))
+    if cutoff:
+        sum_tok_base = sum_tok_base.filter(LLMTrace.created_at >= cutoff)
+    total_tokens_by_type = {
+        trace_type: {
+            "total_in": int(total_in),
+            "total_out": int(total_out),
+            "total": int(total),
+        }
+        for trace_type, total_in, total_out, total
+        in sum_tok_base.group_by(LLMTrace.trace_type).all()
+    }
+
     return MonitoringStatsResponse(
         total_agents=total_agents,
         total_deliberations=total_deliberations,
@@ -308,6 +346,8 @@ async def get_monitoring_stats(
         top_chat_tool_agents=top_chat_tool_agents,
         top_deliberation_creators=top_deliberation_creators,
         opinions_by_source=opinions_by_source,
+        avg_tokens_by_type=avg_tokens_by_type,
+        total_tokens_by_type=total_tokens_by_type,
     )
 
 
@@ -1299,6 +1339,61 @@ async def get_user_behavior(
     ).fetchall()
     consensus_map = {r.user_id: r for r in consensus_rating_stats}
 
+    # Profile stats per hosted agent
+    profile_stats = db.execute(
+        text("""
+            SELECT ha.user_id,
+                   array_length(regexp_split_to_array(trim(ha.user_profile::text), '\s+'), 1) AS profile_words,
+                   ha.profile_version
+            FROM hosted_agents ha
+            WHERE ha.user_profile IS NOT NULL
+        """)
+    ).fetchall()
+    profile_map = {r.user_id: {"profile_words": r.profile_words or 0, "profile_version": r.profile_version or 0} for r in profile_stats}
+
+    # Interview details per user (deliberation chat sessions)
+    interview_stats = db.execute(
+        text("""
+            SELECT s.user_id,
+                   COUNT(*) FILTER (WHERE s.phase = 'browsing') AS browsing_sessions,
+                   COUNT(*) FILTER (WHERE s.phase = 'participating') AS participating_sessions,
+                   SUM(jsonb_array_length(s.messages)) AS total_messages,
+                   SUM(jsonb_array_length(s.messages)) FILTER (WHERE s.phase = 'browsing') AS browsing_messages,
+                   SUM(jsonb_array_length(s.messages)) FILTER (WHERE s.phase = 'participating') AS participating_messages
+            FROM agent_sessions s
+            WHERE s.session_type = 'deliberation' AND s.user_id IS NOT NULL
+            GROUP BY s.user_id
+        """)
+    ).fetchall()
+    interview_map = {r.user_id: r for r in interview_stats}
+
+    # General chat sessions per user
+    general_chat_stats = db.execute(
+        text("""
+            SELECT s.user_id,
+                   COUNT(*) AS general_sessions,
+                   SUM(jsonb_array_length(s.messages)) AS general_messages
+            FROM agent_sessions s
+            WHERE s.session_type = 'general' AND s.user_id IS NOT NULL
+            GROUP BY s.user_id
+        """)
+    ).fetchall()
+    general_chat_map = {r.user_id: r for r in general_chat_stats}
+
+    # Per-agent: deliberations joined by source (distinct deliberation_ids)
+    delib_by_source = db.execute(
+        text("""
+            SELECT o.agent_id,
+                   COUNT(DISTINCT o.deliberation_id) FILTER (WHERE o.source = 'autonomous') AS auto_delibs,
+                   COUNT(DISTINCT o.deliberation_id) FILTER (WHERE o.source = 'topic_interview') AS interview_delibs,
+                   COUNT(DISTINCT o.deliberation_id) FILTER (WHERE o.source = 'chat_tool') AS chat_delibs,
+                   COUNT(DISTINCT o.deliberation_id) FILTER (WHERE o.source = 'creation') AS creation_delibs
+            FROM opinions o
+            GROUP BY o.agent_id
+        """)
+    ).fetchall()
+    delib_source_map = {str(r.agent_id): r for r in delib_by_source}
+
     # LLM trace activity per hosted agent (for last-active tracking)
     llm_activity = db.execute(
         text("""
@@ -1327,6 +1422,10 @@ async def get_user_behavior(
         st_count = statement_map.get(agent_id, 0) if agent_id else 0
         dc_count = delib_created_map.get(agent_id, 0) if agent_id else 0
         llm = llm_map.get(hosted_agent_id) if hosted_agent_id else None
+        prof = profile_map.get(u.id)
+        iv = interview_map.get(u.id)
+        gc = general_chat_map.get(u.id)
+        ds = delib_source_map.get(agent_id) if agent_id else None
 
         # Determine last meaningful activity
         activity_dates = []
@@ -1369,6 +1468,19 @@ async def get_user_behavior(
             "notifications_reviewed": nt.reviewed_notifications if nt else 0,
             "notifications_total": nt.total_notifications if nt else 0,
             "consensus_ratings": cr.total_ratings if cr else 0,
+            # Learning & autonomy fields
+            "profile_words": prof["profile_words"] if prof else 0,
+            "profile_version": prof["profile_version"] if prof else 0,
+            "interview_sessions": iv.browsing_sessions + iv.participating_sessions if iv else 0,
+            "interview_messages": iv.total_messages if iv else 0,
+            "browsing_sessions": iv.browsing_sessions if iv else 0,
+            "participating_sessions": iv.participating_sessions if iv else 0,
+            "general_chat_sessions": gc.general_sessions if gc else 0,
+            "general_chat_messages": gc.general_messages if gc else 0,
+            "delibs_joined_autonomous": ds.auto_delibs if ds else 0,
+            "delibs_joined_interview": ds.interview_delibs if ds else 0,
+            "delibs_joined_chat": ds.chat_delibs if ds else 0,
+            "delibs_joined_creation": ds.creation_delibs if ds else 0,
         })
 
     # ── 4. Funnel stats ──
@@ -1426,6 +1538,25 @@ async def get_user_behavior(
     # Sort cohorts by week
     sorted_cohorts = dict(sorted(cohorts.items()))
 
+    # ── 5. Learning & autonomy aggregates ──
+    users_with_profile = [u for u in users if u["profile_words"] > 0]
+    users_with_interviews = [u for u in users if u["interview_sessions"] > 0]
+    users_with_auto = [u for u in users if u["delibs_joined_autonomous"] > 0]
+
+    avg_profile_words = (
+        sum(u["profile_words"] for u in users_with_profile) / len(users_with_profile)
+        if users_with_profile else 0
+    )
+    avg_profile_version = (
+        sum(u["profile_version"] for u in users_with_profile) / len(users_with_profile)
+        if users_with_profile else 0
+    )
+
+    total_interview_delibs = sum(u["delibs_joined_interview"] for u in users)
+    total_auto_delibs = sum(u["delibs_joined_autonomous"] for u in users)
+    total_chat_delibs = sum(u["delibs_joined_chat"] for u in users)
+    total_creation_delibs = sum(u["delibs_joined_creation"] for u in users)
+
     return {
         "funnel": {
             "total_users": total_users,
@@ -1442,6 +1573,17 @@ async def get_user_behavior(
         "retention": {
             "active_7d": users_active_7d,
             "active_30d": users_active_30d,
+        },
+        "learning": {
+            "users_with_profile": len(users_with_profile),
+            "avg_profile_words": round(avg_profile_words),
+            "avg_profile_version": round(avg_profile_version, 1),
+            "users_interviewed": len(users_with_interviews),
+            "users_autonomous": len(users_with_auto),
+            "total_interview_delibs": total_interview_delibs,
+            "total_auto_delibs": total_auto_delibs,
+            "total_chat_delibs": total_chat_delibs,
+            "total_creation_delibs": total_creation_delibs,
         },
         "engagement_buckets": engagement_buckets,
         "cohorts": sorted_cohorts,

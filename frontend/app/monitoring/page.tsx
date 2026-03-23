@@ -28,6 +28,8 @@ interface Stats {
   top_chat_tool_agents: { agent_name: string; count: number }[];
   top_deliberation_creators: { agent_name: string; count: number }[];
   opinions_by_source: Record<string, number>;
+  avg_tokens_by_type: Record<string, { avg_in: number; avg_out: number; avg_total: number }>;
+  total_tokens_by_type: Record<string, { total_in: number; total_out: number; total: number }>;
 }
 
 function getSecret() {
@@ -138,6 +140,12 @@ export default function MonitoringDashboard() {
 
         {/* Avg Latency by Model */}
         <LatencyBreakdownCard title="Avg Latency by Model" data={stats.latency_by_model} />
+
+        {/* Avg Token Usage by Trace Type */}
+        <TokensByTypeCard data={stats.avg_tokens_by_type} />
+
+        {/* Total Token Usage by Trace Type */}
+        <TotalTokensByTypeCard data={stats.total_tokens_by_type} />
       </div>
 
       {/* Interaction Leaderboards */}
@@ -373,6 +381,102 @@ function LeaderboardCard({
               <div
                 className="h-full rounded-full"
                 style={{ width: `${(entry.count / max) * 100}%`, background: "var(--foreground)", opacity: 0.5 }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TokensByTypeCard({
+  data,
+}: {
+  data: Record<string, { avg_in: number; avg_out: number; avg_total: number }>;
+}) {
+  const entries = Object.entries(data).sort((a, b) => b[1].avg_total - a[1].avg_total);
+  const max = entries.length > 0 ? entries[0][1].avg_total : 1;
+
+  if (entries.length === 0) {
+    return (
+      <div className="p-5 rounded-xl border" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+        <h3 className="text-sm font-bold mb-3">Avg Tokens by Trace Type</h3>
+        <p className="text-xs" style={{ color: "var(--muted)" }}>No data</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-5 rounded-xl border" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+      <h3 className="text-sm font-bold mb-3">Avg Tokens by Trace Type</h3>
+      <div className="space-y-2">
+        {entries.map(([type, vals]) => (
+          <div key={type}>
+            <div className="flex justify-between text-xs mb-0.5">
+              <span className="font-mono truncate mr-2">{type}</span>
+              <span className="font-bold tabular-nums">
+                {vals.avg_total.toLocaleString()}
+                <span className="font-normal ml-1" style={{ color: "var(--muted)" }}>
+                  ({vals.avg_in.toLocaleString()} in / {vals.avg_out.toLocaleString()} out)
+                </span>
+              </span>
+            </div>
+            <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "var(--border)" }}>
+              <div
+                className="h-full rounded-full"
+                style={{ width: `${(vals.avg_total / max) * 100}%`, background: "#8b5cf6", opacity: 0.7 }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TotalTokensByTypeCard({
+  data,
+}: {
+  data: Record<string, { total_in: number; total_out: number; total: number }>;
+}) {
+  const entries = Object.entries(data).sort((a, b) => b[1].total - a[1].total);
+  const max = entries.length > 0 ? entries[0][1].total : 1;
+
+  function fmt(n: number) {
+    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+    if (n >= 1_000) return `${(n / 1_000).toFixed(0)}k`;
+    return n.toLocaleString();
+  }
+
+  if (entries.length === 0) {
+    return (
+      <div className="p-5 rounded-xl border" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+        <h3 className="text-sm font-bold mb-3">Total Tokens by Trace Type</h3>
+        <p className="text-xs" style={{ color: "var(--muted)" }}>No data</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-5 rounded-xl border" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+      <h3 className="text-sm font-bold mb-3">Total Tokens by Trace Type</h3>
+      <div className="space-y-2">
+        {entries.map(([type, vals]) => (
+          <div key={type}>
+            <div className="flex justify-between text-xs mb-0.5">
+              <span className="font-mono truncate mr-2">{type}</span>
+              <span className="font-bold tabular-nums">
+                {fmt(vals.total)}
+                <span className="font-normal ml-1" style={{ color: "var(--muted)" }}>
+                  ({fmt(vals.total_in)} in / {fmt(vals.total_out)} out)
+                </span>
+              </span>
+            </div>
+            <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "var(--border)" }}>
+              <div
+                className="h-full rounded-full"
+                style={{ width: `${(vals.total / max) * 100}%`, background: "#10b981", opacity: 0.7 }}
               />
             </div>
           </div>

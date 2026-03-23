@@ -27,6 +27,19 @@ interface UserRow {
   notifications_reviewed: number;
   notifications_total: number;
   consensus_ratings: number;
+  // Learning & autonomy
+  profile_words: number;
+  profile_version: number;
+  interview_sessions: number;
+  interview_messages: number;
+  browsing_sessions: number;
+  participating_sessions: number;
+  general_chat_sessions: number;
+  general_chat_messages: number;
+  delibs_joined_autonomous: number;
+  delibs_joined_interview: number;
+  delibs_joined_chat: number;
+  delibs_joined_creation: number;
 }
 
 interface Funnel {
@@ -42,6 +55,18 @@ interface Funnel {
   users_rated_consensus: number;
 }
 
+interface Learning {
+  users_with_profile: number;
+  avg_profile_words: number;
+  avg_profile_version: number;
+  users_interviewed: number;
+  users_autonomous: number;
+  total_interview_delibs: number;
+  total_auto_delibs: number;
+  total_chat_delibs: number;
+  total_creation_delibs: number;
+}
+
 interface CohortData {
   signed_up: number;
   onboarded: number;
@@ -52,6 +77,7 @@ interface CohortData {
 interface UserBehaviorData {
   funnel: Funnel;
   retention: { active_7d: number; active_30d: number };
+  learning: Learning;
   engagement_buckets: Record<string, number>;
   cohorts: Record<string, CohortData>;
   users: UserRow[];
@@ -66,20 +92,37 @@ type SortKey =
   | "last_active"
   | "deliberations_participated"
   | "total_opinions"
+  | "autonomous_opinions"
+  | "interview_opinions"
+  | "chat_tool_opinions"
   | "total_rankings"
   | "chat_sessions"
   | "statements_proposed"
-  | "deliberations_created";
+  | "deliberations_created"
+  | "profile_words"
+  | "interview_sessions"
+  | "interview_messages"
+  | "delibs_joined_autonomous"
+  | "delibs_joined_interview"
+  | "pct_auto";
 
-type FilterKey = "all" | "onboarded" | "participated" | "multi" | "inactive" | "no_agent";
+type FilterKey = "all" | "onboarded" | "participated" | "multi" | "inactive" | "no_agent" | "haberagent" | "openclaw";
 
 const FILTER_LABELS: Record<FilterKey, string> = {
   all: "All Users",
+  haberagent: "Haberagent",
+  openclaw: "OpenClaw",
   onboarded: "Onboarded",
   participated: "Participated",
   multi: "2+ Deliberations",
   inactive: "Never Active",
   no_agent: "No Agent",
+};
+
+const SOURCE_COLORS = {
+  autonomous: "#6366f1",
+  interview: "#06b6d4",
+  chat: "#10b981",
 };
 
 export default function UserBehaviorPage() {
@@ -89,6 +132,7 @@ export default function UserBehaviorPage() {
   const [sortBy, setSortBy] = useState<SortKey>("last_active");
   const [sortDesc, setSortDesc] = useState(true);
   const [filter, setFilter] = useState<FilterKey>("all");
+  const [showInfo, setShowInfo] = useState(false);
 
   useEffect(() => {
     fetch("/api/backend/monitoring/user-behavior", {
@@ -111,7 +155,7 @@ export default function UserBehaviorPage() {
       </div>
     );
 
-  const { funnel, retention, engagement_buckets, cohorts, users } = data;
+  const { funnel, retention, learning, engagement_buckets, cohorts, users } = data;
 
   // Filter users
   const filtered = users.filter((u) => {
@@ -126,21 +170,33 @@ export default function UserBehaviorPage() {
         return !u.last_active;
       case "no_agent":
         return !u.has_agent;
+      case "haberagent":
+        return u.has_hosted_agent;
+      case "openclaw":
+        return u.has_agent && !u.has_hosted_agent;
       default:
         return true;
     }
   });
 
   // Sort users
+  function getPctAuto(u: UserRow) {
+    return u.total_opinions > 0 ? u.autonomous_opinions / u.total_opinions : -1;
+  }
+
   const sorted = [...filtered].sort((a, b) => {
-    let av: number | string | null, bv: number | string | null;
     if (sortBy === "signed_up_at" || sortBy === "last_active") {
-      av = a[sortBy] || "";
-      bv = b[sortBy] || "";
+      const av = a[sortBy] || "";
+      const bv = b[sortBy] || "";
       return sortDesc ? (bv > av ? 1 : -1) : av > bv ? 1 : -1;
     }
-    av = a[sortBy] as number;
-    bv = b[sortBy] as number;
+    if (sortBy === "pct_auto") {
+      const av = getPctAuto(a);
+      const bv = getPctAuto(b);
+      return sortDesc ? bv - av : av - bv;
+    }
+    const av = a[sortBy] as number;
+    const bv = b[sortBy] as number;
     return sortDesc ? bv - av : av - bv;
   });
 
@@ -169,10 +225,18 @@ export default function UserBehaviorPage() {
     return `${Math.floor(days / 30)}mo ago`;
   }
 
+  function fmtWords(n: number) {
+    if (n === 0) return "—";
+    return n.toLocaleString();
+  }
+
   const cohortEntries = Object.entries(cohorts);
+  const totalJoinedDelibs =
+    learning.total_interview_delibs + learning.total_auto_delibs +
+    learning.total_chat_delibs + learning.total_creation_delibs;
 
   return (
-    <div className="max-w-7xl">
+    <div className="max-w-[1400px]">
       <h1 className="text-2xl font-bold mb-6">User Behavior</h1>
 
       {loading && (
@@ -211,19 +275,70 @@ export default function UserBehaviorPage() {
       <h2 className="text-lg font-bold mb-3">Engagement & Retention</h2>
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-8">
         <StatCard label="Active (7d)" value={retention.active_7d} sub={pct(retention.active_7d, funnel.total_users)} />
-        <StatCard
-          label="Active (30d)"
-          value={retention.active_30d}
-          sub={pct(retention.active_30d, funnel.total_users)}
-        />
+        <StatCard label="Active (30d)" value={retention.active_30d} sub={pct(retention.active_30d, funnel.total_users)} />
         <StatCard label="Chatted w/ Agent" value={funnel.users_chatted} />
         <StatCard label="Created Delib" value={funnel.users_created_delib} />
         <StatCard label="Reviewed Actions" value={funnel.users_reviewed_actions} />
         <StatCard label="Rated Consensus" value={funnel.users_rated_consensus} />
       </div>
 
-      {/* Engagement Depth */}
+      {/* Learning & Autonomy */}
+      <h2 className="text-lg font-bold mb-3">Agent Learning & Autonomy</h2>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
+        <StatCard label="Users w/ Profile" value={learning.users_with_profile} />
+        <StatCard label="Avg Profile Size" value={fmtWords(learning.avg_profile_words)} sub="words" />
+        <StatCard label="Avg Profile Version" value={learning.avg_profile_version} />
+        <StatCard label="Users Interviewed" value={learning.users_interviewed} sub={pct(learning.users_interviewed, funnel.users_with_agent)} />
+        <StatCard label="Agents Acting Autonomously" value={learning.users_autonomous} sub={pct(learning.users_autonomous, funnel.users_with_agent)} />
+      </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        {/* How deliberations are joined */}
+        <div
+          className="p-5 rounded-xl border"
+          style={{ borderColor: "var(--border)", background: "var(--surface)" }}
+        >
+          <h3 className="text-sm font-bold mb-3">How Deliberations Are Joined</h3>
+          <p className="text-xs mb-3" style={{ color: "var(--muted)" }}>
+            How did the agent first form an opinion on each deliberation?
+          </p>
+          <div className="space-y-2">
+            {[
+              { label: "Autonomous (agent decided)", value: learning.total_auto_delibs, color: SOURCE_COLORS.autonomous },
+              { label: "Interview (user chatted on delib page)", value: learning.total_interview_delibs, color: SOURCE_COLORS.interview },
+              { label: "Chat tool (user chatted on activity page)", value: learning.total_chat_delibs, color: SOURCE_COLORS.chat },
+              { label: "Creation (user/agent created the delib)", value: learning.total_creation_delibs, color: "#f59e0b" },
+            ].map((row) => {
+              const max = Math.max(
+                learning.total_auto_delibs, learning.total_interview_delibs,
+                learning.total_chat_delibs, learning.total_creation_delibs, 1
+              );
+              return (
+                <div key={row.label}>
+                  <div className="flex justify-between text-xs mb-0.5">
+                    <span className="flex items-center gap-1.5">
+                      <span className="inline-block w-2 h-2 rounded-full shrink-0" style={{ background: row.color }} />
+                      {row.label}
+                    </span>
+                    <span className="font-bold tabular-nums">
+                      {row.value}
+                      <span className="font-normal ml-1" style={{ color: "var(--muted)" }}>
+                        ({pct(row.value, totalJoinedDelibs)})
+                      </span>
+                    </span>
+                  </div>
+                  <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "var(--border)" }}>
+                    <div
+                      className="h-full rounded-full"
+                      style={{ width: `${(row.value / max) * 100}%`, background: row.color, opacity: 0.7 }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Deliberation Depth */}
         <div
           className="p-5 rounded-xl border"
           style={{ borderColor: "var(--border)", background: "var(--surface)" }}
@@ -242,17 +357,10 @@ export default function UserBehaviorPage() {
                       <span style={{ color: "var(--muted)" }}>({pct(count, funnel.total_users)})</span>
                     </span>
                   </div>
-                  <div
-                    className="h-1.5 rounded-full overflow-hidden"
-                    style={{ background: "var(--border)" }}
-                  >
+                  <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "var(--border)" }}>
                     <div
                       className="h-full rounded-full"
-                      style={{
-                        width: `${(count / max) * 100}%`,
-                        background: "var(--foreground)",
-                        opacity: 0.6,
-                      }}
+                      style={{ width: `${(count / max) * 100}%`, background: "var(--foreground)", opacity: 0.6 }}
                     />
                   </div>
                 </div>
@@ -260,8 +368,10 @@ export default function UserBehaviorPage() {
             })}
           </div>
         </div>
+      </div>
 
-        {/* Weekly Cohorts */}
+      {/* Weekly Cohorts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         <div
           className="p-5 rounded-xl border"
           style={{ borderColor: "var(--border)", background: "var(--surface)" }}
@@ -301,7 +411,7 @@ export default function UserBehaviorPage() {
           </span>
         </h2>
         <div
-          className="flex gap-1 p-0.5 rounded-lg border"
+          className="flex gap-1 p-0.5 rounded-lg border flex-wrap"
           style={{ borderColor: "var(--border)" }}
         >
           {(Object.keys(FILTER_LABELS) as FilterKey[]).map((f) => (
@@ -320,105 +430,183 @@ export default function UserBehaviorPage() {
         </div>
       </div>
 
+      {/* Info panel */}
+      {showInfo && (
+        <div
+          className="mb-4 p-4 rounded-xl border text-xs space-y-1.5"
+          style={{ borderColor: "var(--border)", background: "var(--surface)" }}
+        >
+          <div className="flex justify-between items-center mb-2">
+            <h3 className="font-bold text-sm">Column Reference</h3>
+            <button onClick={() => setShowInfo(false)} className="text-xs px-2 py-0.5 rounded" style={{ color: "var(--muted)" }}>Close</button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1" style={{ color: "var(--muted)" }}>
+            <div><b style={{ color: "var(--foreground)" }}>Profile</b> — Word count of the agent&apos;s learned user preferences file + version number (v1, v2...)</div>
+            <div><b style={{ color: "var(--foreground)" }}>Interviews</b> — Deliberation chat sessions where the agent interviewed the user about a topic</div>
+            <div><b style={{ color: "var(--foreground)" }}>Int. Msgs</b> — Total messages exchanged across all interview sessions</div>
+            <div><b style={{ color: "var(--foreground)" }}>Delibs</b> — Distinct deliberations the user&apos;s agent has participated in (submitted an opinion)</div>
+            <div><b style={{ color: "var(--foreground)" }}>Auto Join</b> — Deliberations the agent joined autonomously (heartbeat loop, no human input)</div>
+            <div><b style={{ color: "var(--foreground)" }}>Int. Join</b> — Deliberations joined via user interview on the deliberation page chat</div>
+            <div><b style={{ color: "var(--foreground)" }}>Opinions</b> — Total opinion submissions (includes version updates)</div>
+            <div><b style={{ color: "var(--foreground)" }}>Auto Op.</b> — Opinions submitted autonomously by the agent</div>
+            <div><b style={{ color: "var(--foreground)" }}>Int. Op.</b> — Opinions submitted after user interview on deliberation page</div>
+            <div><b style={{ color: "var(--foreground)" }}>Chat Op.</b> — Opinions submitted via chat tool on the activity page</div>
+            <div><b style={{ color: "var(--foreground)" }}>Sources</b> — Visual ratio bar: <span style={{ color: SOURCE_COLORS.autonomous }}>purple</span> = autonomous, <span style={{ color: SOURCE_COLORS.interview }}>cyan</span> = interview, <span style={{ color: SOURCE_COLORS.chat }}>green</span> = chat</div>
+            <div><b style={{ color: "var(--foreground)" }}>% Auto</b> — Percentage of opinions generated autonomously (0% = user drove everything, 100% = agent acted alone for all)</div>
+            <div><b style={{ color: "var(--foreground)" }}>Rankings</b> — How many deliberations the agent has ranked statements in</div>
+            <div><b style={{ color: "var(--foreground)" }}>Chats</b> — Total chat sessions (general + deliberation)</div>
+          </div>
+        </div>
+      )}
+
+      {/* Source color legend */}
+      <div className="flex gap-4 mb-2 text-[10px] items-center" style={{ color: "var(--muted)" }}>
+        <button
+          onClick={() => setShowInfo(!showInfo)}
+          className="px-2 py-0.5 rounded-md border text-[10px] font-medium mr-1"
+          style={{ borderColor: "var(--border)", color: "var(--muted)" }}
+          title="Column explanations"
+        >
+          ?
+        </button>
+        <span className="flex items-center gap-1">
+          <span className="inline-block w-2 h-2 rounded-full" style={{ background: SOURCE_COLORS.autonomous }} />
+          autonomous
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="inline-block w-2 h-2 rounded-full" style={{ background: SOURCE_COLORS.interview }} />
+          interview
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="inline-block w-2 h-2 rounded-full" style={{ background: SOURCE_COLORS.chat }} />
+          chat
+        </span>
+      </div>
+
       <div
         className="rounded-xl border overflow-x-auto"
         style={{ borderColor: "var(--border)", background: "var(--surface)" }}
       >
-        <table className="w-full text-xs">
+        <table className="text-xs" style={{ minWidth: "1200px" }}>
           <thead>
-            <tr
-              className="border-b"
-              style={{ borderColor: "var(--border)" }}
-            >
-              <th className="text-left p-3 font-medium" style={{ color: "var(--muted)" }}>
-                User
-              </th>
-              <th className="text-left p-3 font-medium" style={{ color: "var(--muted)" }}>
-                Agent
-              </th>
-              <th className="text-left p-3 font-medium" style={{ color: "var(--muted)" }}>
-                Type
-              </th>
+            <tr className="border-b" style={{ borderColor: "var(--border)" }}>
+              <th className="text-left p-2.5 font-medium" style={{ color: "var(--muted)" }}>User</th>
+              <th className="text-left p-2.5 font-medium" style={{ color: "var(--muted)" }}>Agent</th>
+              <th className="text-left p-2.5 font-medium" style={{ color: "var(--muted)" }}>Type</th>
               <SortHeader label="Signed Up" sortKey="signed_up_at" current={sortBy} desc={sortDesc} onClick={handleSort} />
               <SortHeader label="Last Active" sortKey="last_active" current={sortBy} desc={sortDesc} onClick={handleSort} />
+              <SortHeader label="Profile" sortKey="profile_words" current={sortBy} desc={sortDesc} onClick={handleSort} />
+              <SortHeader label="Interviews" sortKey="interview_sessions" current={sortBy} desc={sortDesc} onClick={handleSort} />
+              <SortHeader label="Int. Msgs" sortKey="interview_messages" current={sortBy} desc={sortDesc} onClick={handleSort} />
               <SortHeader label="Delibs" sortKey="deliberations_participated" current={sortBy} desc={sortDesc} onClick={handleSort} />
+              <SortHeader label="Auto Join" sortKey="delibs_joined_autonomous" current={sortBy} desc={sortDesc} onClick={handleSort} />
+              <SortHeader label="Int. Join" sortKey="delibs_joined_interview" current={sortBy} desc={sortDesc} onClick={handleSort} />
               <SortHeader label="Opinions" sortKey="total_opinions" current={sortBy} desc={sortDesc} onClick={handleSort} />
+              <SortHeader label="Auto Op." sortKey="autonomous_opinions" current={sortBy} desc={sortDesc} onClick={handleSort} />
+              <SortHeader label="Int. Op." sortKey="interview_opinions" current={sortBy} desc={sortDesc} onClick={handleSort} />
+              <SortHeader label="Chat Op." sortKey="chat_tool_opinions" current={sortBy} desc={sortDesc} onClick={handleSort} />
+              <th className="text-left p-2.5 font-medium" style={{ color: "var(--muted)" }}>Sources</th>
+              <SortHeader label="% Auto" sortKey="pct_auto" current={sortBy} desc={sortDesc} onClick={handleSort} />
               <SortHeader label="Rankings" sortKey="total_rankings" current={sortBy} desc={sortDesc} onClick={handleSort} />
-              <SortHeader label="Stmts" sortKey="statements_proposed" current={sortBy} desc={sortDesc} onClick={handleSort} />
               <SortHeader label="Chats" sortKey="chat_sessions" current={sortBy} desc={sortDesc} onClick={handleSort} />
-              <th className="text-left p-3 font-medium" style={{ color: "var(--muted)" }}>
-                Opinion Sources
-              </th>
             </tr>
           </thead>
           <tbody>
-            {sorted.map((u) => (
-              <tr
-                key={u.user_id}
-                className="border-b hover:opacity-80"
-                style={{ borderColor: "var(--border)" }}
-              >
-                <td className="p-3">
-                  <div className="font-medium truncate max-w-[140px]">{u.name || "—"}</div>
-                  <div className="text-xs truncate max-w-[140px]" style={{ color: "var(--muted)" }}>
-                    {u.email}
-                  </div>
-                </td>
-                <td className="p-3">
-                  {u.has_agent ? (
-                    <div>
-                      <span className="font-mono truncate max-w-[100px] block">
-                        {u.agent_name || "unnamed"}
-                      </span>
-                      <div className="flex gap-1 mt-0.5">
-                        {u.onboarded && <Badge text="onboarded" color="#22c55e" />}
-                        {!u.agent_is_active && u.has_hosted_agent && (
-                          <Badge text="paused" color="#ef4444" />
-                        )}
-                        {u.pricing_tier && u.pricing_tier !== "free" && (
-                          <Badge text={u.pricing_tier} color="#6366f1" />
-                        )}
-                      </div>
+            {sorted.map((u) => {
+              return (
+                <tr
+                  key={u.user_id}
+                  className="border-b hover:opacity-80"
+                  style={{ borderColor: "var(--border)" }}
+                >
+                  <td className="p-2.5">
+                    <div className="font-medium truncate max-w-[120px]">{u.name || "—"}</div>
+                    <div className="truncate max-w-[120px]" style={{ color: "var(--muted)" }}>
+                      {u.email}
                     </div>
-                  ) : (
-                    <span style={{ color: "var(--muted)" }}>none</span>
-                  )}
-                </td>
-                <td className="p-3">
-                  {u.has_hosted_agent ? (
-                    <Badge text="haberagent" color="#8b5cf6" />
-                  ) : u.has_agent ? (
-                    <Badge text="openclaw" color="#f59e0b" />
-                  ) : (
-                    <span style={{ color: "var(--muted)" }}>—</span>
-                  )}
-                </td>
-                <td className="p-3 tabular-nums whitespace-nowrap">
-                  {u.signed_up_at ? new Date(u.signed_up_at).toLocaleDateString() : "—"}
-                </td>
-                <td className="p-3 tabular-nums whitespace-nowrap">{timeAgo(u.last_active)}</td>
-                <td className="p-3 tabular-nums text-center">{u.deliberations_participated}</td>
-                <td className="p-3 tabular-nums text-center">{u.total_opinions}</td>
-                <td className="p-3 tabular-nums text-center">{u.total_rankings}</td>
-                <td className="p-3 tabular-nums text-center">{u.statements_proposed}</td>
-                <td className="p-3 tabular-nums text-center">{u.chat_sessions}</td>
-                <td className="p-3">
-                  {u.total_opinions > 0 ? (
-                    <SourceBar
-                      autonomous={u.autonomous_opinions}
-                      interview={u.interview_opinions}
-                      chat={u.chat_tool_opinions}
-                      total={u.total_opinions}
-                    />
-                  ) : (
-                    <span style={{ color: "var(--muted)" }}>—</span>
-                  )}
-                </td>
-              </tr>
-            ))}
+                  </td>
+                  <td className="p-2.5">
+                    {u.has_agent ? (
+                      <div>
+                        <span className="font-mono truncate max-w-[90px] block">
+                          {u.agent_name || "unnamed"}
+                        </span>
+                        <div className="flex gap-1 mt-0.5">
+                          {u.onboarded && <Badge text="onboarded" color="#22c55e" />}
+                          {!u.agent_is_active && u.has_hosted_agent && <Badge text="paused" color="#ef4444" />}
+                          {u.pricing_tier && u.pricing_tier !== "free" && <Badge text={u.pricing_tier} color="#6366f1" />}
+                        </div>
+                      </div>
+                    ) : (
+                      <span style={{ color: "var(--muted)" }}>none</span>
+                    )}
+                  </td>
+                  <td className="p-2.5">
+                    {u.has_hosted_agent ? (
+                      <Badge text="haberagent" color="#8b5cf6" />
+                    ) : u.has_agent ? (
+                      <Badge text="openclaw" color="#f59e0b" />
+                    ) : (
+                      <span style={{ color: "var(--muted)" }}>—</span>
+                    )}
+                  </td>
+                  <td className="p-2.5 tabular-nums whitespace-nowrap">
+                    {u.signed_up_at ? new Date(u.signed_up_at).toLocaleDateString() : "—"}
+                  </td>
+                  <td className="p-2.5 tabular-nums whitespace-nowrap">{timeAgo(u.last_active)}</td>
+                  <td className="p-2.5 tabular-nums text-center" title={`${u.profile_words} words, v${u.profile_version}`}>
+                    {u.profile_words > 0 ? (
+                      <span>
+                        {fmtWords(u.profile_words)}
+                        <span className="ml-0.5" style={{ color: "var(--muted)" }}>v{u.profile_version}</span>
+                      </span>
+                    ) : (
+                      <span style={{ color: "var(--muted)" }}>—</span>
+                    )}
+                  </td>
+                  <td className="p-2.5 tabular-nums text-center">{u.interview_sessions || <Muted>0</Muted>}</td>
+                  <td className="p-2.5 tabular-nums text-center">{u.interview_messages || <Muted>0</Muted>}</td>
+                  <td className="p-2.5 tabular-nums text-center">{u.deliberations_participated || <Muted>0</Muted>}</td>
+                  <td className="p-2.5 tabular-nums text-center">{u.delibs_joined_autonomous || <Muted>0</Muted>}</td>
+                  <td className="p-2.5 tabular-nums text-center">{u.delibs_joined_interview || <Muted>0</Muted>}</td>
+                  <td className="p-2.5 tabular-nums text-center">{u.total_opinions || <Muted>0</Muted>}</td>
+                  <td className="p-2.5 tabular-nums text-center">{u.autonomous_opinions || <Muted>0</Muted>}</td>
+                  <td className="p-2.5 tabular-nums text-center">{u.interview_opinions || <Muted>0</Muted>}</td>
+                  <td className="p-2.5 tabular-nums text-center">{u.chat_tool_opinions || <Muted>0</Muted>}</td>
+                  <td className="p-2.5">
+                    {u.total_opinions > 0 ? (
+                      <SourceBar
+                        autonomous={u.autonomous_opinions}
+                        interview={u.interview_opinions}
+                        chat={u.chat_tool_opinions}
+                        total={u.total_opinions}
+                      />
+                    ) : (
+                      <span style={{ color: "var(--muted)" }}>—</span>
+                    )}
+                  </td>
+                  <td className="p-2.5 tabular-nums text-center whitespace-nowrap">
+                    {u.total_opinions > 0 ? (
+                      (() => {
+                        const pctAuto = Math.round((u.autonomous_opinions / u.total_opinions) * 100);
+                        return (
+                          <span title={`${u.autonomous_opinions} autonomous / ${u.total_opinions} total opinions`}>
+                            {pctAuto}%
+                          </span>
+                        );
+                      })()
+                    ) : (
+                      <Muted>—</Muted>
+                    )}
+                  </td>
+                  <td className="p-2.5 tabular-nums text-center">{u.total_rankings || <Muted>0</Muted>}</td>
+                  <td className="p-2.5 tabular-nums text-center">{u.chat_sessions || <Muted>0</Muted>}</td>
+                </tr>
+              );
+            })}
             {sorted.length === 0 && (
               <tr>
-                <td colSpan={11} className="p-6 text-center" style={{ color: "var(--muted)" }}>
+                <td colSpan={19} className="p-6 text-center" style={{ color: "var(--muted)" }}>
                   No users match this filter
                 </td>
               </tr>
@@ -432,48 +620,34 @@ export default function UserBehaviorPage() {
 
 /* ── Utility Components ── */
 
+function Muted({ children }: { children: React.ReactNode }) {
+  return <span style={{ color: "var(--muted)" }}>{children}</span>;
+}
+
 function FunnelCard({ label, value, pct }: { label: string; value: number; pct: string }) {
   return (
     <div
       className="p-4 rounded-xl border"
       style={{ borderColor: "var(--border)", background: "var(--surface)" }}
     >
-      <div className="text-xs font-medium mb-1" style={{ color: "var(--muted)" }}>
-        {label}
-      </div>
+      <div className="text-xs font-medium mb-1" style={{ color: "var(--muted)" }}>{label}</div>
       <div className="text-2xl font-bold tabular-nums">{value}</div>
-      <div className="text-xs mt-0.5 font-medium" style={{ color: "#6366f1" }}>
-        {pct}
-      </div>
+      <div className="text-xs mt-0.5 font-medium" style={{ color: "#6366f1" }}>{pct}</div>
     </div>
   );
 }
 
-function StatCard({
-  label,
-  value,
-  sub,
-}: {
-  label: string;
-  value: number | string;
-  sub?: string;
-}) {
+function StatCard({ label, value, sub }: { label: string; value: number | string; sub?: string }) {
   return (
     <div
       className="p-4 rounded-xl border"
       style={{ borderColor: "var(--border)", background: "var(--surface)" }}
     >
-      <div className="text-xs font-medium mb-1" style={{ color: "var(--muted)" }}>
-        {label}
-      </div>
+      <div className="text-xs font-medium mb-1" style={{ color: "var(--muted)" }}>{label}</div>
       <div className="text-2xl font-bold tabular-nums">
         {typeof value === "number" ? value.toLocaleString() : value}
       </div>
-      {sub && (
-        <div className="text-xs mt-0.5" style={{ color: "var(--muted)" }}>
-          {sub}
-        </div>
-      )}
+      {sub && <div className="text-xs mt-0.5" style={{ color: "var(--muted)" }}>{sub}</div>}
     </div>
   );
 }
@@ -505,7 +679,7 @@ function SortHeader({
   const active = current === sortKey;
   return (
     <th
-      className="p-3 font-medium cursor-pointer select-none whitespace-nowrap"
+      className="p-2.5 font-medium cursor-pointer select-none whitespace-nowrap"
       style={{ color: active ? "var(--foreground)" : "var(--muted)" }}
       onClick={() => onClick(sortKey)}
     >
@@ -525,25 +699,21 @@ function SourceBar({
   chat: number;
   total: number;
 }) {
-  const segments = [
-    { value: autonomous, color: "#6366f1", label: "autonomous" },
-    { value: interview, color: "#06b6d4", label: "interview" },
-    { value: chat, color: "#10b981", label: "chat" },
-  ].filter((s) => s.value > 0);
-
   return (
-    <div className="space-y-1">
-      {segments.map((s) => (
-        <div key={s.label} className="flex items-center gap-1.5">
-          <span
-            className="inline-block w-2 h-2 rounded-full shrink-0"
-            style={{ background: s.color }}
-          />
-          <span className="text-[10px] tabular-nums" style={{ color: "var(--muted)" }}>
-            {s.value} {s.label}
-          </span>
-        </div>
-      ))}
+    <div
+      className="flex h-2.5 rounded-full overflow-hidden"
+      style={{ width: 70, background: "var(--border)" }}
+      title={`auto: ${autonomous}, interview: ${interview}, chat: ${chat}`}
+    >
+      {autonomous > 0 && (
+        <div style={{ width: `${(autonomous / total) * 100}%`, background: SOURCE_COLORS.autonomous }} />
+      )}
+      {interview > 0 && (
+        <div style={{ width: `${(interview / total) * 100}%`, background: SOURCE_COLORS.interview }} />
+      )}
+      {chat > 0 && (
+        <div style={{ width: `${(chat / total) * 100}%`, background: SOURCE_COLORS.chat }} />
+      )}
     </div>
   );
 }

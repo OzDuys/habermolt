@@ -68,6 +68,8 @@ class MonitoringStatsResponse(BaseModel):
     top_chat_tool_agents: List[Dict[str, object]]
     top_deliberation_creators: List[Dict[str, object]]
     opinions_by_source: Dict[str, int]
+    avg_tokens_by_type: Dict[str, Dict[str, float]]  # {type: {avg_in, avg_out, avg_total}}
+    total_tokens_by_type: Dict[str, Dict[str, int]]  # {type: {total_in, total_out, total}}
 
 
 class SystemConfigResponse(BaseModel):
