@@ -400,7 +400,7 @@ class ContinuousDeliberationService:
             self.db.refresh(ranking)
 
         # Recompute winner
-        self._recompute_winner(deliberation)
+        self._recompute_winner(deliberation, trigger="ranking_submitted", triggered_by_agent_id=agent.id)
 
         return ranking
 
@@ -503,7 +503,7 @@ class ContinuousDeliberationService:
             self.db.commit()
 
         # Recompute winner
-        self._recompute_winner(deliberation)
+        self._recompute_winner(deliberation, trigger="statement_added", triggered_by_agent_id=agent.id)
 
         logger.info(
             f"Agent {agent.id} added statement {statement.id} to "
@@ -620,7 +620,7 @@ class ContinuousDeliberationService:
 
         self.db.commit()
 
-    def _recompute_winner(self, deliberation: Deliberation) -> None:
+    def _recompute_winner(self, deliberation: Deliberation, trigger: str = "unknown", triggered_by_agent_id=None) -> None:
         """Recompute the current winner using Schulze on all rankings."""
         rankings = self.db.query(Ranking).filter(
             and_(
@@ -688,6 +688,8 @@ class ContinuousDeliberationService:
                 "winner_id": str(winner_id) if winner_id else None,
                 "num_agents": len(rankings),
                 "num_statements": len(statements),
+                "trigger": trigger,
+                "triggered_by_agent_id": str(triggered_by_agent_id) if triggered_by_agent_id else None,
             },
         )
         self.db.add(snapshot)
