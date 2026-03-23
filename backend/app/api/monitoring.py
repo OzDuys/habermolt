@@ -1394,6 +1394,23 @@ async def get_user_behavior(
     ).fetchall()
     delib_source_map = {str(r.agent_id): r for r in delib_by_source}
 
+    # Last human activity per user (notification reviews, consensus ratings)
+    human_activity = db.execute(
+        text("""
+            SELECT user_id, MAX(ts) AS last_human_at FROM (
+                SELECT user_id, GREATEST(COALESCE(corrected_at, read_at), COALESCE(read_at, corrected_at)) AS ts
+                FROM notifications
+                WHERE corrected_at IS NOT NULL OR read_at IS NOT NULL
+                UNION ALL
+                SELECT user_id, submitted_at AS ts
+                FROM consensus_ratings
+            ) sub
+            WHERE ts IS NOT NULL
+            GROUP BY user_id
+        """)
+    ).fetchall()
+    human_activity_map = {r.user_id: r.last_human_at for r in human_activity}
+
     # LLM trace activity per hosted agent (for last-active tracking)
     llm_activity = db.execute(
         text("""
@@ -1427,19 +1444,28 @@ async def get_user_behavior(
         gc = general_chat_map.get(u.id)
         ds = delib_source_map.get(agent_id) if agent_id else None
 
-        # Determine last meaningful activity
-        activity_dates = []
-        if u.agent_last_active:
-            activity_dates.append(u.agent_last_active)
-        if u.last_heartbeat_at:
-            activity_dates.append(u.last_heartbeat_at)
+        # Determine last activity (split human vs agent)
+        human_dates = []
+        agent_dates = []
+        # Human activity: chatting, sessions, notification reviews, consensus ratings
         if u.last_chatted_at:
-            activity_dates.append(u.last_chatted_at)
+            human_dates.append(u.last_chatted_at)
         if ch and ch.last_session_at:
-            activity_dates.append(ch.last_session_at)
+            human_dates.append(ch.last_session_at)
+        ha_date = human_activity_map.get(u.id)
+        if ha_date:
+            human_dates.append(ha_date)
+        # Agent activity: heartbeats, API calls, LLM traces
+        if u.agent_last_active:
+            agent_dates.append(u.agent_last_active)
+        if u.last_heartbeat_at:
+            agent_dates.append(u.last_heartbeat_at)
         if llm and llm.last_trace_at:
-            activity_dates.append(llm.last_trace_at)
-        last_active = max(activity_dates).isoformat() if activity_dates else None
+            agent_dates.append(llm.last_trace_at)
+        last_human_active = max(human_dates).isoformat() if human_dates else None
+        last_agent_active = max(agent_dates).isoformat() if agent_dates else None
+        all_dates = human_dates + agent_dates
+        last_active = max(all_dates).isoformat() if all_dates else None
 
         deliberations_participated = (op.deliberations_with_opinion if op else 0)
 
@@ -1455,6 +1481,8 @@ async def get_user_behavior(
             "agent_is_active": bool(u.agent_is_active) if u.agent_is_active is not None else False,
             "pricing_tier": u.pricing_tier,
             "last_active": last_active,
+            "last_human_active": last_human_active,
+            "last_agent_active": last_agent_active,
             "deliberations_participated": deliberations_participated,
             "deliberations_created": dc_count,
             "total_opinions": op.total_opinions if op else 0,

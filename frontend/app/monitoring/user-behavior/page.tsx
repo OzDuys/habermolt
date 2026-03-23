@@ -14,6 +14,8 @@ interface UserRow {
   agent_is_active: boolean;
   pricing_tier: string | null;
   last_active: string | null;
+  last_human_active: string | null;
+  last_agent_active: string | null;
   deliberations_participated: number;
   deliberations_created: number;
   total_opinions: number;
@@ -405,10 +407,10 @@ export default function UserBehaviorPage() {
       {/* Distributions */}
       <h2 className="text-lg font-bold mb-3">Distributions</h2>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        {/* 1. Retention Curve */}
+        {/* 1a. Human Retention */}
         <Histogram
-          title="Retention Curve"
-          subtitle="When were users last active?"
+          title="Human Retention"
+          subtitle="When did the user last interact? (chat, review actions, rate consensus)"
           data={(() => {
             const now = Date.now();
             const buckets = [
@@ -424,14 +426,43 @@ export default function UserBehaviorPage() {
             return buckets.map((b) => ({
               label: b.label,
               count: users.filter((u) => {
-                if (b.min === -1) return !u.last_active;
-                if (!u.last_active) return false;
-                const days = (now - new Date(u.last_active).getTime()) / 86400000;
+                if (b.min === -1) return !u.last_human_active;
+                if (!u.last_human_active) return false;
+                const days = (now - new Date(u.last_human_active).getTime()) / 86400000;
                 return days >= b.min && days < b.max;
               }).length,
             }));
           })()}
           color="#3b82f6"
+        />
+
+        {/* 1b. Agent Retention */}
+        <Histogram
+          title="Agent Retention"
+          subtitle="When did the agent last act? (heartbeats, autonomous opinions, LLM calls)"
+          data={(() => {
+            const now = Date.now();
+            const buckets = [
+              { label: "Today", min: 0, max: 1 },
+              { label: "1-3d", min: 1, max: 3 },
+              { label: "3-7d", min: 3, max: 7 },
+              { label: "1-2w", min: 7, max: 14 },
+              { label: "2-4w", min: 14, max: 28 },
+              { label: "1-2mo", min: 28, max: 60 },
+              { label: "2mo+", min: 60, max: Infinity },
+              { label: "Never", min: -1, max: -1 },
+            ];
+            return buckets.map((b) => ({
+              label: b.label,
+              count: users.filter((u) => {
+                if (b.min === -1) return !u.last_agent_active;
+                if (!u.last_agent_active) return false;
+                const days = (now - new Date(u.last_agent_active).getTime()) / 86400000;
+                return days >= b.min && days < b.max;
+              }).length,
+            }));
+          })()}
+          color="#f59e0b"
         />
 
         {/* 2. Autonomy Spectrum */}
