@@ -30,6 +30,7 @@ interface Stats {
   opinions_by_source: Record<string, number>;
   avg_tokens_by_type: Record<string, { avg_in: number; avg_out: number; avg_total: number }>;
   total_tokens_by_type: Record<string, { total_in: number; total_out: number; total: number }>;
+  cost_by_type: Record<string, number>;
 }
 
 function getSecret() {
@@ -135,6 +136,7 @@ export default function MonitoringDashboard() {
         <LatencyBreakdownCard title="Avg Latency by Model" data={stats.latency_by_model} />
 
         {/* Row 2: By Type */}
+        <CostBreakdownCard title="Total Cost by Trace Type" data={stats.cost_by_type} />
         <BreakdownCard title="Traces by Type" data={stats.traces_by_type} />
         <TokensByTypeCard data={stats.avg_tokens_by_type} />
         <TotalTokensByTypeCard data={stats.total_tokens_by_type} />

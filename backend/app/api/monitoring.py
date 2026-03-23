@@ -283,6 +283,15 @@ async def get_monitoring_stats(
         for src, count in src_base.group_by(Opinion.source).all()
     }
 
+    # Cost by trace type
+    cbt_base = (
+        db.query(LLMTrace.trace_type, func.coalesce(func.sum(LLMTrace.cost_total), 0.0))
+        .filter(LLMTrace.cost_total.isnot(None))
+    )
+    if cutoff:
+        cbt_base = cbt_base.filter(LLMTrace.created_at >= cutoff)
+    cost_by_type = {row[0]: round(float(row[1]), 6) for row in cbt_base.group_by(LLMTrace.trace_type).all()}
+
     # Average token usage by trace type
     avg_tok_base = db.query(
         LLMTrace.trace_type,
@@ -346,6 +355,7 @@ async def get_monitoring_stats(
         top_chat_tool_agents=top_chat_tool_agents,
         top_deliberation_creators=top_deliberation_creators,
         opinions_by_source=opinions_by_source,
+        cost_by_type=cost_by_type,
         avg_tokens_by_type=avg_tokens_by_type,
         total_tokens_by_type=total_tokens_by_type,
     )
