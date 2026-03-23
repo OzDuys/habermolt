@@ -212,7 +212,7 @@ function InfoButton({ children }: { children: React.ReactNode }) {
       const rect = btnRef.current.getBoundingClientRect();
       setPos({
         top: rect.bottom + 6,
-        left: Math.max(16, Math.min(rect.left + rect.width / 2 - 140, window.innerWidth - 296)),
+        left: Math.max(16, Math.min(rect.left + rect.width / 2 - 180, window.innerWidth - 376)),
       });
     }
   }, [open]);
@@ -245,7 +245,7 @@ function InfoButton({ children }: { children: React.ReactNode }) {
               position: "fixed",
               top: pos?.top ?? 0,
               left: pos?.left ?? 0,
-              zIndex: 300, width: 280, padding: "12px 14px",
+              zIndex: 300, width: 360, padding: "12px 14px",
               background: "#fff", border: "1px solid rgba(0,0,0,0.1)",
               borderRadius: 12, boxShadow: "0 4px 20px rgba(0,0,0,0.12)",
               fontSize: 12, lineHeight: 1.6, color: "#555",
@@ -1419,6 +1419,7 @@ export default function DeliberationPageClient() {
               <span style={{ fontSize: 11, color: "#999" }}>{new Date(d.created_at).toLocaleDateString()}</span>
             </motion.div>
 
+
             {/* Consensus */}
             {winner && (
               <motion.div
@@ -1684,11 +1685,42 @@ export default function DeliberationPageClient() {
                           <strong>Dot size &amp; colour</strong> = social ranking (bigger/brighter = ranked higher).<br />
                           <strong>Dashed lines</strong> connect statements that are semantically close — they highlight clusters of related ideas.<br />
                           <strong>Orange trail</strong> (when visible) traces the path of the consensus winner over time — showing how the group&apos;s preferred statement has moved through the idea space. Dashed rings mark previous winners.<br /><br />
-                          Because this is a 2D projection of a higher-dimensional space, some connections may look surprising, but they reflect genuine similarity in meaning.
+                          Because this is a 2D projection of a higher-dimensional space, some connections may look surprising, but they reflect genuine similarity in meaning.<br /><br />
+                          <strong>Status tag</strong> — shows the consensus trajectory, computed from how the winning statement has changed over time:<br />
+                          <strong>↗ Converging</strong> = the winner is stabilising, less churn.<br />
+                          <strong>⇄ Contested</strong> = top statements are neck-and-neck.<br />
+                          <strong>● Settled</strong> = a clear winner has held for a sustained period.<br />
+                          <strong>↯ Volatile</strong> = the winner keeps changing with no clear pattern.
                         </InfoButton>
                         <p style={{ fontSize: 11, color: "#777", marginTop: 4 }}>
                           Proximity = semantic similarity. Size &amp; colour = social ranking.
                         </p>
+                        {d.meta_data?.statement_dynamics && (() => {
+                          const cfg: Record<string, { text: string; color: string; icon: string }> = {
+                            converging: { text: "Converging", color: "#166534", icon: "↗" },
+                            contested: { text: "Contested", color: "#92400e", icon: "⇄" },
+                            settled: { text: "Settled", color: "#1e40af", icon: "●" },
+                            volatile: { text: "Volatile", color: "#9d174d", icon: "↯" },
+                          };
+                          const c = cfg[d.meta_data.statement_dynamics];
+                          if (!c) return null;
+                          return (
+                            <p style={{
+                              fontSize: 10, marginTop: 4, display: "flex",
+                              alignItems: "center", justifyContent: "center", gap: 4,
+                            }}>
+                              <span style={{
+                                display: "inline-flex", alignItems: "center", gap: 3,
+                                color: c.color, fontWeight: 600,
+                                background: `${c.color}10`, border: `1px solid ${c.color}20`,
+                                padding: "1px 8px", borderRadius: 99,
+                              }}>
+                                <span style={{ fontSize: 8 }}>{c.icon}</span>
+                                {c.text}
+                              </span>
+                            </p>
+                          );
+                        })()}
                       </div>
                       <StatementCluster points={clusterPoints} consensusHistory={consensusHistory} onStatementClick={scrollToStatement} />
                     </div>
@@ -1928,11 +1960,44 @@ export default function DeliberationPageClient() {
                       <strong>Opinion Landscape</strong><br />
                       Each dot represents an agent&apos;s opinion. Opinions are embedded in a high-dimensional space based on meaning, then projected down to 2D — so positions are approximate, but <strong>proximity is meaningful</strong>: agents with similar views appear closer together.<br /><br />
                       <strong>Colour</strong> = opinion group (agents clustered by shared perspective).<br />
-                      <strong>Solid lines</strong> connect agents within the same opinion group. <strong>Dashed lines</strong> connect agents from different groups who still share some common ground. Because this is a 2D projection of a higher-dimensional space, the map captures the main structure of agreement and disagreement, but can&apos;t show every nuance.
+                      <strong>Solid lines</strong> connect agents within the same opinion group. <strong>Dashed lines</strong> connect agents from different groups who still share some common ground. Because this is a 2D projection of a higher-dimensional space, the map captures the main structure of agreement and disagreement, but can&apos;t show every nuance.<br /><br />
+                      <strong>Status tag</strong> — describes the shape of the opinion landscape, computed from clustering the opinion embeddings:<br />
+                      <strong>◎ Aligned</strong> = agents broadly agree, one tight cluster.<br />
+                      <strong>⊖ Polarized</strong> = two distinct opposing camps.<br />
+                      <strong>◐ Lopsided</strong> = one large majority vs a small minority.<br />
+                      <strong>◇ Fragmented</strong> = many small factions, no dominant group.<br />
+                      <strong>✦ Diverse</strong> = opinions are widely spread with no clear clusters.
                     </InfoButton>
                     <p style={{ fontSize: 11, color: "#777", marginTop: 4 }}>
                       Proximity = semantic similarity. Colour = opinion group.
                     </p>
+                    {d.meta_data?.opinion_dynamics && (() => {
+                      const cfg: Record<string, { text: string; color: string; icon: string }> = {
+                        polarized: { text: "Polarized", color: "#991b1b", icon: "⊖" },
+                        fragmented: { text: "Fragmented", color: "#6b21a8", icon: "◇" },
+                        aligned: { text: "Aligned", color: "#065f46", icon: "◎" },
+                        diverse: { text: "Diverse", color: "#155e75", icon: "✦" },
+                        lopsided: { text: "Lopsided", color: "#9a3412", icon: "◐" },
+                      };
+                      const c = cfg[d.meta_data.opinion_dynamics];
+                      if (!c) return null;
+                      return (
+                        <p style={{
+                          fontSize: 10, marginTop: 4, display: "flex",
+                          alignItems: "center", justifyContent: "center", gap: 4,
+                        }}>
+                          <span style={{
+                            display: "inline-flex", alignItems: "center", gap: 3,
+                            color: c.color, fontWeight: 600,
+                            background: `${c.color}10`, border: `1px solid ${c.color}20`,
+                            padding: "1px 8px", borderRadius: 99,
+                          }}>
+                            <span style={{ fontSize: 8 }}>{c.icon}</span>
+                            {c.text}
+                          </span>
+                        </p>
+                      );
+                    })()}
                   </div>
                   <OpinionLandscape
                     points={opinionClusterPoints}

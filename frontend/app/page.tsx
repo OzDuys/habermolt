@@ -1013,56 +1013,6 @@ export default function HomePage() {
                             {deliberation.question}
                           </h3>
 
-                          {/* Dynamics badges */}
-                          {(deliberation.meta_data?.statement_dynamics || deliberation.meta_data?.opinion_dynamics) && (
-                            <div className="flex flex-wrap items-center" style={{ gap: "clamp(0.3rem, 0.6vw, 0.5rem)", marginBottom: "clamp(0.3rem, 0.5vw, 0.5rem)" }}>
-                              {deliberation.meta_data?.statement_dynamics && deliberation.meta_data.statement_dynamics !== "emerging" && (() => {
-                                const d = deliberation.meta_data.statement_dynamics;
-                                const cfg: Record<string, { label: string; bg: string; text: string }> = {
-                                  converging: { label: "Converging", bg: "#dcfce7", text: "#166534" },
-                                  contested: { label: "Contested", bg: "#fef3c7", text: "#92400e" },
-                                  settled: { label: "Settled", bg: "#dbeafe", text: "#1e40af" },
-                                  volatile: { label: "Volatile", bg: "#fce7f3", text: "#9d174d" },
-                                };
-                                const c = cfg[d];
-                                if (!c) return null;
-                                return (
-                                  <span className="inline-flex items-center" style={{ gap: "clamp(2px, 0.3vw, 4px)", fontSize: "clamp(7px, 0.85vw, 10px)" }}>
-                                    <span className="text-stone-400" style={{ fontSize: "clamp(6px, 0.75vw, 9px)" }}>consensus</span>
-                                    <span
-                                      style={{ padding: "clamp(0px, 0.2vw, 1px) clamp(3px, 0.6vw, 8px)", backgroundColor: c.bg, color: c.text }}
-                                      className="inline-flex rounded-full font-medium"
-                                    >
-                                      {c.label}
-                                    </span>
-                                  </span>
-                                );
-                              })()}
-                              {deliberation.meta_data?.opinion_dynamics && (() => {
-                                const d = deliberation.meta_data.opinion_dynamics;
-                                const cfg: Record<string, { label: string; bg: string; text: string }> = {
-                                  polarized: { label: "Polarized", bg: "#fecaca", text: "#991b1b" },
-                                  fragmented: { label: "Fragmented", bg: "#e9d5ff", text: "#6b21a8" },
-                                  aligned: { label: "Aligned", bg: "#d1fae5", text: "#065f46" },
-                                  diverse: { label: "Diverse", bg: "#cffafe", text: "#155e75" },
-                                  lopsided: { label: "Lopsided", bg: "#fed7aa", text: "#9a3412" },
-                                };
-                                const c = cfg[d];
-                                if (!c) return null;
-                                return (
-                                  <span className="inline-flex items-center" style={{ gap: "clamp(2px, 0.3vw, 4px)", fontSize: "clamp(7px, 0.85vw, 10px)" }}>
-                                    <span className="text-stone-400" style={{ fontSize: "clamp(6px, 0.75vw, 9px)" }}>opinions</span>
-                                    <span
-                                      style={{ padding: "clamp(0px, 0.2vw, 1px) clamp(3px, 0.6vw, 8px)", backgroundColor: c.bg, color: c.text }}
-                                      className="inline-flex rounded-full font-medium"
-                                    >
-                                      {c.label}
-                                    </span>
-                                  </span>
-                                );
-                              })()}
-                            </div>
-                          )}
 
                           {/* Stats row */}
                           <div className="flex items-center justify-between text-stone-500" style={{ fontSize: "clamp(0.55rem, 1vw, 0.75rem)" }}>

@@ -53,7 +53,12 @@ def compute_statement_dynamics(deliberation: Deliberation, db: Session) -> Optio
     if len(snapshots) >= 3:
         return _classify_from_snapshots(snapshots, consensus_history)
 
-    # Fall back to consensus_history only
+    # Fall back to consensus_history — but only if there IS history.
+    # Without snapshots AND without history, we haven't observed enough
+    # to classify (likely a pre-tracking deliberation).
+    if len(consensus_history) == 0 and len(snapshots) == 0:
+        return None
+
     return _classify_from_history(consensus_history, deliberation)
 
 
@@ -280,8 +285,12 @@ def update_deliberation_dynamics(deliberation: Deliberation, db: Session,
     if update_statements:
         try:
             label = compute_statement_dynamics(deliberation, db)
-            if label and label != meta.get("statement_dynamics"):
-                meta["statement_dynamics"] = label
+            old = meta.get("statement_dynamics")
+            if label != old:
+                if label is None:
+                    meta.pop("statement_dynamics", None)
+                else:
+                    meta["statement_dynamics"] = label
                 changed = True
         except Exception as e:
             logger.warning(f"Failed to compute statement dynamics for {deliberation.id}: {e}")
@@ -289,8 +298,12 @@ def update_deliberation_dynamics(deliberation: Deliberation, db: Session,
     if update_opinions:
         try:
             label = compute_opinion_dynamics(deliberation, db)
-            if label and label != meta.get("opinion_dynamics"):
-                meta["opinion_dynamics"] = label
+            old = meta.get("opinion_dynamics")
+            if label != old:
+                if label is None:
+                    meta.pop("opinion_dynamics", None)
+                else:
+                    meta["opinion_dynamics"] = label
                 changed = True
         except Exception as e:
             logger.warning(f"Failed to compute opinion dynamics for {deliberation.id}: {e}")
