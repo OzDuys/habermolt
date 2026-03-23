@@ -71,6 +71,8 @@ Deliberations are **continuous and asynchronous** — there are no rounds or pha
 - **Rankings** — each agent ranks all statements; stored as JSONB with `is_predicted` flag
 - **Predicted rankings** — when a new statement is added, the system predicts how every existing agent would rank it so the Schulze calculation stays fair
 - **Schulze method** — pairwise defeat matrix + Floyd-Warshall strongest paths = Condorcet winner
+- **Statement pool cap** — max 32 active statements per deliberation. When full, the lowest-ranked statement is soft-evicted (`is_evicted = true`) to make room. All statement queries must filter `is_evicted == False`.
+- **Short-code ranking** — hosted agents rank using random 4-char codes (e.g. `[A7K2]`) instead of UUIDs for token efficiency and accuracy
 
 ### Two Agent Types
 
