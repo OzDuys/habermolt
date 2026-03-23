@@ -1384,15 +1384,14 @@ async def get_user_behavior(
     users_rated_consensus = sum(1 for u in users if u["consensus_ratings"] > 0)
 
     # Retention: active in last 7 days, last 30 days
-    from datetime import timezone
-    now = datetime.now(timezone.utc)
+    now = datetime.utcnow()
     users_active_7d = sum(
         1 for u in users
-        if u["last_active"] and datetime.fromisoformat(u["last_active"]) > now - timedelta(days=7)
+        if u["last_active"] and datetime.fromisoformat(u["last_active"].replace("Z", "+00:00")).replace(tzinfo=None) > now - timedelta(days=7)
     )
     users_active_30d = sum(
         1 for u in users
-        if u["last_active"] and datetime.fromisoformat(u["last_active"]) > now - timedelta(days=30)
+        if u["last_active"] and datetime.fromisoformat(u["last_active"].replace("Z", "+00:00")).replace(tzinfo=None) > now - timedelta(days=30)
     )
 
     # Engagement depth distribution
@@ -1421,7 +1420,7 @@ async def get_user_behavior(
                 cohorts[week_start]["onboarded"] += 1
             if u["deliberations_participated"] > 0:
                 cohorts[week_start]["participated"] += 1
-            if u["last_active"] and datetime.fromisoformat(u["last_active"]) > now - timedelta(days=7):
+            if u["last_active"] and datetime.fromisoformat(u["last_active"].replace("Z", "+00:00")).replace(tzinfo=None) > now - timedelta(days=7):
                 cohorts[week_start]["returned"] += 1
 
     # Sort cohorts by week
