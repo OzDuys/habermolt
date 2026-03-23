@@ -332,9 +332,9 @@ def _exec_join_deliberation(db: Session, hosted_agent: HostedAgent, deliberation
 
 
 def _exec_rank_statements(db: Session, hosted_agent: HostedAgent, deliberation_id: str) -> dict:
-    from app.services.hosted_agent_runner import _do_ranking
+    from app.services.hosted_agent_runner import _do_incremental_ranking
 
-    ranking_data = _do_ranking(db, hosted_agent, UUID(deliberation_id))
+    ranking_data = _do_incremental_ranking(db, hosted_agent, UUID(deliberation_id))
     if ranking_data:
         return {
             "action": "rank_statements",

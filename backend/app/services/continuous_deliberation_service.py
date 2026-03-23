@@ -516,7 +516,11 @@ class ContinuousDeliberationService:
         deliberation: Deliberation,
         new_statement: Statement,
     ) -> None:
-        """Predict where each past agent would place the new statement."""
+        """Predict where each past agent would place the new statement.
+
+        Uses batched predictions (RANKING_PREDICTION_BATCH_SIZE agents per LLM call)
+        to reduce token usage and API calls.
+        """
         # Get all agents with rankings (except the statement contributor)
         rankings = self.db.query(Ranking).filter(
             and_(
@@ -525,14 +529,19 @@ class ContinuousDeliberationService:
             )
         ).all()
 
+        if not rankings:
+            return
+
         # Get active (non-evicted) statements for text lookup
         statements = self.db.query(Statement).filter(
             and_(Statement.deliberation_id == deliberation.id, Statement.is_evicted == False)
         ).all()
         stmt_text_map = {str(s.id): s.statement_text for s in statements}
 
+        # Build agent data for batched prediction
+        agents_data = []
+        ranking_by_agent_id = {}
         for ranking in rankings:
-            # Get this agent's latest opinion
             opinion = self.db.query(Opinion).filter(
                 and_(
                     Opinion.deliberation_id == deliberation.id,
@@ -542,7 +551,6 @@ class ContinuousDeliberationService:
             if not opinion:
                 continue
 
-            # Build current ranking with statement texts
             current_ranking_with_text = []
             for entry in ranking.statement_rankings:
                 sid = entry["statement_id"]
@@ -552,29 +560,41 @@ class ContinuousDeliberationService:
                     "statement_text": stmt_text_map.get(str(sid), ""),
                 })
 
-            # Predict position
-            position = await asyncio.to_thread(
-                ranking_prediction_service.predict_position,
-                opinion.opinion_text,
-                current_ranking_with_text,
+            agents_data.append({
+                "agent_id": ranking.agent_id,
+                "opinion": opinion.opinion_text,
+                "current_ranking": current_ranking_with_text,
+            })
+            ranking_by_agent_id[str(ranking.agent_id)] = ranking
+
+        # Process in batches
+        batch_size = settings.RANKING_PREDICTION_BATCH_SIZE
+        for i in range(0, len(agents_data), batch_size):
+            batch = agents_data[i:i + batch_size]
+
+            predictions = await asyncio.to_thread(
+                ranking_prediction_service.predict_positions_batched,
+                batch,
                 new_statement.statement_text,
                 deliberation_id=deliberation.id,
-                agent_id=ranking.agent_id,
             )
 
-            # Insert into ranking at predicted position
-            updated_rankings = list(ranking.statement_rankings)
-            # Shift ranks for entries at or below the predicted position
-            for entry in updated_rankings:
-                if entry["rank"] >= position:
-                    entry["rank"] += 1
-            # Add new entry
-            updated_rankings.append({
-                "statement_id": str(new_statement.id),
-                "rank": position,
-                "is_predicted": True,
-            })
-            ranking.statement_rankings = updated_rankings
+            # Apply predictions to rankings
+            for agent_id_str, position in predictions.items():
+                ranking = ranking_by_agent_id.get(agent_id_str)
+                if not ranking:
+                    continue
+
+                updated_rankings = list(ranking.statement_rankings)
+                for entry in updated_rankings:
+                    if entry["rank"] >= position:
+                        entry["rank"] += 1
+                updated_rankings.append({
+                    "statement_id": str(new_statement.id),
+                    "rank": position,
+                    "is_predicted": True,
+                })
+                ranking.statement_rankings = updated_rankings
 
         self.db.commit()
 

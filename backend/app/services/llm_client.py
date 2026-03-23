@@ -56,11 +56,12 @@ logger = logging.getLogger(__name__)
 # Fallback pricing per 1M tokens (USD): (input, output)
 # Used when the provider doesn't return cost directly.
 MODEL_PRICING_FALLBACK: dict[str, tuple[float, float]] = {
-    "x-ai/grok-4.1-fast":                  (5.00, 25.00),
-    "google/gemini-3-flash-preview":        (0.075, 0.30),
-    "deepseek/deepseek-v3.2":              (0.27, 1.10),
-    "minimax/minimax-m2.5":                (0.20, 1.10),
-    "z-ai/glm-5":                          (0.50, 1.50),
+    "x-ai/grok-4.1-fast":                  (0.20, 0.50),
+    "google/gemini-3-flash-preview":        (0.50, 3.00),
+    "google/gemini-3.1-flash-lite-preview": (0.25, 1.50),
+    "deepseek/deepseek-v3.2":              (0.26, 0.38),
+    "minimax/minimax-m2.5":                (0.20, 1.17),
+    "z-ai/glm-5":                          (0.72, 2.30),
     "arcee-ai/trinity-large-preview:free":  (0.00, 0.00),
     "openai/text-embedding-3-small":       (0.02, 0.00),
 }

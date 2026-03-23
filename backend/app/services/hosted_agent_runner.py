@@ -7,6 +7,7 @@ rank statements, propose consensus statements — all guided by the user's profi
 
 import json
 import logging
+import re
 from datetime import datetime, timedelta
 from typing import Optional
 from uuid import UUID
@@ -87,6 +88,27 @@ well each one aligns with your human's values and preferences.
 
 Respond with ONLY a comma-separated list of statement codes from best (rank 1) to worst.
 Example: A7K2, M3PX, R9BJ"""
+
+INCREMENTAL_RANKING_SYSTEM_PROMPT = """\
+You represent a human in democratic deliberations. You have an existing ranking of statements \
+and need to insert new statements into it.
+
+## Human's Profile
+{profile}
+
+## Your Human's Opinion on This Topic
+{opinion}
+
+## Evaluation Criteria
+1. **Alignment with your human's values** — Does this reflect what they believe?
+2. **Relevance** — Does it address the actual question?
+3. **Actionability** — Does it take a clear position? Rank vague statements LOW.
+
+For each new statement, respond with the position (1-indexed) where it should be inserted.
+Format: CODE: POSITION (one per line)
+Example:
+A7K2: 3
+M3PX: 7"""
 
 STATEMENT_SYSTEM_PROMPT = """\
 You represent a human in democratic deliberations. Read all the opinions below and propose \
@@ -764,7 +786,12 @@ def _execute_action(db: Session, hosted_agent: HostedAgent, action: dict) -> Opt
     act = action["action"]
 
     if act in ("rank_statements", "update_rankings", "review_predicted_rankings"):
-        ranking_data = _do_ranking(db, hosted_agent, delib_id)
+        # Use incremental ranking when agent already has a ranking and just needs to
+        # insert new/predicted statements. Full re-rank for first-time rankings.
+        if act in ("update_rankings", "review_predicted_rankings"):
+            ranking_data = _do_incremental_ranking(db, hosted_agent, delib_id)
+        else:
+            ranking_data = _do_ranking(db, hosted_agent, delib_id)
         return {
             "action": "rank_statements",
             "deliberation_id": str(delib_id),
@@ -913,6 +940,176 @@ def _do_ranking(db: Session, hosted_agent: HostedAgent, delib_id: UUID) -> Optio
         return None
 
     return rankings
+
+
+def _do_incremental_ranking(db: Session, hosted_agent: HostedAgent, delib_id: UUID) -> Optional[list]:
+    """Insert only new/predicted statements into an existing ranking. Much cheaper than full re-rank.
+
+    Falls back to full re-rank if the existing ranking is missing or empty.
+    """
+    agent = hosted_agent.agent
+
+    # Get existing ranking
+    existing_ranking = db.query(Ranking).filter(
+        and_(Ranking.deliberation_id == delib_id, Ranking.agent_id == agent.id)
+    ).first()
+    if not existing_ranking or not existing_ranking.statement_rankings:
+        return _do_ranking(db, hosted_agent, delib_id)
+
+    # Get active statements
+    statements = db.query(Statement).filter(
+        and_(Statement.deliberation_id == delib_id, Statement.is_evicted == False)
+    ).all()
+    if not statements:
+        return None
+
+    stmt_map = {str(s.id): s for s in statements}
+    ranked_ids = {e["statement_id"] for e in existing_ranking.statement_rankings}
+    active_ids = {str(s.id) for s in statements}
+
+    # Find new statements (in active set but not in ranking) + predicted ones
+    new_stmt_ids = active_ids - ranked_ids
+    predicted_ids = {
+        e["statement_id"] for e in existing_ranking.statement_rankings
+        if e.get("is_predicted", False)
+    }
+    needs_placement = new_stmt_ids | predicted_ids
+
+    if not needs_placement:
+        # Nothing to do — ranking is already complete
+        return existing_ranking.statement_rankings
+
+    # If too many new statements, fall back to full re-rank
+    if len(needs_placement) > 10:
+        return _do_ranking(db, hosted_agent, delib_id)
+
+    profile = _get_profile_text(hosted_agent)
+    opinion = db.query(Opinion).filter(
+        and_(Opinion.deliberation_id == delib_id, Opinion.agent_id == agent.id)
+    ).order_by(Opinion.version.desc()).first()
+    if not opinion:
+        return None
+
+    # Build current ranking text (only confirmed entries, excluding predicted)
+    confirmed = sorted(
+        [e for e in existing_ranking.statement_rankings
+         if e["statement_id"] not in predicted_ids and e["statement_id"] in active_ids],
+        key=lambda x: x["rank"],
+    )
+
+    # Generate short codes for only the new statements
+    new_statements = [stmt_map[sid] for sid in needs_placement if sid in stmt_map]
+    if not new_statements:
+        return existing_ranking.statement_rankings
+
+    code_to_id, id_to_code = _generate_short_codes(new_statements)
+
+    # Build prompt showing existing ranking + new statements to place
+    existing_lines = "\n".join(
+        f"  {i+1}. {sanitize_prompt_text(stmt_map[e['statement_id']].title or 'Untitled')}: "
+        f"{sanitize_prompt_text(stmt_map[e['statement_id']].statement_text)}"
+        for i, e in enumerate(confirmed)
+        if e["statement_id"] in stmt_map
+    )
+
+    new_lines = "\n".join(
+        f"- [{id_to_code[str(s.id)]}] {sanitize_prompt_text(s.title or 'Untitled')}: {sanitize_prompt_text(s.statement_text)}"
+        for s in new_statements
+    )
+
+    delib_question = sanitize_prompt_text(db.query(Deliberation).get(delib_id).question)
+    max_pos = len(confirmed) + 1
+
+    prompt = (
+        f"Deliberation question: \"{delib_question}\"\n\n"
+        f"Your current ranking ({len(confirmed)} statements, 1 = best):\n{existing_lines}\n\n"
+        f"New statements to insert (valid positions: 1 to {max_pos + len(new_statements)}):\n{new_lines}\n\n"
+        f"For each new statement, respond with its code and the position where it should be inserted."
+    )
+
+    client = get_llm_client(hosted_agent)
+    client.set_trace_context(
+        trace_type="hosted_agent_ranking",
+        deliberation_id=delib_id,
+        agent_id=agent.id,
+        hosted_agent_id=hosted_agent.id,
+    )
+    response = client.sample_text(
+        prompt=prompt,
+        system_prompt=INCREMENTAL_RANKING_SYSTEM_PROMPT.format(
+            profile=profile,
+            opinion=sanitize_prompt_text(opinion.opinion_text),
+        ),
+        temperature=0.3,
+        max_tokens=256,
+    )
+
+    if not response:
+        return _do_ranking(db, hosted_agent, delib_id)
+
+    # Parse incremental response: "CODE: POSITION" lines
+    placements = {}
+    for line in response.strip().split("\n"):
+        line = line.strip()
+        if not line:
+            continue
+        match = re.match(r"([A-Z0-9]{4})\s*[:=-]\s*(\d+)", line, re.IGNORECASE)
+        if match:
+            code = match.group(1).upper()
+            pos = int(match.group(2))
+            stmt_id = code_to_id.get(code)
+            if stmt_id:
+                placements[stmt_id] = pos
+
+    # If we couldn't parse any placements, fall back to full re-rank
+    if not placements:
+        logger.warning(f"Failed to parse incremental ranking response, falling back to full re-rank")
+        return _do_ranking(db, hosted_agent, delib_id)
+
+    # Build updated ranking: start with confirmed entries, insert new ones
+    updated = list(confirmed)
+    # Re-number confirmed entries contiguously
+    for i, entry in enumerate(updated):
+        entry["rank"] = i + 1
+
+    # Insert new statements at predicted positions
+    for stmt_id, position in sorted(placements.items(), key=lambda x: x[1]):
+        position = max(1, min(position, len(updated) + 1))
+        # Shift existing entries
+        for entry in updated:
+            if entry["rank"] >= position:
+                entry["rank"] += 1
+        updated.append({
+            "statement_id": stmt_id,
+            "rank": position,
+            "is_predicted": False,
+        })
+
+    # Add any un-parsed new statements at the end
+    for sid in needs_placement:
+        if sid not in placements and sid in stmt_map:
+            updated.append({
+                "statement_id": sid,
+                "rank": len(updated) + 1,
+                "is_predicted": False,
+            })
+
+    service = ContinuousDeliberationService(db)
+    try:
+        service.submit_ranking(
+            db.query(Deliberation).get(delib_id),
+            agent,
+            updated,
+        )
+    except ValueError as e:
+        logger.warning(f"Incremental ranking submission failed: {e}")
+        return None
+
+    logger.info(
+        f"Incremental ranking: inserted {len(placements)} statements for agent {agent.id} "
+        f"in deliberation {delib_id}"
+    )
+    return updated
 
 
 def _do_add_statement(db: Session, hosted_agent: HostedAgent, delib_id: UUID) -> Optional[dict]:
