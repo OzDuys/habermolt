@@ -887,9 +887,11 @@ export default function DeliberationPageClient() {
   const [opinionClusterPoints, setOpinionClusterPoints] = useState<OpinionClusterPoint[]>([]);
   const [opinionClusters, setOpinionClusters] = useState<OpinionClusterInfo[]>([]);
   const [highlightedStatementId, setHighlightedStatementId] = useState<string | null>(null);
+  const [highlightFading, setHighlightFading] = useState(false);
   const [evictedData, setEvictedData] = useState<EvictedStatementsResponse | null>(null);
   const [showEvicted, setShowEvicted] = useState(false);
   const statementRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const highlightTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
   // Map agent_id -> cluster color (for charts) and softened version (for lobsters)
   const { agentClusterColor, agentClusterColorSoft } = useMemo(() => {
     const soften = (hex: string): string => {
@@ -1157,9 +1159,18 @@ export default function DeliberationPageClient() {
   const scrollToStatement = useCallback((statementId: string) => {
     const el = statementRefs.current[statementId];
     if (el) {
+      // Clear any previous highlight timers
+      highlightTimers.current.forEach(clearTimeout);
+      highlightTimers.current = [];
+
       el.scrollIntoView({ behavior: "smooth", block: "center" });
       setHighlightedStatementId(statementId);
-      setTimeout(() => setHighlightedStatementId(null), 2000);
+      setHighlightFading(false);
+      // Start fading after 2s, then fully remove after fade completes (1.5s transition)
+      highlightTimers.current.push(
+        setTimeout(() => setHighlightFading(true), 2000),
+        setTimeout(() => { setHighlightedStatementId(null); setHighlightFading(false); }, 3500),
+      );
     }
   }, []);
 
@@ -1571,18 +1582,18 @@ export default function DeliberationPageClient() {
                       const isMine = userAgentId != null && s.contributed_by_agent_id === userAgentId;
                       const myColor = userAgentId ? (agentClusterColorSoft[userAgentId] || agentClusterColor[userAgentId]) : null;
                       const isHighlighted = highlightedStatementId === s.id;
+                      const isFading = isHighlighted && highlightFading;
                       return (
                         <motion.div key={s.id}
                           ref={(el) => { statementRefs.current[s.id] = el; }}
                           initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }}
                           viewport={{ once: true }} transition={{ delay: i * 0.03 }}
-                          animate={isHighlighted ? { boxShadow: ["0 0 0px rgba(200,74,32,0)", "0 0 20px rgba(200,74,32,0.3)", "0 0 0px rgba(200,74,32,0)"] } : {}}
                           style={{
                             padding: "18px 20px", borderRadius: 16,
-                            background: isHighlighted ? "rgba(200,74,32,0.06)" : isMine && myColor ? `${myColor}0a` : isWinner ? "rgba(200,74,32,0.04)" : "rgba(255,255,255,0.6)",
-                            border: `1.5px solid ${isHighlighted ? "rgba(200,74,32,0.3)" : isMine && myColor ? `${myColor}30` : isWinner ? "rgba(200,74,32,0.15)" : "rgba(0,0,0,0.04)"}`,
-                            boxShadow: isWinner ? "0 4px 16px rgba(200,74,32,0.06)" : "none",
-                            transition: "background 0.5s, border-color 0.5s",
+                            background: isHighlighted && !isFading ? "rgba(200,74,32,0.06)" : isMine && myColor ? `${myColor}0a` : isWinner ? "rgba(200,74,32,0.04)" : "rgba(255,255,255,0.6)",
+                            border: `1.5px solid ${isHighlighted && !isFading ? "rgba(200,74,32,0.3)" : isMine && myColor ? `${myColor}30` : isWinner ? "rgba(200,74,32,0.15)" : "rgba(0,0,0,0.04)"}`,
+                            boxShadow: isHighlighted && !isFading ? "0 0 20px rgba(200,74,32,0.25)" : isWinner ? "0 4px 16px rgba(200,74,32,0.06)" : "none",
+                            transition: "background 1.5s ease, border-color 1.5s ease, box-shadow 1.5s ease",
                           }}
                         >
                           <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
@@ -1679,7 +1690,7 @@ export default function DeliberationPageClient() {
                           Proximity = semantic similarity. Size &amp; colour = social ranking.
                         </p>
                       </div>
-                      <StatementCluster points={clusterPoints} consensusHistory={consensusHistory} />
+                      <StatementCluster points={clusterPoints} consensusHistory={consensusHistory} onStatementClick={scrollToStatement} />
                     </div>
 
                     {/* Ranking Distribution (Ridgeline) */}

@@ -1,7 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useMemo } from "react";
 import * as d3 from "d3";
 import type { ClusterPoint } from "@/lib/types";
 
@@ -14,6 +13,8 @@ interface StatementClusterProps {
   points: ClusterPoint[];
   /** Ordered list of previous consensus winners (oldest first) */
   consensusHistory?: ConsensusHistoryEntry[];
+  /** Fired when user clicks on a statement dot */
+  onStatementClick?: (statementId: string) => void;
 }
 
 const WIDTH = 720;
@@ -69,12 +70,7 @@ function computeEdges(
   return edges;
 }
 
-export default function StatementCluster({ points, consensusHistory = [] }: StatementClusterProps) {
-  const [tooltip, setTooltip] = useState<{
-    point: ClusterPoint;
-    svgX: number;
-    svgY: number;
-  } | null>(null);
+export default function StatementCluster({ points, consensusHistory = [], onStatementClick }: StatementClusterProps) {
 
   const { xScale, yScale } = useMemo(() => {
     if (points.length < 2) return { xScale: null, yScale: null };
@@ -128,11 +124,6 @@ export default function StatementCluster({ points, consensusHistory = [] }: Stat
     return trail;
   }, [points, consensusHistory, xScale, yScale]);
 
-  // Set of historical winner IDs for styling
-  const historicalWinnerIds = useMemo(() => {
-    return new Set(consensusHistory.map((e) => e.statement_id));
-  }, [consensusHistory]);
-
   if (points.length < 2 || !xScale || !yScale) return null;
 
   const sorted = [...points].sort((a, b) => {
@@ -141,16 +132,12 @@ export default function StatementCluster({ points, consensusHistory = [] }: Stat
     return rb - ra;
   });
 
-  const truncate = (text: string, max = 140) =>
-    text.length > max ? text.slice(0, max) + "…" : text;
-
   return (
     <div className="relative w-full">
       <svg
         width="100%"
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
         className="overflow-visible"
-        onMouseLeave={() => setTooltip(null)}
         style={{ minHeight: 320 }}
       >
         <defs>
@@ -292,7 +279,7 @@ export default function StatementCluster({ points, consensusHistory = [] }: Stat
                 filter={isWinner ? "url(#glow-winner)" : isTop3 ? "url(#glow-soft)" : undefined}
                 className="cursor-pointer"
                 style={{ transition: "r 0.3s, opacity 0.2s" }}
-                onMouseEnter={() => setTooltip({ point: p, svgX: cx, svgY: cy })}
+                onClick={() => onStatementClick?.(p.id)}
               />
               {/* Rank label */}
               {isTop3 && (
@@ -302,7 +289,7 @@ export default function StatementCluster({ points, consensusHistory = [] }: Stat
                   fontSize={isWinner ? 11 : 9}
                   fontWeight={800}
                   fill={isWinner ? "#78350f" : "#fff"}
-                  className="pointer-events-none select-none"
+                  className="pointer-events-none select-none cursor-pointer"
                 >
                   #{p.social_ranking}
                 </text>
@@ -311,47 +298,6 @@ export default function StatementCluster({ points, consensusHistory = [] }: Stat
           );
         })}
 
-        {/* Tooltip */}
-        {tooltip &&
-          (() => {
-            const TOOLTIP_W = 240;
-            const TOOLTIP_H = 90;
-            const tx = Math.min(tooltip.svgX + 18, WIDTH - TOOLTIP_W - 8);
-            const ty = Math.max(tooltip.svgY - TOOLTIP_H - 12, 8);
-            return (
-              <foreignObject
-                x={tx} y={ty}
-                width={TOOLTIP_W} height={TOOLTIP_H}
-                className="pointer-events-none"
-              >
-                <div
-                  style={{
-                    background: "#fffcf7",
-                    border: `1.5px solid ${rankColor(tooltip.point.social_ranking)}30`,
-                    borderRadius: 12,
-                    padding: "10px 14px",
-                    fontSize: 12,
-                    lineHeight: 1.5,
-                    color: "#444",
-                    boxShadow: "0 4px 20px rgba(0,0,0,0.08)",
-                  }}
-                >
-                  {tooltip.point.social_ranking !== null && (
-                    <span style={{
-                      display: "block", fontWeight: 800, fontSize: 11,
-                      color: rankColor(tooltip.point.social_ranking),
-                      marginBottom: 4,
-                    }}>
-                      Rank #{tooltip.point.social_ranking}
-                    </span>
-                  )}
-                  {tooltip.point.title
-                    ? tooltip.point.title
-                    : truncate(tooltip.point.statement_text.replace(/[#*_`]/g, ""))}
-                </div>
-              </foreignObject>
-            );
-          })()}
       </svg>
 
       {/* Legend */}
