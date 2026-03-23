@@ -336,6 +336,9 @@ export default function UserBehaviorPage() {
               <th className="text-left p-3 font-medium" style={{ color: "var(--muted)" }}>
                 Agent
               </th>
+              <th className="text-left p-3 font-medium" style={{ color: "var(--muted)" }}>
+                Type
+              </th>
               <SortHeader label="Signed Up" sortKey="signed_up_at" current={sortBy} desc={sortDesc} onClick={handleSort} />
               <SortHeader label="Last Active" sortKey="last_active" current={sortBy} desc={sortDesc} onClick={handleSort} />
               <SortHeader label="Delibs" sortKey="deliberations_participated" current={sortBy} desc={sortDesc} onClick={handleSort} />
@@ -381,6 +384,15 @@ export default function UserBehaviorPage() {
                     <span style={{ color: "var(--muted)" }}>none</span>
                   )}
                 </td>
+                <td className="p-3">
+                  {u.has_hosted_agent ? (
+                    <Badge text="haberagent" color="#8b5cf6" />
+                  ) : u.has_agent ? (
+                    <Badge text="openclaw" color="#f59e0b" />
+                  ) : (
+                    <span style={{ color: "var(--muted)" }}>—</span>
+                  )}
+                </td>
                 <td className="p-3 tabular-nums whitespace-nowrap">
                   {u.signed_up_at ? new Date(u.signed_up_at).toLocaleDateString() : "—"}
                 </td>
@@ -406,7 +418,7 @@ export default function UserBehaviorPage() {
             ))}
             {sorted.length === 0 && (
               <tr>
-                <td colSpan={10} className="p-6 text-center" style={{ color: "var(--muted)" }}>
+                <td colSpan={11} className="p-6 text-center" style={{ color: "var(--muted)" }}>
                   No users match this filter
                 </td>
               </tr>
@@ -514,28 +526,24 @@ function SourceBar({
   total: number;
 }) {
   const segments = [
-    { value: autonomous, color: "#6366f1", label: "auto" },
+    { value: autonomous, color: "#6366f1", label: "autonomous" },
     { value: interview, color: "#06b6d4", label: "interview" },
     { value: chat, color: "#10b981", label: "chat" },
   ].filter((s) => s.value > 0);
 
   return (
-    <div className="flex items-center gap-1.5">
-      <div
-        className="flex h-2 rounded-full overflow-hidden"
-        style={{ width: 60, background: "var(--border)" }}
-      >
-        {segments.map((s) => (
-          <div
-            key={s.label}
-            style={{ width: `${(s.value / total) * 100}%`, background: s.color }}
-            title={`${s.label}: ${s.value}`}
+    <div className="space-y-1">
+      {segments.map((s) => (
+        <div key={s.label} className="flex items-center gap-1.5">
+          <span
+            className="inline-block w-2 h-2 rounded-full shrink-0"
+            style={{ background: s.color }}
           />
-        ))}
-      </div>
-      <span className="text-[10px] tabular-nums" style={{ color: "var(--muted)" }}>
-        {segments.map((s) => `${s.value}${s.label[0]}`).join(" ")}
-      </span>
+          <span className="text-[10px] tabular-nums" style={{ color: "var(--muted)" }}>
+            {s.value} {s.label}
+          </span>
+        </div>
+      ))}
     </div>
   );
 }
