@@ -128,23 +128,15 @@ export default function MonitoringDashboard() {
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        {/* Cost by Model */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        {/* Row 1: By Model */}
         <CostBreakdownCard title="Cost by Model" data={stats.cost_by_model} />
-
-        {/* Traces by Type */}
-        <BreakdownCard title="Traces by Type" data={stats.traces_by_type} />
-
-        {/* Traces by Model */}
         <BreakdownCard title="Traces by Model" data={stats.traces_by_model} />
-
-        {/* Avg Latency by Model */}
         <LatencyBreakdownCard title="Avg Latency by Model" data={stats.latency_by_model} />
 
-        {/* Avg Token Usage by Trace Type */}
+        {/* Row 2: By Type */}
+        <BreakdownCard title="Traces by Type" data={stats.traces_by_type} />
         <TokensByTypeCard data={stats.avg_tokens_by_type} />
-
-        {/* Total Token Usage by Trace Type */}
         <TotalTokensByTypeCard data={stats.total_tokens_by_type} />
       </div>
 
