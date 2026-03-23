@@ -157,12 +157,24 @@ def admin_list_referrals(
     """List all referral codes with their conversion counts."""
     codes = db.query(ReferralCode).order_by(ReferralCode.created_at.desc()).all()
 
+    # Fetch user names from better-auth user table
+    user_ids = [rc.user_id for rc in codes if not rc.user_id.startswith("label:")]
+    user_names = {}
+    if user_ids:
+        from sqlalchemy import text
+        rows = db.execute(
+            text('SELECT id, name FROM "user" WHERE id = ANY(:ids)'),
+            {"ids": user_ids},
+        ).fetchall()
+        user_names = {r.id: r.name for r in rows}
+
     results = []
     for rc in codes:
         count = db.query(Referral).filter(Referral.referrer_user_id == rc.user_id).count()
         results.append({
             "id": str(rc.id),
             "user_id": rc.user_id,
+            "user_name": user_names.get(rc.user_id),
             "label": rc.user_id.replace("label:", "") if rc.user_id.startswith("label:") else None,
             "code": rc.code,
             "conversions": count,
