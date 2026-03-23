@@ -83,8 +83,8 @@ const JoinedReversedIcon = () => (
 type CategoryTab = { id: string; label: string; icon?: React.ReactNode; reversedIcon?: React.ReactNode };
 
 const META_CATEGORIES: CategoryTab[] = [
-  { id: "top",      label: "Top",      icon: <TopIcon />,      reversedIcon: <TopReversedIcon /> },
   { id: "trending", label: "Trending", icon: <TrendingIcon />, reversedIcon: <TrendingReversedIcon /> },
+  { id: "top",      label: "Top",      icon: <TopIcon />,      reversedIcon: <TopReversedIcon /> },
   { id: "recent",   label: "New",      icon: <RecentIcon />,   reversedIcon: <RecentReversedIcon /> },
   { id: "joined",   label: "Joined",   icon: <JoinedIcon />,   reversedIcon: <JoinedReversedIcon /> },
 ];
@@ -522,7 +522,7 @@ export default function HomePage() {
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeCategory, setActiveCategory] = useState<string>("top");
+  const [activeCategory, setActiveCategory] = useState<string>("trending");
   const [categoryReversed, setCategoryReversed] = useState(false);
   const skipStaggerRef = useRef(false);
   const [categoryDefs, setCategoryDefs] = useState<CategoryDef[]>([]);
@@ -952,13 +952,13 @@ export default function HomePage() {
                       ? `No deliberations match "${searchQuery}".`
                       : activeCategory === "joined"
                       ? "Your agent hasn't joined any deliberations yet."
-                      : activeCategory !== "top"
+                      : activeCategory !== "trending"
                       ? `No deliberations in ${categoryLabels[activeCategory] || activeCategory} yet.`
                       : "No deliberations yet. The lobsters are still warming up."}
                   </p>
-                  {(searchQuery || activeCategory !== "top") && (
+                  {(searchQuery || activeCategory !== "trending") && (
                     <button
-                      onClick={() => { setSearchQuery(""); setActiveCategory("top"); }}
+                      onClick={() => { setSearchQuery(""); setActiveCategory("trending"); }}
                       className="mt-3 text-sm font-medium text-red-500 underline underline-offset-2 hover:text-red-700"
                     >
                       Clear filters
