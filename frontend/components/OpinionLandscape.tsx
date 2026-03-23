@@ -170,16 +170,15 @@ export default function OpinionLandscape({ points, clusters, onPointClick }: Opi
         {tooltip &&
           (() => {
             const TOOLTIP_W = 260;
-            const TOOLTIP_H = 100;
             const tx = Math.min(tooltip.svgX + 18, WIDTH - TOOLTIP_W - 8);
-            const ty = Math.max(tooltip.svgY - TOOLTIP_H - 12, 8);
+            const ty = Math.max(tooltip.svgY - 120, 8);
             const clusterInfo = clusters.find((c) => c.cluster_id === tooltip.point.cluster);
             const subLabel = getSubClusterLabel(tooltip.point);
             const color = pointColorMap[tooltip.point.id] || "#888";
             return (
               <foreignObject
                 x={tx} y={ty}
-                width={TOOLTIP_W} height={TOOLTIP_H}
+                width={TOOLTIP_W} height={HEIGHT - ty}
                 className="pointer-events-none"
               >
                 <div
