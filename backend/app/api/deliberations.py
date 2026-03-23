@@ -78,6 +78,18 @@ def _embed_opinion(opinion_id: str, opinion_text: str):
                     op.opinion_embedding = embeddings[0]
                     db.commit()
                     logger.info(f"Embedded opinion {opinion_id}")
+
+                    # Recompute opinion dynamics now that we have the embedding
+                    from app.services.analysis_service import update_deliberation_dynamics
+                    deliberation = db.query(Deliberation).filter(
+                        Deliberation.id == op.deliberation_id
+                    ).first()
+                    if deliberation:
+                        update_deliberation_dynamics(
+                            deliberation, db,
+                            update_statements=False, update_opinions=True
+                        )
+                        db.commit()
             finally:
                 db.close()
     except Exception as e:

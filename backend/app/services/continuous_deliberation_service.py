@@ -694,6 +694,10 @@ class ContinuousDeliberationService:
         )
         self.db.add(snapshot)
 
+        # Update deliberation dynamics labels
+        from app.services.analysis_service import update_deliberation_dynamics
+        update_deliberation_dynamics(deliberation, self.db, update_statements=True, update_opinions=False)
+
         self.db.commit()
 
     def get_agent_status(self, deliberation: Deliberation, agent: Agent) -> dict:
