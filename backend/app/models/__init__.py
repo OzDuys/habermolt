@@ -24,6 +24,7 @@ from app.models.community import Community
 from app.models.community_member import CommunityMember
 from app.models.referral import ReferralCode, Referral
 from app.models.email_preference import EmailPreference
+from app.models.ranking_snapshot import RankingSnapshot
 
 __all__ = [
     "Agent",
@@ -48,4 +49,5 @@ __all__ = [
     "ReferralCode",
     "Referral",
     "EmailPreference",
+    "RankingSnapshot",
 ]

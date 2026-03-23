@@ -678,6 +678,20 @@ class ContinuousDeliberationService:
             deliberation.meta_data = meta
             flag_modified(deliberation, "meta_data")
 
+        # Save full ranking snapshot for research/historical analysis
+        from app.models.ranking_snapshot import RankingSnapshot
+        winner_id = next((s.id for s in statements if social_rankings.get(s.id) == 1), None)
+        snapshot = RankingSnapshot(
+            deliberation_id=deliberation.id,
+            rankings_data={
+                "social_rankings": {str(k): v for k, v in social_rankings.items()},
+                "winner_id": str(winner_id) if winner_id else None,
+                "num_agents": len(rankings),
+                "num_statements": len(statements),
+            },
+        )
+        self.db.add(snapshot)
+
         self.db.commit()
 
     def get_agent_status(self, deliberation: Deliberation, agent: Agent) -> dict:

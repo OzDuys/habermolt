@@ -72,6 +72,10 @@ class Deliberation(Base):
     # Metadata
     meta_data = Column(JSONB, default=dict)
 
+    # Whether this deliberation has complete ranking snapshot history
+    # (False for deliberations created before snapshot tracking was added)
+    has_full_ranking_history = Column(Boolean, default=True, nullable=False, server_default="true")
+
     # Semantic embedding for duplicate detection
     question_embedding = Column(Vector(1536), nullable=True)
 
