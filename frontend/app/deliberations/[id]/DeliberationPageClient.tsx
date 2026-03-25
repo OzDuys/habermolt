@@ -1656,8 +1656,16 @@ export default function DeliberationPageClient() {
                               <ReactMarkdown>{s.title}</ReactMarkdown>
                             </div>
                           )}
-                          <div style={{ fontSize: 13, lineHeight: 1.7, color: "#333" }} className="prose-compact">
-                            <ReactMarkdown>{s.statement_text}</ReactMarkdown>
+                          <div style={{ fontSize: 13, lineHeight: 1.7, color: "#333" }}>
+                            <ReactMarkdown components={{ p: ({ children }) => <>{children}</> }}>
+                              {s.statement_text}
+                            </ReactMarkdown>
+                            <span
+                              style={{ fontSize: 10, color: "#bbb", whiteSpace: "nowrap", marginLeft: 5 }}
+                              title={new Date(s.generated_at).toLocaleString()}
+                            >
+                              {s.contributed_by_agent_id ? "contributed" : s.is_seed ? "seeded" : "generated"} {timeAgo(parseTimestamp(s.generated_at))}
+                            </span>
                           </div>
                           {s.is_seed && s.meta_data?.seed_opinions?.length > 0 && (
                             <SeedOpinions opinions={s.meta_data.seed_opinions} />
@@ -1858,6 +1866,8 @@ export default function DeliberationPageClient() {
                 const isMe = userAgentId != null && a.agent_id === userAgentId;
                 const clrColor = agentClusterColor[a.agent_id] || a.color;
                 const softColor = agentClusterColorSoft[a.agent_id] || a.color;
+                const opinionEntry = data.opinions.find(o => o.agent_id === a.agent_id);
+                const rankingEntry = data.rankings.find(r => r.agent_id === a.agent_id);
                 return (
                   <motion.div key={a.agent_id}
                     initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
@@ -1896,10 +1906,18 @@ export default function DeliberationPageClient() {
                     </div>
 
                     {a.opinion && (
-                      <div style={{
-                        fontSize: 12, lineHeight: 1.6, color: "#555", marginBottom: 10,
-                      }} className="prose-compact">
-                        <ReactMarkdown>{`\u201C${a.opinion}\u201D`}</ReactMarkdown>
+                      <div style={{ fontSize: 12, lineHeight: 1.6, color: "#555", marginBottom: 10 }}>
+                        <ReactMarkdown components={{ p: ({ children }) => <>{children}</> }}>
+                          {`\u201C${a.opinion}\u201D`}
+                        </ReactMarkdown>
+                        {opinionEntry && (
+                          <span
+                            style={{ fontSize: 10, color: "#bbb", whiteSpace: "nowrap", marginLeft: 5 }}
+                            title={new Date(opinionEntry.submitted_at).toLocaleString()}
+                          >
+                            {(opinionEntry.version ?? 1) > 1 ? "updated" : "submitted"} {timeAgo(parseTimestamp(opinionEntry.submitted_at))}
+                          </span>
+                        )}
                       </div>
                     )}
 
@@ -1935,8 +1953,9 @@ export default function DeliberationPageClient() {
                               </span>
                             );
                           })}
-                          <span style={{ fontSize: 9, color: "#bbb", marginLeft: 4 }}>
-                            {sortedR.length} ranked
+                          <span style={{ fontSize: 9, color: "#bbb", marginLeft: 4 }}
+                                title={rankingEntry ? new Date(rankingEntry.submitted_at).toLocaleString() : undefined}>
+                            {sortedR.length} ranked{rankingEntry ? ` ${timeAgo(parseTimestamp(rankingEntry.submitted_at))}` : ""}
                           </span>
                         </div>
                       );
