@@ -89,7 +89,7 @@ class ContinuousDeliberationService:
         )
         return deliberation
 
-    async def _generate_seeds(self, deliberation: Deliberation, initial_opinion: str) -> None:
+    async def _generate_seeds(self, deliberation: Deliberation, initial_opinion: str = None) -> None:
         """Generate seed opinions and seed statements. Retries on failure."""
         question = deliberation.question
 
@@ -99,7 +99,7 @@ class ContinuousDeliberationService:
         )
 
         # Always include the creator's real opinion so the LLM has substantive input
-        if initial_opinion.strip() not in seed_opinions:
+        if initial_opinion and initial_opinion.strip() and initial_opinion.strip() not in seed_opinions:
             seed_opinions.insert(0, initial_opinion.strip())
 
         # Store seed opinions on deliberation for debugging/monitoring
@@ -142,18 +142,20 @@ class ContinuousDeliberationService:
             stmt.is_seed = True
         self.db.commit()
 
-    def _create_fallback_seed(self, deliberation: Deliberation, opinion_text: str) -> None:
-        """Create a minimal seed statement from the creator's opinion so the deliberation isn't stuck."""
+    def _create_fallback_seed(self, deliberation: Deliberation, opinion_text: str = None) -> None:
+        """Create a minimal seed statement so the deliberation isn't stuck."""
         existing = self.db.query(Statement).filter(
             Statement.deliberation_id == deliberation.id
         ).count()
         if existing > 0:
             return  # Already has statements, no fallback needed
 
+        fallback_text = (opinion_text.strip() if opinion_text and opinion_text.strip()
+                         else f"We should consider the full range of perspectives on: {deliberation.question}")
         stmt = Statement(
             deliberation_id=deliberation.id,
             title="Initial perspective",
-            statement_text=opinion_text.strip(),
+            statement_text=fallback_text,
             is_seed=True,
         )
         self.db.add(stmt)

@@ -6,6 +6,7 @@ All endpoints use human auth (X-User-Id) since communities are human-managed.
 
 import logging
 import secrets
+import threading
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
@@ -497,6 +498,15 @@ async def create_community_deliberation(
 
     db.commit()
     db.refresh(deliberation)
+
+    # Generate seed statements in background so the deliberation is never empty
+    from app.api.private_deliberations import _generate_seeds_background
+    thread = threading.Thread(
+        target=_generate_seeds_background,
+        args=(deliberation.id,),
+        daemon=True,
+    )
+    thread.start()
 
     logger.info(
         f"Community deliberation created: {deliberation.id} in community {community.id} by user {user_id}"

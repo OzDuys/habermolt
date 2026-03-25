@@ -6,14 +6,16 @@ Supports two paths:
 2. Agent auth (X-API-Key) — for OpenClaw agents joining via invite link
 """
 
+import asyncio
 import logging
 import secrets
+import threading
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
 
-from app.database import get_db
+from app.database import get_db, SessionLocal
 from app.middleware.auth import require_user_id, APIKeyAuth
 from app.models import Agent, Deliberation, DeliberationStage, Opinion
 from app.models.deliberation_member import DeliberationMember
@@ -36,6 +38,30 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/deliberations", tags=["private-deliberations"])
 
 
+def _generate_seeds_background(deliberation_id) -> None:
+    """Background thread: generate seed statements for a shell deliberation."""
+    from app.services.continuous_deliberation_service import ContinuousDeliberationService
+    from app.models import Statement
+
+    db = SessionLocal()
+    try:
+        deliberation = db.query(Deliberation).get(deliberation_id)
+        if not deliberation:
+            return
+        service = ContinuousDeliberationService(db)
+        try:
+            asyncio.run(service._generate_seeds(deliberation))
+        except Exception as e:
+            logger.error(f"Background seed generation failed for {deliberation_id}: {e}", exc_info=True)
+            service._create_fallback_seed(deliberation)
+        stmt_count = db.query(Statement).filter(
+            Statement.deliberation_id == deliberation_id
+        ).count()
+        logger.info(f"Background seed generation completed for {deliberation_id}: {stmt_count} statements")
+    except Exception as e:
+        logger.error(f"Background seed generation thread failed for {deliberation_id}: {e}", exc_info=True)
+    finally:
+        db.close()
 
 
 
@@ -56,9 +82,8 @@ async def create_deliberation_human(
     Requires human authentication (X-User-Id header).
     User must have an agent (HaberAgent or OpenClaw).
 
-    Creates a shell deliberation — no opinion or seed statements yet.
-    The user will be interviewed inline after creation, and seed statements
-    are generated after the interview opinion is submitted.
+    Seed statements are generated in a background thread from the question alone.
+    The user's opinion is collected later via the chat interview.
     """
     user_id = require_user_id(req)
 
@@ -105,6 +130,14 @@ async def create_deliberation_human(
 
     db.commit()
     db.refresh(deliberation)
+
+    # Generate seed statements in background so the deliberation is never empty
+    thread = threading.Thread(
+        target=_generate_seeds_background,
+        args=(deliberation.id,),
+        daemon=True,
+    )
+    thread.start()
 
     logger.info(f"Deliberation created: {deliberation.id} by user {user_id} (private={body.is_private})")
 
