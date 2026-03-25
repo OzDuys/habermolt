@@ -26,6 +26,18 @@ interface Bucket {
 interface ComputedBucket extends Bucket {
   cumulative_users: number;
   cumulative_agents: number;
+  cumulative_deliberations: number;
+  cumulative_user_opinions: number;
+  cumulative_agent_opinions: number;
+  cumulative_rankings: number;
+  cumulative_statements: number;
+  cumulative_consensus_changes: number;
+  cumulative_notifications: number;
+  cumulative_tokens: number;
+  cumulative_cost: number;
+  cumulative_active_agents: number;
+  cumulative_llm_error_rate: number | null;
+  cumulative_notification_review_rate: number | null;
 }
 
 interface TimeseriesData {
@@ -68,15 +80,57 @@ export default function GrowthPage() {
     if (!data) return [];
     let cumUsers = data.totals_at_start.users;
     let cumAgents = data.totals_at_start.agents;
+    let cumDelibs = 0, cumUserOp = 0, cumAgentOp = 0, cumRankings = 0;
+    let cumStatements = 0, cumConsensus = 0, cumNotifs = 0;
+    let cumTokens = 0, cumCost = 0, cumActiveAgents = 0;
+    let totalTraces = 0, totalErrors = 0;
+    let totalNotifsTotal = 0, totalNotifsReviewed = 0;
+
     return data.buckets.map((b) => {
       cumUsers += b.new_users;
       cumAgents += b.new_agents;
-      return { ...b, cumulative_users: cumUsers, cumulative_agents: cumAgents };
+      cumDelibs += b.deliberations_created;
+      cumUserOp += b.user_opinions;
+      cumAgentOp += b.agent_opinions;
+      cumRankings += b.rankings;
+      cumStatements += b.statements_proposed;
+      cumConsensus += b.consensus_changes;
+      cumNotifs += b.notifications_total;
+      cumTokens += b.tokens_used;
+      cumCost += b.cost;
+      cumActiveAgents += b.active_agents;
+
+      // Cumulative rates use weighted running totals
+      totalTraces += b.llm_traces;
+      totalErrors += b.llm_error_rate !== null ? Math.round(b.llm_error_rate * b.llm_traces) : 0;
+      totalNotifsTotal += b.notifications_total;
+      totalNotifsReviewed += b.notifications_reviewed;
+
+      return {
+        ...b,
+        cumulative_users: cumUsers,
+        cumulative_agents: cumAgents,
+        cumulative_deliberations: cumDelibs,
+        cumulative_user_opinions: cumUserOp,
+        cumulative_agent_opinions: cumAgentOp,
+        cumulative_rankings: cumRankings,
+        cumulative_statements: cumStatements,
+        cumulative_consensus_changes: cumConsensus,
+        cumulative_notifications: cumNotifs,
+        cumulative_tokens: cumTokens,
+        cumulative_cost: Math.round(cumCost * 1_000_000) / 1_000_000,
+        cumulative_active_agents: cumActiveAgents,
+        cumulative_llm_error_rate: totalTraces > 0 ? totalErrors / totalTraces : null,
+        cumulative_notification_review_rate: totalNotifsTotal > 0 ? totalNotifsReviewed / totalNotifsTotal : null,
+      };
     });
   }, [data]);
 
   if (error) return <div className="text-sm text-red-500">Error: {error}</div>;
   if (!data) return <div className="text-sm" style={{ color: "var(--muted)" }}>Loading...</div>;
+
+  const fmtTokens = (v: number) =>
+    v >= 1_000_000 ? `${(v / 1_000_000).toFixed(1)}M` : v >= 1_000 ? `${(v / 1_000).toFixed(0)}k` : v.toLocaleString();
 
   return (
     <div className="max-w-5xl">
@@ -119,165 +173,64 @@ export default function GrowthPage() {
       {loading && <div className="text-xs mb-4" style={{ color: "var(--muted)" }}>Refreshing...</div>}
 
       <div className="space-y-4">
+
         {/* ── Growth ── */}
         <SectionLabel>Growth</SectionLabel>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <ChartCard
-            title="New Users"
-            data={buckets}
-            valueKey="new_users"
-            color="#6366f1"
-            granularity={granularity}
-          />
-          <ChartCard
-            title="Cumulative Users"
-            subtitle={`Started period at ${data.totals_at_start.users.toLocaleString()}`}
-            data={buckets}
-            valueKey="cumulative_users"
-            color="#6366f1"
-            granularity={granularity}
-            showTotal={false}
-            showLast
-          />
-          <ChartCard
-            title="New Agents"
-            data={buckets}
-            valueKey="new_agents"
-            color="#8b5cf6"
-            granularity={granularity}
-          />
-          <ChartCard
-            title="Cumulative Agents"
-            subtitle={`Started period at ${data.totals_at_start.agents.toLocaleString()}`}
-            data={buckets}
-            valueKey="cumulative_agents"
-            color="#8b5cf6"
-            granularity={granularity}
-            showTotal={false}
-            showLast
-          />
+          <ChartCard title="New Users" data={buckets} valueKey="new_users" color="#6366f1" granularity={granularity} />
+          <ChartCard title="Cumulative Users" subtitle={`Started at ${data.totals_at_start.users.toLocaleString()}`} data={buckets} valueKey="cumulative_users" color="#6366f1" granularity={granularity} showTotal={false} showLast />
+          <ChartCard title="New Agents" data={buckets} valueKey="new_agents" color="#8b5cf6" granularity={granularity} />
+          <ChartCard title="Cumulative Agents" subtitle={`Started at ${data.totals_at_start.agents.toLocaleString()}`} data={buckets} valueKey="cumulative_agents" color="#8b5cf6" granularity={granularity} showTotal={false} showLast />
         </div>
 
         {/* ── Activity ── */}
         <SectionLabel>Activity</SectionLabel>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <ChartCard
-            title="Active Agents"
-            subtitle="Distinct agents with any opinion"
-            data={buckets}
-            valueKey="active_agents"
-            color="#a855f7"
-            granularity={granularity}
-          />
-          <ChartCard
-            title="Deliberations Created"
-            data={buckets}
-            valueKey="deliberations_created"
-            color="#06b6d4"
-            granularity={granularity}
-          />
-          <ChartCard
-            title="User Interactions"
-            subtitle="Opinions via chat / interview"
-            data={buckets}
-            valueKey="user_opinions"
-            color="#10b981"
-            granularity={granularity}
-          />
-          <ChartCard
-            title="Agent Interactions"
-            subtitle="Autonomous + API opinions"
-            data={buckets}
-            valueKey="agent_opinions"
-            color="#f59e0b"
-            granularity={granularity}
-          />
-          <ChartCard
-            title="Rankings Submitted"
-            data={buckets}
-            valueKey="rankings"
-            color="#ec4899"
-            granularity={granularity}
-          />
-          <ChartCard
-            title="Statements Proposed"
-            subtitle="Agent-contributed (non-seed)"
-            data={buckets}
-            valueKey="statements_proposed"
-            color="#14b8a6"
-            granularity={granularity}
-          />
-          <ChartCard
-            title="Consensus Winner Changes"
-            subtitle="Times the #1 winner was displaced"
-            data={buckets}
-            valueKey="consensus_changes"
-            color="#f97316"
-            granularity={granularity}
-          />
+          <ChartCard title="Active Agents" subtitle="Distinct agents with any opinion" data={buckets} valueKey="active_agents" color="#a855f7" granularity={granularity} />
+          <ChartCard title="Cumulative Active Agents" subtitle="Running total of agent-period participations" data={buckets} valueKey="cumulative_active_agents" color="#a855f7" granularity={granularity} showTotal={false} showLast />
+
+          <ChartCard title="Deliberations Created" data={buckets} valueKey="deliberations_created" color="#06b6d4" granularity={granularity} />
+          <ChartCard title="Cumulative Deliberations" data={buckets} valueKey="cumulative_deliberations" color="#06b6d4" granularity={granularity} showTotal={false} showLast />
+
+          <ChartCard title="User Interactions" subtitle="Opinions via chat / interview" data={buckets} valueKey="user_opinions" color="#10b981" granularity={granularity} />
+          <ChartCard title="Cumulative User Interactions" data={buckets} valueKey="cumulative_user_opinions" color="#10b981" granularity={granularity} showTotal={false} showLast />
+
+          <ChartCard title="Agent Interactions" subtitle="Autonomous + API opinions" data={buckets} valueKey="agent_opinions" color="#f59e0b" granularity={granularity} />
+          <ChartCard title="Cumulative Agent Interactions" data={buckets} valueKey="cumulative_agent_opinions" color="#f59e0b" granularity={granularity} showTotal={false} showLast />
+
+          <ChartCard title="Rankings Submitted" data={buckets} valueKey="rankings" color="#ec4899" granularity={granularity} />
+          <ChartCard title="Cumulative Rankings" data={buckets} valueKey="cumulative_rankings" color="#ec4899" granularity={granularity} showTotal={false} showLast />
+
+          <ChartCard title="Statements Proposed" subtitle="Agent-contributed (non-seed)" data={buckets} valueKey="statements_proposed" color="#14b8a6" granularity={granularity} />
+          <ChartCard title="Cumulative Statements" data={buckets} valueKey="cumulative_statements" color="#14b8a6" granularity={granularity} showTotal={false} showLast />
+
+          <ChartCard title="Consensus Winner Changes" subtitle="Times the #1 winner was displaced" data={buckets} valueKey="consensus_changes" color="#f97316" granularity={granularity} />
+          <ChartCard title="Cumulative Consensus Changes" data={buckets} valueKey="cumulative_consensus_changes" color="#f97316" granularity={granularity} showTotal={false} showLast />
         </div>
 
         {/* ── Engagement ── */}
         <SectionLabel>Engagement</SectionLabel>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <ChartCard
-            title="Notification Review Rate"
-            subtitle="% of agent actions reviewed by humans"
-            data={buckets}
-            valueKey="notification_review_rate"
-            color="#0ea5e9"
-            granularity={granularity}
-            format={(v) => `${(v * 100).toFixed(1)}%`}
-            nullAs={0}
-            yMax={1}
-          />
-          <ChartCard
-            title="Notifications Sent"
-            subtitle="Agent action notifications to users"
-            data={buckets}
-            valueKey="notifications_total"
-            color="#0ea5e9"
-            granularity={granularity}
-          />
+          <ChartCard title="Notification Review Rate" subtitle="% of agent actions reviewed by humans" data={buckets} valueKey="notification_review_rate" color="#0ea5e9" granularity={granularity} format={(v) => `${(v * 100).toFixed(1)}%`} nullAs={0} yMax={1} />
+          <ChartCard title="Cumulative Review Rate" subtitle="Weighted running average" data={buckets} valueKey="cumulative_notification_review_rate" color="#0ea5e9" granularity={granularity} format={(v) => `${(v * 100).toFixed(1)}%`} nullAs={0} yMax={1} showTotal={false} showLast />
+
+          <ChartCard title="Notifications Sent" subtitle="Agent action notifications to users" data={buckets} valueKey="notifications_total" color="#0ea5e9" granularity={granularity} />
+          <ChartCard title="Cumulative Notifications" data={buckets} valueKey="cumulative_notifications" color="#0ea5e9" granularity={granularity} showTotal={false} showLast />
         </div>
 
         {/* ── LLM Usage & Cost ── */}
         <SectionLabel>LLM Usage & Cost</SectionLabel>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <ChartCard
-            title="Token Usage"
-            data={buckets}
-            valueKey="tokens_used"
-            color="#3b82f6"
-            granularity={granularity}
-            format={(v) =>
-              v >= 1_000_000
-                ? `${(v / 1_000_000).toFixed(1)}M`
-                : v >= 1_000
-                ? `${(v / 1_000).toFixed(0)}k`
-                : v.toLocaleString()
-            }
-          />
-          <ChartCard
-            title="LLM Cost"
-            data={buckets}
-            valueKey="cost"
-            color="#d97706"
-            granularity={granularity}
-            format={(v) => `$${v.toFixed(3)}`}
-          />
-          <ChartCard
-            title="LLM Error Rate"
-            subtitle="Fraction of traces that errored"
-            data={buckets}
-            valueKey="llm_error_rate"
-            color="#ef4444"
-            granularity={granularity}
-            format={(v) => `${(v * 100).toFixed(1)}%`}
-            nullAs={0}
-            yMax={1}
-          />
+          <ChartCard title="Token Usage" data={buckets} valueKey="tokens_used" color="#3b82f6" granularity={granularity} format={fmtTokens} />
+          <ChartCard title="Cumulative Token Usage" data={buckets} valueKey="cumulative_tokens" color="#3b82f6" granularity={granularity} format={fmtTokens} showTotal={false} showLast />
+
+          <ChartCard title="LLM Cost" data={buckets} valueKey="cost" color="#d97706" granularity={granularity} format={(v) => `$${v.toFixed(3)}`} />
+          <ChartCard title="Cumulative LLM Cost" data={buckets} valueKey="cumulative_cost" color="#d97706" granularity={granularity} format={(v) => `$${v.toFixed(2)}`} showTotal={false} showLast />
+
+          <ChartCard title="LLM Error Rate" subtitle="Fraction of traces that errored" data={buckets} valueKey="llm_error_rate" color="#ef4444" granularity={granularity} format={(v) => `${(v * 100).toFixed(1)}%`} nullAs={0} yMax={1} />
+          <ChartCard title="Cumulative Error Rate" subtitle="Weighted running average" data={buckets} valueKey="cumulative_llm_error_rate" color="#ef4444" granularity={granularity} format={(v) => `${(v * 100).toFixed(1)}%`} nullAs={0} yMax={1} showTotal={false} showLast />
         </div>
+
       </div>
     </div>
   );
@@ -319,13 +272,12 @@ function ChartCard({
   const [tooltip, setTooltip] = useState<{ x: number; y: number; date: string; value: number } | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
 
-  const rawValues = data.map((d) => {
+  const values = data.map((d) => {
     const v = d[valueKey];
-    if (v === null || v === undefined) return nullAs ?? null;
+    if (v === null || v === undefined) return nullAs ?? 0;
     return v as number;
   });
 
-  const values = rawValues.map((v) => v ?? 0);
   const total = values.reduce((s, v) => s + v, 0);
   const maxVal = yMax !== undefined ? yMax : Math.max(...values, 1);
   const n = data.length;
@@ -347,29 +299,27 @@ function ChartCard({
     values.map((v, i) => `L ${xScale(i).toFixed(1)} ${yScale(v).toFixed(1)}`).join(" ") +
     ` L ${xScale(n - 1).toFixed(1)} ${cH} Z`;
 
-  // X-axis labels: ~5 evenly spaced
+  const tz = typeof window !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone : "UTC";
+
+  function formatLabel(rawDate: string): string {
+    const date = new Date(granularity === "hour" ? rawDate + ":00Z" : rawDate + "T00:00:00Z");
+    if (granularity === "hour") {
+      return date.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", hour12: true, timeZone: tz });
+    }
+    return date.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: tz });
+  }
+
   const labelStep = Math.max(1, Math.floor(n / 5));
   const xLabels: { idx: number; label: string }[] = [];
   for (let i = 0; i < n; i++) {
     if (i % labelStep === 0 || i === n - 1) {
-      const rawDate = data[i].date;
-      // Hourly buckets are formatted as "YYYY-MM-DDTHH:00", daily/weekly as "YYYY-MM-DD"
-      const date = new Date(granularity === "hour" ? rawDate + ":00Z" : rawDate + "T00:00:00Z");
-      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-      const label =
-        granularity === "hour"
-          ? date.toLocaleTimeString("en-US", { hour: "numeric", hour12: true, timeZone: tz })
-          : date.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: tz });
-      xLabels.push({ idx: i, label });
+      xLabels.push({ idx: i, label: formatLabel(data[i].date) });
     }
   }
-  // Remove last label if too close to second-to-last
   if (xLabels.length >= 2) {
     const last = xLabels[xLabels.length - 1];
     const prev = xLabels[xLabels.length - 2];
-    if (last.idx - prev.idx < labelStep * 0.5) {
-      xLabels.splice(xLabels.length - 2, 1);
-    }
+    if (last.idx - prev.idx < labelStep * 0.5) xLabels.splice(xLabels.length - 2, 1);
   }
 
   function handleMouseMove(e: React.MouseEvent<SVGSVGElement>) {
@@ -378,12 +328,7 @@ function ChartCard({
     const svgX = ((e.clientX - rect.left) / rect.width) * W - PAD.left;
     const ratio = Math.max(0, Math.min(1, svgX / cW));
     const idx = Math.round(ratio * (n - 1));
-    setTooltip({
-      x: xScale(idx) + PAD.left,
-      y: yScale(values[idx]) + PAD.top,
-      date: data[idx].date,
-      value: values[idx],
-    });
+    setTooltip({ x: xScale(idx) + PAD.left, y: yScale(values[idx]) + PAD.top, date: data[idx].date, value: values[idx] });
   }
 
   const gradId = `grad-${String(valueKey)}`;
@@ -394,11 +339,7 @@ function ChartCard({
       <div className="flex items-start justify-between mb-3">
         <div>
           <h3 className="text-sm font-bold">{title}</h3>
-          {subtitle && (
-            <p className="text-xs" style={{ color: "var(--muted)" }}>
-              {subtitle}
-            </p>
-          )}
+          {subtitle && <p className="text-xs" style={{ color: "var(--muted)" }}>{subtitle}</p>}
         </div>
         <span className="text-xs tabular-nums font-medium" style={{ color: "var(--muted)" }}>
           {showLast ? format(lastValue) : showTotal ? `${format(total)} total` : null}
@@ -423,34 +364,14 @@ function ChartCard({
           <g transform={`translate(${PAD.left}, ${PAD.top})`}>
             <path d={areaPath} fill={`url(#${gradId})`} />
             <path d={linePath} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" />
-
             {xLabels.map(({ idx, label }) => (
-              <text
-                key={idx}
-                x={xScale(idx)}
-                y={cH + 16}
-                textAnchor="middle"
-                fontSize="10"
-                fill="currentColor"
-                opacity="0.4"
-                style={{ color: "var(--muted)" }}
-              >
+              <text key={idx} x={xScale(idx)} y={cH + 16} textAnchor="middle" fontSize="10" fill="currentColor" opacity="0.4" style={{ color: "var(--muted)" }}>
                 {label}
               </text>
             ))}
-
             {tooltip && (
               <>
-                <line
-                  x1={tooltip.x - PAD.left}
-                  y1={0}
-                  x2={tooltip.x - PAD.left}
-                  y2={cH}
-                  stroke={color}
-                  strokeWidth="1"
-                  strokeDasharray="3,3"
-                  opacity="0.5"
-                />
+                <line x1={tooltip.x - PAD.left} y1={0} x2={tooltip.x - PAD.left} y2={cH} stroke={color} strokeWidth="1" strokeDasharray="3,3" opacity="0.5" />
                 <circle cx={tooltip.x - PAD.left} cy={tooltip.y - PAD.top} r="3" fill={color} />
               </>
             )}
@@ -460,25 +381,10 @@ function ChartCard({
         {tooltip && (
           <div
             className="absolute top-0 text-xs rounded-lg border px-2 py-1.5 pointer-events-none z-10"
-            style={{
-              borderColor: "var(--border)",
-              background: "var(--surface)",
-              left: `${(tooltip.x / W) * 100}%`,
-              transform: tooltip.x > W * 0.6 ? "translateX(-110%)" : "translateX(10%)",
-              whiteSpace: "nowrap",
-            }}
+            style={{ borderColor: "var(--border)", background: "var(--surface)", left: `${(tooltip.x / W) * 100}%`, transform: tooltip.x > W * 0.6 ? "translateX(-110%)" : "translateX(10%)", whiteSpace: "nowrap" }}
           >
-            <div style={{ color: "var(--muted)" }}>
-              {granularity === "hour"
-                ? new Date(tooltip.date + ":00Z").toLocaleString("en-US", {
-                    month: "short", day: "numeric", hour: "numeric", hour12: true,
-                    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-                  })
-                : tooltip.date}
-            </div>
-            <div className="font-bold" style={{ color }}>
-              {format(tooltip.value)}
-            </div>
+            <div style={{ color: "var(--muted)" }}>{formatLabel(tooltip.date)}</div>
+            <div className="font-bold" style={{ color }}>{format(tooltip.value)}</div>
           </div>
         )}
       </div>
