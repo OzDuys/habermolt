@@ -1043,72 +1043,113 @@ async def get_moderation_logs(
 # ─── Email Management ────────────────────────────────────────────────────────
 
 
+def _resolve_agent_for_user(db: Session, user_id: str) -> tuple[str, str] | None:
+    """Resolve (agent_id, agent_name) for a user. Checks hosted agents first, then OpenClaw agents.
+    Returns None if no agent found."""
+    from app.models.agent import Agent
+
+    ha = db.query(HostedAgent).filter(HostedAgent.user_id == user_id).first()
+    if ha:
+        return str(ha.agent_id), ha.display_name
+
+    agent = db.query(Agent).filter(Agent.user_id == user_id).first()
+    if agent:
+        return str(agent.id), agent.name
+
+    return None
+
+
+def _get_all_agents_with_users(db: Session, user_ids: list[str] | None = None) -> list[tuple[str, str, str]]:
+    """Get all (user_id, agent_id, agent_name) tuples for users with agents.
+    Includes both hosted and OpenClaw agents."""
+    from app.models.agent import Agent
+
+    results = []
+    seen_user_ids = set()
+
+    # Hosted agents first
+    ha_query = db.query(HostedAgent).filter(HostedAgent.is_active == True)
+    if user_ids:
+        ha_query = ha_query.filter(HostedAgent.user_id.in_(user_ids))
+    for ha in ha_query.all():
+        results.append((ha.user_id, str(ha.agent_id), ha.display_name))
+        seen_user_ids.add(ha.user_id)
+
+    # OpenClaw agents (only those claimed by a user and not already covered by hosted)
+    agent_query = db.query(Agent).filter(
+        Agent.user_id.isnot(None),
+        Agent.api_key.isnot(None),  # active (not deactivated)
+    )
+    if user_ids:
+        agent_query = agent_query.filter(Agent.user_id.in_(user_ids))
+    for agent in agent_query.all():
+        if agent.user_id not in seen_user_ids:
+            results.append((agent.user_id, str(agent.id), agent.name))
+
+    return results
+
+
 @router.post("/send-weekly-summaries", dependencies=[Depends(verify_monitoring_secret)])
 async def send_weekly_summaries(
     db: Session = Depends(get_db),
     user_ids: Optional[list[str]] = None,
 ):
     """Send weekly summary emails to opted-in users (or specific user_ids)."""
-    from app.models.email_preference import EmailPreference
     from app.services.email_service import get_or_create_email_preference, send_weekly_summary_email
     from app.services.weekly_summary_service import get_weekly_summary
     import time
 
-    # Get all hosted agents (optionally filtered by user_ids)
-    query = db.query(HostedAgent).filter(HostedAgent.is_active == True)
-    if user_ids:
-        query = query.filter(HostedAgent.user_id.in_(user_ids))
-    hosted_agents = query.all()
+    all_agents = _get_all_agents_with_users(db, user_ids)
 
     sent = 0
     skipped = 0
     errors = 0
     details = []
 
-    for ha in hosted_agents:
+    for user_id, agent_id, agent_name in all_agents:
         try:
             # Check email preference
-            pref = get_or_create_email_preference(db, ha.user_id)
+            pref = get_or_create_email_preference(db, user_id)
             db.commit()
             if not pref.weekly_summary:
                 skipped += 1
-                details.append({"user_id": ha.user_id, "agent": ha.display_name, "status": "opted_out"})
+                details.append({"user_id": user_id, "agent": agent_name, "status": "opted_out"})
                 continue
 
             # Get summary
-            summary = get_weekly_summary(db, str(ha.agent_id))
+            summary = get_weekly_summary(db, agent_id)
             if summary["is_empty"]:
                 skipped += 1
-                details.append({"user_id": ha.user_id, "agent": ha.display_name, "status": "empty"})
+                details.append({"user_id": user_id, "agent": agent_name, "status": "empty"})
                 continue
 
             # Get user email
             row = db.execute(
                 text('SELECT name, email FROM "user" WHERE id = :uid'),
-                {"uid": ha.user_id},
+                {"uid": user_id},
             ).fetchone()
             if not row or not row[1]:
                 skipped += 1
-                details.append({"user_id": ha.user_id, "agent": ha.display_name, "status": "no_email"})
+                details.append({"user_id": user_id, "agent": agent_name, "status": "no_email"})
                 continue
 
             ok = send_weekly_summary_email(
-                db, row[1], row[0] or "there", ha.display_name, summary, pref.unsubscribe_token,
+                db, row[1], row[0] or "there", agent_name, summary, pref.unsubscribe_token,
             )
             if ok:
                 sent += 1
-                details.append({"user_id": ha.user_id, "agent": ha.display_name, "status": "sent"})
+                details.append({"user_id": user_id, "agent": agent_name, "status": "sent"})
             else:
                 errors += 1
-                details.append({"user_id": ha.user_id, "agent": ha.display_name, "status": "error"})
+                details.append({"user_id": user_id, "agent": agent_name, "status": "error"})
 
             # Brief delay to respect Resend rate limits
             time.sleep(0.2)
         except Exception as e:
             errors += 1
-            details.append({"user_id": ha.user_id, "agent": ha.display_name, "status": "error", "error": str(e)})
+            details.append({"user_id": user_id, "agent": agent_name, "status": "error", "error": str(e)})
 
-    return {"sent": sent, "skipped": skipped, "errors": errors, "total": len(hosted_agents), "details": details}
+    return {"sent": sent, "skipped": skipped, "errors": errors, "total": len(all_agents), "details": details}
 
 
 @router.post("/preview-weekly-summary", dependencies=[Depends(verify_monitoring_secret)])
@@ -1119,11 +1160,12 @@ async def preview_weekly_summary(
     """Preview weekly summary data for a specific user (dry run, no email sent)."""
     from app.services.weekly_summary_service import get_weekly_summary
 
-    ha = db.query(HostedAgent).filter(HostedAgent.user_id == user_id).first()
-    if not ha:
-        raise HTTPException(status_code=404, detail="No hosted agent for this user")
+    resolved = _resolve_agent_for_user(db, user_id)
+    if not resolved:
+        raise HTTPException(status_code=404, detail="No agent found for this user")
+    agent_id, agent_name = resolved
 
-    summary = get_weekly_summary(db, str(ha.agent_id))
+    summary = get_weekly_summary(db, agent_id)
 
     row = db.execute(
         text('SELECT name, email FROM "user" WHERE id = :uid'),
@@ -1134,7 +1176,7 @@ async def preview_weekly_summary(
         "user_id": user_id,
         "user_name": row[0] if row else None,
         "user_email": row[1] if row else None,
-        "agent_name": ha.display_name,
+        "agent_name": agent_name,
         "summary": summary,
     }
 
@@ -1149,11 +1191,12 @@ async def render_weekly_summary(
     from app.services.weekly_summary_service import get_weekly_summary
     from fastapi.responses import HTMLResponse
 
-    ha = db.query(HostedAgent).filter(HostedAgent.user_id == user_id).first()
-    if not ha:
-        raise HTTPException(status_code=404, detail="No hosted agent for this user")
+    resolved = _resolve_agent_for_user(db, user_id)
+    if not resolved:
+        raise HTTPException(status_code=404, detail="No agent found for this user")
+    agent_id, agent_name = resolved
 
-    summary = get_weekly_summary(db, str(ha.agent_id))
+    summary = get_weekly_summary(db, agent_id)
 
     row = db.execute(
         text('SELECT name, email FROM "user" WHERE id = :uid'),
@@ -1165,7 +1208,7 @@ async def render_weekly_summary(
 
     html = render_weekly_summary_html(
         user_name=row[0] if row else "there",
-        agent_name=ha.display_name,
+        agent_name=agent_name,
         summary=summary,
         unsubscribe_token=pref.unsubscribe_token,
     )
@@ -1182,9 +1225,10 @@ async def send_weekly_summary_to_user(
     from app.services.email_service import get_or_create_email_preference, send_weekly_summary_email
     from app.services.weekly_summary_service import get_weekly_summary
 
-    ha = db.query(HostedAgent).filter(HostedAgent.user_id == user_id).first()
-    if not ha:
-        raise HTTPException(status_code=404, detail="No hosted agent for this user")
+    resolved = _resolve_agent_for_user(db, user_id)
+    if not resolved:
+        raise HTTPException(status_code=404, detail="No agent found for this user")
+    agent_id, agent_name = resolved
 
     row = db.execute(
         text('SELECT name, email FROM "user" WHERE id = :uid'),
@@ -1196,17 +1240,17 @@ async def send_weekly_summary_to_user(
     pref = get_or_create_email_preference(db, user_id)
     db.commit()
 
-    summary = get_weekly_summary(db, str(ha.agent_id))
+    summary = get_weekly_summary(db, agent_id)
 
     ok = send_weekly_summary_email(
-        db, row[1], row[0] or "there", ha.display_name, summary, pref.unsubscribe_token,
+        db, row[1], row[0] or "there", agent_name, summary, pref.unsubscribe_token,
     )
 
     return {
         "sent": ok,
         "user_id": user_id,
         "email": row[1],
-        "agent_name": ha.display_name,
+        "agent_name": agent_name,
         "summary_empty": summary["is_empty"],
     }
 
