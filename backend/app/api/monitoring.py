@@ -1699,3 +1699,204 @@ async def get_user_behavior(
         "cohorts": sorted_cohorts,
         "users": users,
     }
+
+
+# ─── Growth Timeseries ───────────────────────────────────────────────────────
+
+
+@router.get("/growth-timeseries")
+async def get_growth_timeseries(
+    granularity: str = Query("week", regex="^(hour|day|week)$"),
+    days: int = Query(90, ge=1, le=365),
+    db: Session = Depends(get_db),
+    _auth: bool = Depends(verify_monitoring_secret),
+):
+    """Bucketed time-series for platform growth and activity trends."""
+    trunc = granularity  # 'day' or 'week'
+    interval = f"{days} days"
+
+    user_rows = db.execute(text(f"""
+        SELECT date_trunc('{trunc}', "createdAt") AS bucket, COUNT(*) AS cnt
+        FROM "user"
+        WHERE "createdAt" >= now() - interval '{interval}'
+        GROUP BY 1 ORDER BY 1
+    """)).fetchall()
+
+    agent_rows = db.execute(text(f"""
+        SELECT date_trunc('{trunc}', created_at) AS bucket, COUNT(*) AS cnt
+        FROM agents
+        WHERE created_at >= now() - interval '{interval}'
+        GROUP BY 1 ORDER BY 1
+    """)).fetchall()
+
+    delib_rows = db.execute(text(f"""
+        SELECT date_trunc('{trunc}', created_at) AS bucket, COUNT(*) AS cnt
+        FROM deliberations
+        WHERE created_at >= now() - interval '{interval}'
+        GROUP BY 1 ORDER BY 1
+    """)).fetchall()
+
+    opinion_rows = db.execute(text(f"""
+        SELECT date_trunc('{trunc}', submitted_at) AS bucket,
+               COUNT(*) AS total,
+               COUNT(*) FILTER (WHERE source IN ('autonomous', 'api')) AS agent_cnt,
+               COUNT(*) FILTER (WHERE source IN ('topic_interview', 'chat_tool', 'creation')) AS user_cnt
+        FROM opinions
+        WHERE submitted_at >= now() - interval '{interval}'
+        GROUP BY 1 ORDER BY 1
+    """)).fetchall()
+
+    ranking_rows = db.execute(text(f"""
+        SELECT date_trunc('{trunc}', submitted_at) AS bucket, COUNT(*) AS cnt
+        FROM rankings
+        WHERE submitted_at >= now() - interval '{interval}'
+        GROUP BY 1 ORDER BY 1
+    """)).fetchall()
+
+    statement_rows = db.execute(text(f"""
+        SELECT date_trunc('{trunc}', generated_at) AS bucket, COUNT(*) AS cnt
+        FROM statements
+        WHERE generated_at >= now() - interval '{interval}'
+          AND NOT is_seed AND contributed_by_agent_id IS NOT NULL
+        GROUP BY 1 ORDER BY 1
+    """)).fetchall()
+
+    trace_rows = db.execute(text(f"""
+        SELECT date_trunc('{trunc}', created_at) AS bucket,
+               COUNT(*) AS traces,
+               COALESCE(SUM(tokens_in + tokens_out), 0) AS tokens,
+               COALESCE(SUM(cost_total), 0.0) AS cost
+        FROM llm_traces
+        WHERE created_at >= now() - interval '{interval}'
+        GROUP BY 1 ORDER BY 1
+    """)).fetchall()
+
+    active_agent_rows = db.execute(text(f"""
+        SELECT date_trunc('{trunc}', submitted_at) AS bucket,
+               COUNT(DISTINCT agent_id) AS active_agents
+        FROM opinions
+        WHERE submitted_at >= now() - interval '{interval}'
+        GROUP BY 1 ORDER BY 1
+    """)).fetchall()
+
+    error_rate_rows = db.execute(text(f"""
+        SELECT date_trunc('{trunc}', created_at) AS bucket,
+               COUNT(*) AS total_traces,
+               COUNT(*) FILTER (WHERE status = 'error') AS error_traces
+        FROM llm_traces
+        WHERE created_at >= now() - interval '{interval}'
+        GROUP BY 1 ORDER BY 1
+    """)).fetchall()
+
+    consensus_change_rows = db.execute(text(f"""
+        SELECT date_trunc('{trunc}', (elem->>'lost_at')::timestamp) AS bucket,
+               COUNT(*) AS changes
+        FROM deliberations,
+             jsonb_array_elements(meta_data->'consensus_history') AS elem
+        WHERE meta_data ? 'consensus_history'
+          AND (elem->>'lost_at') IS NOT NULL
+          AND (elem->>'lost_at')::timestamp >= now() - interval '{interval}'
+        GROUP BY 1 ORDER BY 1
+    """)).fetchall()
+
+    notif_rows = db.execute(text(f"""
+        SELECT date_trunc('{trunc}', created_at) AS bucket,
+               COUNT(*) AS total_notifs,
+               COUNT(*) FILTER (WHERE approval_status IS NOT NULL) AS reviewed_notifs
+        FROM notifications
+        WHERE type = 'agent_action'
+          AND created_at >= now() - interval '{interval}'
+        GROUP BY 1 ORDER BY 1
+    """)).fetchall()
+
+    users_before = db.execute(text(f"""
+        SELECT COUNT(*) FROM "user" WHERE "createdAt" < now() - interval '{interval}'
+    """)).scalar() or 0
+
+    agents_before = db.execute(text(f"""
+        SELECT COUNT(*) FROM agents WHERE created_at < now() - interval '{interval}'
+    """)).scalar() or 0
+
+    # Build full bucket list in the date range
+    now_dt = datetime.utcnow()
+    cutoff_dt = now_dt - timedelta(days=days)
+    if granularity == "week":
+        cutoff_dt -= timedelta(days=cutoff_dt.weekday())  # align to Monday
+    if granularity == "hour":
+        cutoff_dt = cutoff_dt.replace(minute=0, second=0, microsecond=0)
+        step = timedelta(hours=1)
+    elif granularity == "day":
+        cutoff_dt = cutoff_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+        step = timedelta(days=1)
+    else:
+        cutoff_dt = cutoff_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+        step = timedelta(weeks=1)
+
+    bucket_fmt = "%Y-%m-%dT%H:00" if granularity == "hour" else "%Y-%m-%d"
+    all_buckets = []
+    cur = cutoff_dt
+    while cur <= now_dt:
+        all_buckets.append(cur.strftime(bucket_fmt))
+        cur += step
+
+    def to_date_str(v):
+        if not hasattr(v, "strftime"):
+            s = str(v)
+            return s[:13] + ":00" if granularity == "hour" else s[:10]
+        return v.strftime(bucket_fmt)
+
+    user_map = {to_date_str(r.bucket): int(r.cnt) for r in user_rows}
+    agent_map = {to_date_str(r.bucket): int(r.cnt) for r in agent_rows}
+    delib_map = {to_date_str(r.bucket): int(r.cnt) for r in delib_rows}
+    op_total_map = {to_date_str(r.bucket): int(r.total) for r in opinion_rows}
+    op_agent_map = {to_date_str(r.bucket): int(r.agent_cnt) for r in opinion_rows}
+    op_user_map = {to_date_str(r.bucket): int(r.user_cnt) for r in opinion_rows}
+    ranking_map_d = {to_date_str(r.bucket): int(r.cnt) for r in ranking_rows}
+    statement_map_d = {to_date_str(r.bucket): int(r.cnt) for r in statement_rows}
+    trace_map_d = {
+        to_date_str(r.bucket): (int(r.traces), int(r.tokens), float(r.cost))
+        for r in trace_rows
+    }
+    active_agent_map = {to_date_str(r.bucket): int(r.active_agents) for r in active_agent_rows}
+    error_rate_map = {
+        to_date_str(r.bucket): (int(r.total_traces), int(r.error_traces))
+        for r in error_rate_rows
+    }
+    consensus_change_map = {to_date_str(r.bucket): int(r.changes) for r in consensus_change_rows}
+    notif_map_d = {
+        to_date_str(r.bucket): (int(r.total_notifs), int(r.reviewed_notifs))
+        for r in notif_rows
+    }
+
+    result = []
+    for b in all_buckets:
+        t = trace_map_d.get(b, (0, 0, 0.0))
+        et = error_rate_map.get(b, (0, 0))
+        nm = notif_map_d.get(b, (0, 0))
+        result.append({
+            "date": b,
+            "new_users": user_map.get(b, 0),
+            "new_agents": agent_map.get(b, 0),
+            "deliberations_created": delib_map.get(b, 0),
+            "opinions_total": op_total_map.get(b, 0),
+            "agent_opinions": op_agent_map.get(b, 0),
+            "user_opinions": op_user_map.get(b, 0),
+            "rankings": ranking_map_d.get(b, 0),
+            "statements_proposed": statement_map_d.get(b, 0),
+            "llm_traces": t[0],
+            "tokens_used": t[1],
+            "cost": round(t[2], 6),
+            "active_agents": active_agent_map.get(b, 0),
+            "llm_error_rate": round(et[1] / et[0], 4) if et[0] > 0 else None,
+            "consensus_changes": consensus_change_map.get(b, 0),
+            "notifications_total": nm[0],
+            "notifications_reviewed": nm[1],
+            "notification_review_rate": round(nm[1] / nm[0], 4) if nm[0] > 0 else None,
+        })
+
+    return {
+        "buckets": result,
+        "granularity": granularity,
+        "days": days,
+        "totals_at_start": {"users": int(users_before), "agents": int(agents_before)},
+    }
