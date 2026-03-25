@@ -28,8 +28,18 @@ interface PreviewResult {
     rankings_count: number;
     statements_proposed: number;
     consensus_wins: Array<{ question: string; statement_title: string }>;
+    highlight: { title: string; text: string; rank: number; deliberation_question: string } | null;
+    active_deliberation_questions: string[];
     is_empty: boolean;
   };
+}
+
+interface SendToUserResult {
+  sent: boolean;
+  user_id: string;
+  email: string;
+  agent_name: string;
+  summary_empty: boolean;
 }
 
 export default function EmailsPage() {
@@ -38,6 +48,11 @@ export default function EmailsPage() {
   const [previewUserId, setPreviewUserId] = useState("");
   const [previewing, setPreviewing] = useState(false);
   const [preview, setPreview] = useState<PreviewResult | null>(null);
+  const [sendToUserId, setSendToUserId] = useState("");
+  const [sendingToUser, setSendingToUser] = useState(false);
+  const [sendToUserResult, setSendToUserResult] = useState<SendToUserResult | null>(null);
+  const [renderHtml, setRenderHtml] = useState("");
+  const [rendering, setRendering] = useState(false);
   const [error, setError] = useState("");
 
   const handleSendAll = async () => {
@@ -68,16 +83,23 @@ export default function EmailsPage() {
     setPreviewing(true);
     setError("");
     setPreview(null);
+    setRenderHtml("");
     try {
-      const res = await fetch(
-        `/api/backend/monitoring/preview-weekly-summary?user_id=${encodeURIComponent(previewUserId.trim())}`,
-        {
-          method: "POST",
-          headers: { "X-Monitoring-Secret": getSecret() },
-        }
-      );
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      setPreview(await res.json());
+      const [dataRes, htmlRes] = await Promise.all([
+        fetch(
+          `/api/backend/monitoring/preview-weekly-summary?user_id=${encodeURIComponent(previewUserId.trim())}`,
+          { method: "POST", headers: { "X-Monitoring-Secret": getSecret() } }
+        ),
+        fetch(
+          `/api/backend/monitoring/render-weekly-summary?user_id=${encodeURIComponent(previewUserId.trim())}`,
+          { method: "POST", headers: { "X-Monitoring-Secret": getSecret() } }
+        ),
+      ]);
+      if (!dataRes.ok) throw new Error(`HTTP ${dataRes.status}`);
+      setPreview(await dataRes.json());
+      if (htmlRes.ok) {
+        setRenderHtml(await htmlRes.text());
+      }
     } catch (e: any) {
       setError(e.message || "Failed to preview");
     } finally {
@@ -123,6 +145,76 @@ export default function EmailsPage() {
         >
           {sending ? "Sending..." : "Send to All Opted-In Users"}
         </button>
+      </div>
+
+      {/* Send to Specific User */}
+      <div
+        className="rounded-xl border p-5 mb-6"
+        style={{ borderColor: "var(--border)", background: "var(--surface)" }}
+      >
+        <h2 className="text-sm font-semibold mb-2" style={{ color: "var(--foreground)" }}>
+          Send to Specific User
+        </h2>
+        <p className="text-xs mb-4" style={{ color: "var(--muted)" }}>
+          Send a weekly summary to a single user (bypasses opt-out and empty checks).
+        </p>
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault();
+            if (!sendToUserId.trim()) return;
+            setSendingToUser(true);
+            setError("");
+            setSendToUserResult(null);
+            try {
+              const res = await fetch(
+                `/api/backend/monitoring/send-weekly-summary-to-user?user_id=${encodeURIComponent(sendToUserId.trim())}`,
+                {
+                  method: "POST",
+                  headers: { "X-Monitoring-Secret": getSecret() },
+                }
+              );
+              if (!res.ok) throw new Error(`HTTP ${res.status}`);
+              setSendToUserResult(await res.json());
+            } catch (e: any) {
+              setError(e.message || "Failed to send");
+            } finally {
+              setSendingToUser(false);
+            }
+          }}
+          className="flex gap-2"
+        >
+          <input
+            type="text"
+            value={sendToUserId}
+            onChange={(e) => setSendToUserId(e.target.value)}
+            placeholder="User ID"
+            className="flex-1 px-3 py-2 rounded-lg border text-sm"
+            style={{
+              borderColor: "var(--border)",
+              background: "var(--background)",
+              color: "var(--foreground)",
+            }}
+          />
+          <button
+            type="submit"
+            disabled={sendingToUser || !sendToUserId.trim()}
+            className="px-4 py-2 rounded-lg text-sm font-medium transition-opacity hover:opacity-90 disabled:opacity-50"
+            style={{ background: "var(--foreground)", color: "var(--background)" }}
+          >
+            {sendingToUser ? "Sending..." : "Send"}
+          </button>
+        </form>
+        {sendToUserResult && (
+          <div className="mt-3 rounded-lg border p-3 text-sm" style={{ borderColor: "var(--border)", background: "var(--background)" }}>
+            <div style={{ color: sendToUserResult.sent ? "#16a34a" : "#dc2626" }}>
+              {sendToUserResult.sent ? "Sent successfully" : "Failed to send"}
+            </div>
+            <div className="mt-1 text-xs" style={{ color: "var(--muted)" }}>
+              {sendToUserResult.agent_name} &rarr; {sendToUserResult.email}
+              {sendToUserResult.summary_empty && " (note: summary was empty)"}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Send Results */}
@@ -254,8 +346,41 @@ export default function EmailsPage() {
                     </ul>
                   </div>
                 )}
+                {preview.summary.highlight && (
+                  <div>
+                    <strong>Highlight (rank #{preview.summary.highlight.rank}):</strong>
+                    <div className="ml-4 mt-1 italic" style={{ color: "var(--muted)" }}>
+                      &ldquo;{preview.summary.highlight.text}&rdquo;
+                      <span className="not-italic"> in &ldquo;{preview.summary.highlight.deliberation_question}&rdquo;</span>
+                    </div>
+                  </div>
+                )}
+                {preview.summary.active_deliberation_questions.length > 0 && (
+                  <div>
+                    <strong>Active in {preview.summary.active_deliberation_questions.length} deliberation{preview.summary.active_deliberation_questions.length !== 1 ? "s" : ""}:</strong>
+                    <ul className="ml-4 mt-1 list-disc" style={{ color: "var(--muted)" }}>
+                      {preview.summary.active_deliberation_questions.map((q, i) => (
+                        <li key={i}>{q}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
             </div>
+
+            {renderHtml && (
+              <div>
+                <h3 className="text-xs font-semibold mb-2" style={{ color: "var(--foreground)" }}>
+                  Rendered Email
+                </h3>
+                <iframe
+                  srcDoc={renderHtml}
+                  className="w-full rounded-lg border"
+                  style={{ borderColor: "var(--border)", height: 600, background: "#f5f5f5" }}
+                  sandbox=""
+                />
+              </div>
+            )}
           </div>
         )}
       </div>

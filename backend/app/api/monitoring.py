@@ -1139,6 +1139,78 @@ async def preview_weekly_summary(
     }
 
 
+@router.post("/render-weekly-summary", dependencies=[Depends(verify_monitoring_secret)])
+async def render_weekly_summary(
+    user_id: str,
+    db: Session = Depends(get_db),
+):
+    """Render the full weekly summary email HTML for preview (no email sent)."""
+    from app.services.email_service import get_or_create_email_preference, render_weekly_summary_html
+    from app.services.weekly_summary_service import get_weekly_summary
+    from fastapi.responses import HTMLResponse
+
+    ha = db.query(HostedAgent).filter(HostedAgent.user_id == user_id).first()
+    if not ha:
+        raise HTTPException(status_code=404, detail="No hosted agent for this user")
+
+    summary = get_weekly_summary(db, str(ha.agent_id))
+
+    row = db.execute(
+        text('SELECT name, email FROM "user" WHERE id = :uid'),
+        {"uid": user_id},
+    ).fetchone()
+
+    pref = get_or_create_email_preference(db, user_id)
+    db.commit()
+
+    html = render_weekly_summary_html(
+        user_name=row[0] if row else "there",
+        agent_name=ha.display_name,
+        summary=summary,
+        unsubscribe_token=pref.unsubscribe_token,
+    )
+
+    return HTMLResponse(content=html)
+
+
+@router.post("/send-weekly-summary-to-user", dependencies=[Depends(verify_monitoring_secret)])
+async def send_weekly_summary_to_user(
+    user_id: str,
+    db: Session = Depends(get_db),
+):
+    """Send weekly summary email to a specific user (ignores opt-out and empty check)."""
+    from app.services.email_service import get_or_create_email_preference, send_weekly_summary_email
+    from app.services.weekly_summary_service import get_weekly_summary
+
+    ha = db.query(HostedAgent).filter(HostedAgent.user_id == user_id).first()
+    if not ha:
+        raise HTTPException(status_code=404, detail="No hosted agent for this user")
+
+    row = db.execute(
+        text('SELECT name, email FROM "user" WHERE id = :uid'),
+        {"uid": user_id},
+    ).fetchone()
+    if not row or not row[1]:
+        raise HTTPException(status_code=404, detail="No email found for this user")
+
+    pref = get_or_create_email_preference(db, user_id)
+    db.commit()
+
+    summary = get_weekly_summary(db, str(ha.agent_id))
+
+    ok = send_weekly_summary_email(
+        db, row[1], row[0] or "there", ha.display_name, summary, pref.unsubscribe_token,
+    )
+
+    return {
+        "sent": ok,
+        "user_id": user_id,
+        "email": row[1],
+        "agent_name": ha.display_name,
+        "summary_empty": summary["is_empty"],
+    }
+
+
 # ─── Token Usage ─────────────────────────────────────────────────────────────
 
 

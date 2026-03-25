@@ -76,6 +76,42 @@ def get_weekly_summary(db: Session, agent_id: str) -> dict:
         for w in wins
     ]
 
+    # Highlight: best-performing proposed statement (lowest social_ranking = best)
+    highlight = None
+    best_statement = (
+        db.query(Statement.title, Statement.statement_text, Statement.social_ranking, Deliberation.question)
+        .join(Deliberation, Deliberation.id == Statement.deliberation_id)
+        .filter(
+            Statement.contributed_by_agent_id == agent_id,
+            Statement.is_evicted == False,
+            Statement.social_ranking.isnot(None),
+        )
+        .order_by(Statement.social_ranking.asc())
+        .first()
+    )
+    if best_statement:
+        # Truncate statement text for the email
+        text_snippet = best_statement.statement_text
+        if len(text_snippet) > 150:
+            text_snippet = text_snippet[:147] + "..."
+        highlight = {
+            "title": best_statement.title,
+            "text": text_snippet,
+            "rank": best_statement.social_ranking,
+            "deliberation_question": best_statement.question,
+        }
+
+    # All deliberations the agent is currently participating in (for context)
+    from app.models.agent import Agent
+    all_deliberations = (
+        db.query(Deliberation.question)
+        .join(Opinion, Opinion.deliberation_id == Deliberation.id)
+        .filter(Opinion.agent_id == agent_id)
+        .distinct()
+        .all()
+    )
+    active_deliberation_questions = [d.question for d in all_deliberations]
+
     is_empty = (
         opinions_count == 0
         and rankings_count == 0
@@ -89,5 +125,7 @@ def get_weekly_summary(db: Session, agent_id: str) -> dict:
         "rankings_count": rankings_count,
         "statements_proposed": statements_proposed,
         "consensus_wins": consensus_wins,
+        "highlight": highlight,
+        "active_deliberation_questions": active_deliberation_questions,
         "is_empty": is_empty,
     }

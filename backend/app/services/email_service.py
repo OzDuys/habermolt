@@ -225,17 +225,13 @@ def send_agent_ready_email(db: Session, user_id: str, agent_name: str) -> bool:
 # Weekly summary email
 # ---------------------------------------------------------------------------
 
-def send_weekly_summary_email(
-    db: Session,
-    to_email: str,
+def render_weekly_summary_html(
     user_name: str,
     agent_name: str,
     summary: dict,
-    unsubscribe_token: str,
-) -> bool:
-    """Send weekly agent activity summary. Returns True if sent."""
-    _init_resend()
-
+    unsubscribe_token: str | None = None,
+) -> str:
+    """Build the full weekly summary email HTML. Used by both send and preview."""
     first_name = user_name.split()[0] if user_name else "there"
 
     # Build activity list
@@ -267,6 +263,24 @@ def send_weekly_summary_email(
           <ul style="margin: 8px 0 0; padding-left: 20px;">{wins_list}</ul>
         </div>"""
 
+    # Highlight: best-performing proposed statement
+    highlight_html = ""
+    highlight = summary.get("highlight")
+    if highlight:
+        rank_label = f"#{highlight['rank']}" if highlight["rank"] > 1 else "the consensus winner"
+        highlight_html = f"""
+        <div style="background: #f8f8f8; border-radius: 6px; padding: 14px 16px; margin: 16px 0;">
+          <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #999; margin-bottom: 6px;">
+            Top statement by {agent_name} &mdash; ranked {rank_label}
+          </div>
+          <div style="font-size: 14px; color: #333; font-style: italic; margin-bottom: 4px;">
+            &ldquo;{highlight['text']}&rdquo;
+          </div>
+          <div style="font-size: 12px; color: #888;">
+            in &ldquo;{highlight['deliberation_question']}&rdquo;
+          </div>
+        </div>"""
+
     body = f"""
     <tr>
       <td style="padding: 24px 32px;">
@@ -278,6 +292,7 @@ def send_weekly_summary_email(
           {activity_html}
         </ul>
         {wins_html}
+        {highlight_html}
         <div style="text-align: center; margin: 24px 0;">
           <a href="{settings.FRONTEND_URL}/agent-activity"
              style="display: inline-block; background: {BRAND_COLOR}; color: #fff; padding: 12px 28px;
@@ -285,16 +300,37 @@ def send_weekly_summary_email(
             View Full Activity
           </a>
         </div>
+        <p style="color: #888; font-size: 13px; margin: 16px 0 0; line-height: 1.5;">
+          Want {agent_name} to take a different stance or focus on new topics?
+          <a href="{settings.FRONTEND_URL}/agent-activity" style="color: {BRAND_COLOR};">Chat with your lobster</a>
+          to give feedback or update its instructions.
+        </p>
       </td>
     </tr>
     """
+
+    return _email_wrapper(body, unsubscribe_token)
+
+
+def send_weekly_summary_email(
+    db: Session,
+    to_email: str,
+    user_name: str,
+    agent_name: str,
+    summary: dict,
+    unsubscribe_token: str,
+) -> bool:
+    """Send weekly agent activity summary. Returns True if sent."""
+    _init_resend()
+
+    html = render_weekly_summary_html(user_name, agent_name, summary, unsubscribe_token)
 
     try:
         resend.Emails.send({
             "from": FROM_ADDRESS,
             "to": to_email,
             "subject": f"This week: {agent_name}'s deliberation summary",
-            "html": _email_wrapper(body, unsubscribe_token),
+            "html": html,
             "headers": {
                 "List-Unsubscribe": f"<{_unsubscribe_url(unsubscribe_token)}>",
                 "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
