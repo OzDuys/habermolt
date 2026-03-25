@@ -355,10 +355,11 @@ function ChartCard({
       const rawDate = data[i].date;
       // Hourly buckets are formatted as "YYYY-MM-DDTHH:00", daily/weekly as "YYYY-MM-DD"
       const date = new Date(granularity === "hour" ? rawDate + ":00Z" : rawDate + "T00:00:00Z");
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
       const label =
         granularity === "hour"
-          ? date.toLocaleTimeString("en-US", { hour: "numeric", hour12: true, timeZone: "UTC" })
-          : date.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+          ? date.toLocaleTimeString("en-US", { hour: "numeric", hour12: true, timeZone: tz })
+          : date.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: tz });
       xLabels.push({ idx: i, label });
     }
   }
@@ -470,7 +471,8 @@ function ChartCard({
             <div style={{ color: "var(--muted)" }}>
               {granularity === "hour"
                 ? new Date(tooltip.date + ":00Z").toLocaleString("en-US", {
-                    month: "short", day: "numeric", hour: "numeric", hour12: true, timeZone: "UTC",
+                    month: "short", day: "numeric", hour: "numeric", hour12: true,
+                    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
                   })
                 : tooltip.date}
             </div>
