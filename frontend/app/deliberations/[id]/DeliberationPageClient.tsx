@@ -1931,18 +1931,28 @@ export default function DeliberationPageClient() {
                           {sortedR.map((r, ri) => {
                             const title = stmtMap[r.statement_id] || `#${r.rank}`;
                             const socialRank = socialRankMap[r.statement_id] ?? "?";
+                            const predicted = r.is_predicted;
+                            const authored = (agentContributions.get(a.agent_id) || new Set()).has(r.statement_id);
                             return (
                               <span key={ri} style={{ display: "inline-flex", alignItems: "center" }}>
                                 <span
-                                  title={`${title} (consensus #${socialRank})`}
+                                  title={`${title} (consensus #${socialRank})${predicted ? " — predicted ranking" : ""}${authored ? " — authored by this agent" : ""}`}
                                   style={{
                                     display: "inline-flex", alignItems: "center", justifyContent: "center",
                                     width: 22, height: 22, borderRadius: "50%",
-                                    background: ri === 0 ? clrColor : ri < 3 ? `${clrColor}30` : "rgba(0,0,0,0.06)",
-                                    color: ri === 0 ? "#fff" : ri < 3 ? clrColor : "#999",
+                                    background: predicted
+                                      ? "transparent"
+                                      : ri === 0 ? clrColor : ri < 3 ? `${clrColor}30` : "rgba(0,0,0,0.06)",
+                                    color: predicted
+                                      ? (ri < 3 ? clrColor : "#bbb")
+                                      : ri === 0 ? "#fff" : ri < 3 ? clrColor : "#999",
                                     fontSize: 9, fontWeight: 700,
                                     flexShrink: 0,
-                                    border: ri === 0 ? `1.5px solid ${clrColor}` : "1px solid transparent",
+                                    border: predicted
+                                      ? `1.5px dashed ${ri < 3 ? clrColor : "#ccc"}`
+                                      : ri === 0 ? `1.5px solid ${clrColor}` : "1px solid transparent",
+                                    opacity: predicted ? 0.7 : 1,
+                                    boxShadow: authored && !predicted ? `0 0 0 1.5px ${clrColor}` : undefined,
                                   }}
                                 >
                                   {socialRank}
@@ -1953,10 +1963,16 @@ export default function DeliberationPageClient() {
                               </span>
                             );
                           })}
-                          <span style={{ fontSize: 9, color: "#bbb", marginLeft: 4 }}
-                                title={rankingEntry ? new Date(rankingEntry.submitted_at).toLocaleString() : undefined}>
-                            {sortedR.length} ranked{rankingEntry ? ` ${timeAgo(parseTimestamp(rankingEntry.submitted_at))}` : ""}
-                          </span>
+                          {(() => {
+                            const predictedCount = sortedR.filter(r => r.is_predicted).length;
+                            return (
+                              <span style={{ fontSize: 9, color: "#bbb", marginLeft: 4 }}
+                                    title={rankingEntry ? new Date(rankingEntry.submitted_at).toLocaleString() : undefined}>
+                                {sortedR.length} ranked{predictedCount > 0 ? ` (${predictedCount} predicted)` : ""}
+                                {rankingEntry ? ` ${timeAgo(parseTimestamp(rankingEntry.submitted_at))}` : ""}
+                              </span>
+                            );
+                          })()}
                         </div>
                       );
                     })()}
