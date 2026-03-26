@@ -190,6 +190,23 @@ Respond with ONLY a comma-separated list of categories, nothing else."""
 
 def run_all_hosted_agents(db: Session) -> dict:
     """Run heartbeat for all eligible hosted agents. Called by the cron endpoint."""
+    # First, un-pause any agents whose billing period has reset.
+    # Without this, token-paused agents stay paused forever since nothing
+    # else triggers check_token_limit() for inactive agents.
+    paused_agents = (
+        db.query(HostedAgent)
+        .filter(
+            HostedAgent.is_active == False,
+            HostedAgent.paused_reason == "token_limit",
+            HostedAgent.user_profile.isnot(None),
+        )
+        .all()
+    )
+    for ha in paused_agents:
+        check_token_limit(ha)
+    if paused_agents:
+        db.commit()
+
     agents = (
         db.query(HostedAgent)
         .filter(HostedAgent.is_active == True, HostedAgent.user_profile.isnot(None))
