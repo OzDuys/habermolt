@@ -35,6 +35,7 @@ function getSecret() {
 
 const TRACE_COLORS: Record<string, string> = {
   hosted_agent_heartbeat: "#6366f1",
+  hosted_agent_heartbeat_turn: "#818cf8",
   hosted_agent_ranking: "#8b5cf6",
   hosted_agent_opinion: "#06b6d4",
   hosted_agent_statement: "#f59e0b",

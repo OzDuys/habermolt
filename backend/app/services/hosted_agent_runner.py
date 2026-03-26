@@ -312,9 +312,9 @@ def run_single_hosted_agent(db: Session, hosted_agent: HostedAgent) -> dict:
 
     # Agentic loop
     max_turns = 10
-    for _ in range(max_turns):
+    for turn in range(max_turns):
         client.set_trace_context(
-            trace_type="hosted_agent_heartbeat",
+            trace_type="hosted_agent_heartbeat" if turn == 0 else "hosted_agent_heartbeat_turn",
             agent_id=hosted_agent.agent_id,
             hosted_agent_id=hosted_agent.id,
         )
@@ -412,9 +412,9 @@ def run_single_hosted_agent_stream(db: Session, hosted_agent: HostedAgent):
     started_at = datetime.utcnow()
 
     max_turns = 10
-    for _ in range(max_turns):
+    for turn in range(max_turns):
         client.set_trace_context(
-            trace_type="hosted_agent_heartbeat",
+            trace_type="hosted_agent_heartbeat" if turn == 0 else "hosted_agent_heartbeat_turn",
             agent_id=hosted_agent.agent_id,
             hosted_agent_id=hosted_agent.id,
         )
