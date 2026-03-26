@@ -1331,6 +1331,73 @@ async def get_token_usage(
     return {"agents": results}
 
 
+@router.get("/heartbeat-timeseries")
+async def get_heartbeat_timeseries(
+    days: int = Query(30, ge=1, le=365),
+    granularity: str = Query("day", regex="^(hour|day|week)$"),
+    db: Session = Depends(get_db),
+    _auth: bool = Depends(verify_monitoring_secret),
+):
+    """Time-series of total vs duplicate heartbeats (< 60s apart per agent)."""
+    rows = db.execute(text(f"""
+        WITH hb AS (
+            SELECT
+                created_at,
+                hosted_agent_id,
+                LAG(created_at) OVER (
+                    PARTITION BY hosted_agent_id ORDER BY created_at
+                ) AS prev_at
+            FROM llm_traces
+            WHERE trace_type = 'hosted_agent_heartbeat'
+              AND created_at >= now() - interval '{days} days'
+        ),
+        classified AS (
+            SELECT
+                date_trunc('{granularity}', created_at) AS bucket,
+                CASE
+                    WHEN prev_at IS NOT NULL
+                     AND EXTRACT(EPOCH FROM (created_at - prev_at)) < 60
+                    THEN 1 ELSE 0
+                END AS is_dupe
+            FROM hb
+        )
+        SELECT bucket, COUNT(*) AS total, SUM(is_dupe) AS dupes
+        FROM classified
+        GROUP BY 1
+        ORDER BY 1
+    """)).fetchall()
+
+    row_map = {r.bucket: (int(r.total), int(r.dupes)) for r in rows}
+
+    # Build contiguous bucket list
+    now_dt = datetime.utcnow()
+    cutoff_dt = now_dt - timedelta(days=days)
+    if granularity == "week":
+        cutoff_dt -= timedelta(days=cutoff_dt.weekday())
+    if granularity == "hour":
+        cutoff_dt = cutoff_dt.replace(minute=0, second=0, microsecond=0)
+        step = timedelta(hours=1)
+    elif granularity == "day":
+        cutoff_dt = cutoff_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+        step = timedelta(days=1)
+    else:
+        cutoff_dt = cutoff_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+        step = timedelta(weeks=1)
+
+    buckets = []
+    cur = cutoff_dt
+    while cur <= now_dt:
+        vals = row_map.get(cur, (0, 0))
+        buckets.append({
+            "date": cur.strftime("%Y-%m-%dT%H:00" if granularity == "hour" else "%Y-%m-%d"),
+            "total": vals[0],
+            "dupes": vals[1],
+        })
+        cur += step
+
+    return {"buckets": buckets, "granularity": granularity, "days": days}
+
+
 # ─── User Behavior Analytics ────────────────────────────────────────────────
 
 
