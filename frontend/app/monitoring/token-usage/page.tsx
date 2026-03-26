@@ -36,7 +36,7 @@ function getSecret() {
 const TRACE_COLORS: Record<string, string> = {
   hosted_agent_heartbeat: "#6366f1",
   hosted_agent_heartbeat_turn: "#818cf8",
-  hosted_agent_ranking: "#8b5cf6",
+  hosted_agent_ranking: "#f43f5e",
   hosted_agent_opinion: "#06b6d4",
   hosted_agent_statement: "#f59e0b",
   hosted_agent_chat: "#10b981",
@@ -104,10 +104,11 @@ export default function TokenUsagePage() {
 
       {/* Summary */}
       <div
-        className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4"
+        className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-5"
       >
         {[
           { label: "Total tracked", value: totalTokens.toLocaleString() },
+          { label: "Avg per user", value: agents.length > 0 ? `${(totalTokens / agents.length / 1000).toFixed(1)}K` : "0" },
           { label: "Total in traces", value: totalTraces.toLocaleString() },
           { label: "Drift", value: (totalTokens - totalTraces).toLocaleString() },
           {
@@ -223,7 +224,7 @@ export default function TokenUsagePage() {
                       className="inline-block h-1.5 w-1.5 rounded-full"
                       style={{ background: TRACE_COLORS[type] || "#94a3b8" }}
                     />
-                    {shortType(type)}: {(data.tokens / 1000).toFixed(0)}K ({data.count}x)
+                    {shortType(type)}: {(data.tokens / 1000).toFixed(0)}K ({a.tokens_used_period > 0 ? ((data.tokens / a.tokens_used_period) * 100).toFixed(0) : 0}%)
                   </span>
                 ))}
               </div>
