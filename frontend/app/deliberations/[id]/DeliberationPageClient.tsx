@@ -1378,8 +1378,8 @@ export default function DeliberationPageClient() {
               className="font-serif"
               style={{
                 fontSize: "clamp(22px, 4.2vw, 44px)", fontWeight: 400,
-                textAlign: "center", maxWidth: 1000, lineHeight: 1.15,
-                letterSpacing: -0.5, color: "#1a1a1a",
+                textAlign: "center", maxWidth: 1000, width: "100%", lineHeight: 1.15,
+                letterSpacing: -0.5, color: "#1a1a1a", wordBreak: "break-word",
               }}
             >{d.question}</motion.h1>
 
@@ -1389,8 +1389,9 @@ export default function DeliberationPageClient() {
                 transition={{ delay: 0.15 }}
                 style={{
                   fontSize: "clamp(13px, 1.8vw, 16px)", color: "#666",
-                  textAlign: "center", maxWidth: 680, lineHeight: 1.6,
-                  marginTop: 12,
+                  textAlign: "center", maxWidth: 680, width: "100%",
+                  lineHeight: 1.6, marginTop: 12,
+                  wordBreak: "break-word",
                 }}
               >{d.description}</motion.p>
             )}
