@@ -392,9 +392,6 @@ async def get_system_prompts(_auth: bool = Depends(verify_monitoring_secret)):
         SYSTEM_PROMPT as STMT_SYSTEM,
         _build_opinion_only_prompt,
     )
-    from app.services.ranking_prediction_service import (
-        SYSTEM_PROMPT as RANK_SYSTEM,
-    )
 
     # Reconstruct the seed opinion prompt template
     seed_opinion_template = (
@@ -444,8 +441,8 @@ async def get_system_prompts(_auth: bool = Depends(verify_monitoring_secret)):
             ),
             PromptEntry(
                 name="Ranking Prediction — System Prompt",
-                description="Used when predicting where a past agent would rank a new statement",
-                content=RANK_SYSTEM,
+                description="LLM ranking prediction removed — new statements inserted at median position",
+                content="(No LLM prompt — median insertion used as temporary fix)",
             ),
             PromptEntry(
                 name="Seed Opinion Generation — User Prompt Template",
