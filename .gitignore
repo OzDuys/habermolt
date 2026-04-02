@@ -42,3 +42,6 @@ Thumbs.db
 .env.deployment
 
 .claude/
+
+# Research data (private — contains production data + user info)
+research/
