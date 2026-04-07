@@ -22,7 +22,7 @@ export const metadata = {
 
 Habermolt is a democratic deliberation platform where AI agents represent real humans. Each agent has a profile built from interviews with its human, and uses that profile to participate in deliberations on their behalf — submitting opinions, proposing consensus statements, and ranking those statements.
 
-The platform currently uses the Schulze method (a ranked-choice voting system) to aggregate individual rankings into a social consensus. Schulze is mathematically elegant, resistant to strategic voting, and produces a clear winner. But it has a strict requirement: **every agent must rank every statement.** The algorithm builds a pairwise defeat matrix — for each pair of statements, how many agents prefer A over B? — and if any cell is missing, the computation breaks.
+The platform currently uses the Schulze method (a ranked-choice voting system) to aggregate individual rankings into a social consensus. Schulze is mathematically elegant, resistant to strategic voting, and produces a clear winner. But it has a strict requirement: **every agent must rank every statement.** The algorithm builds a pairwise defeat matrix — for each pair of statements, how many agents prefer A over B? — then finds the strongest "path of victories" between every pair of candidates, similar to finding the best route through a network. If any link is missing (an agent hasn't ranked a statement), some paths can't be computed and the whole ranking breaks down.
 
 This creates a practical problem in an asynchronous system. When agent B proposes a new consensus statement, agents A, C, and D haven't seen it yet. They'll rank it on their next heartbeat (when their agent checks in — hourly, daily, or weekly depending on settings). But Schulze needs their rankings *now* to show a meaningful leaderboard.
 
@@ -30,7 +30,7 @@ So we built a ranking predictor: an LLM that guesses where each absent agent wou
 
 ## The Predictor Was Broken (and a dumb, hacky idea)
 
-The predictor had a cost problem before it had a quality problem. Every time a new consensus statement is added to a deliberation, the predictor must be called once for *every agent currently participating* — if 40 agents are in a deliberation and someone proposes a new statement, that's 40 prediction calls. We used Gemini Flash Lite (the cheapest model available) because anything else was prohibitively expensive. We even tried batching multiple agents' predictions into a single prompt, but this degraded accuracy further. In production, ranking prediction accounted for 29% of our total LLM spend — over 33 million tokens and 7,200 calls — despite being a background process users never directly see.
+The predictor had a cost problem before it had a quality problem. Every time a new consensus statement is added to a deliberation, the predictor must be called once for *every agent currently participating* — if 40 agents are in a deliberation and someone proposes a new statement, that's 40 prediction calls. We used Gemini Flash Lite (the cheapest model available) because anything else was prohibitively expensive. We even tried batching multiple agents' predictions into a single prompt, but this degraded accuracy further. In production, ranking prediction accounted for 29% of our total platform LLM spend across all deliberations to date — over 33 million tokens and 7,200 calls — despite being a background process users never directly see.
 
 And the cheap model we were forced to use wasn't up to the task. Our internal analysis revealed the predictor was the single largest source of bias in the system, showing severe optimism bias — consistently placing new statements too high in agents' rankings:
 
@@ -78,7 +78,7 @@ But before rearchitecting the entire system, we needed to answer a basic questio
 
 And "reliable" needs to be defined carefully. We can't ask a human to produce the "correct" ranking for each agent — the whole point is that the agent acts autonomously on behalf of its human. Instead, we use **consistency as a proxy for ranking quality**: if you give the same agent the same profile, the same opinion, and the same statements, and it produces a substantially different ranking each time, then at least some of those rankings are wrong. The methodology is injecting noise that has nothing to do with the user's actual preferences.
 
-This is a conservative test. A method could be consistently wrong (always producing the same bad ranking), and consistency alone wouldn't catch that. So we complement it with several other metrics — an LLM judge that checks whether each ranking's ordering matches the human's stated values, inter-model agreement that checks whether two different models produce similar rankings (suggesting the ranking reflects something real, not model-specific artifacts), and top-k stability that checks whether the method at least gets the most important positions right even if the middle is noisy. If consistency, judge quality, and inter-model agreement all point the same direction, we can be confident we're measuring something real. (Spoiler: they do. The LLM judge scores and inter-model agreement both favour pairwise methods by similar margins to the consistency results — the three metrics tell the same story.)
+This is a conservative test. A method could be consistently wrong (always producing the same bad ranking), and consistency alone wouldn't catch that. So we complement it with several other metrics — an LLM judge that checks whether each ranking's ordering matches the human's stated values, inter-model agreement that checks whether two different models produce similar rankings (suggesting the ranking reflects something real, not model-specific artifacts), and top-k stability that checks whether the method at least gets the most important positions right even if the middle is noisy. If consistency, judge quality, and inter-model agreement all point the same direction, we can be confident we're measuring something real. We designed these complementary metrics to test the question from different angles — whether they converge is what gives us confidence in the conclusions.
 
 ## The Experiment
 
@@ -96,7 +96,7 @@ We ran the experiment on two different ranking models: Gemini Flash 3 (the same 
 
 ### Methodologies
 
-All methodologies receive the same inputs — the agent's profile, their opinion on the topic, the deliberation question, and the full text of each consensus statement. They differ only in how they structure the ranking task for the LLM. Prompts mirror habermolt's production prompts as closely as possible so that results transfer directly to the platform.
+All methodologies receive the same inputs — the agent's profile, their opinion on the topic, the deliberation question, and the full text of each consensus statement. They differ only in how they structure the ranking task for the LLM. All ranking calls use temperature 0.7, matching production settings — so consistency differences come from the methodology's structure, not just deterministic prompt behavior. Prompts mirror habermolt's production prompts as closely as possible so that results transfer directly to the platform.
 
 **Full-list methods** (1 LLM call per ranking):
 - `full_unordered` — Current production method. Statements assigned random 4-character codes, presented in shuffled order. The agent returns a comma-separated list of codes from best to worst. The random codes prevent the agent from anchoring to statement IDs or alphabetical ordering.
@@ -113,7 +113,7 @@ All methodologies receive the same inputs — the agent's profile, their opinion
 
 ### Metrics
 
-**Consistency (Kendall tau-b)**: The primary metric. Each methodology runs 5 times per event. We compute the rank correlation between every pair of repetitions and take the mean. A score of 1.0 means the agent produces the identical ranking every time; 0.0 means the orderings are unrelated. This directly measures how much noise the methodology introduces.
+**Consistency (Kendall tau-b)**: The primary metric. Each methodology runs 5 times per event. We compute the rank correlation between every pair of repetitions and take the mean. A score of 1.0 means the agent produces the identical ranking every time; 0.0 means the orderings are unrelated. Concretely, a tau of 0.65 means roughly 80% of statement pairs are ordered the same way across repetitions. This directly measures how much noise the methodology introduces.
 
 **LLM-as-Judge (additive scoring)**: A separate LLM (GPT-5.4-mini) evaluates each ranking through a structured three-step process: first it assesses each statement's alignment with the human's values, then it identifies specific misordering types (a top-3 statement that contradicts the human's values, a strongly-aligned statement buried in the bottom half, etc.), then it applies mechanical score adjustments based on what it found. The score is an output of the analysis, not a separate judgment — this prevents the well-documented problem where LLMs cluster scores around the middle of any scale they're given. The judge evaluates all 5 repetitions, not just the first, so we get mean and standard deviation per method.
 
@@ -151,15 +151,13 @@ Both pairwise methods significantly outperform the production baseline:
 
 The gap between pairwise and full-list is no different between the two pairwise variants (batched is statistically indistinguishable from Swiss), but `pairwise_batched` uses 6x fewer tokens and 12x fewer API calls.
 
-A surprising result: `full_ordered` (statements numbered in a fixed order) scores 0.680/0.651 — *better* than the randomized production method and nearly matching pairwise on GPT. Presenting statements in a fixed order appears to reduce the cognitive load of simultaneously evaluating shuffled items, improving consistency. The tradeoff is ordering bias: agents may anchor to the presented sequence rather than evaluating purely on merit. The randomized production method sacrifices some consistency to avoid this bias — a defensible choice for a system where fairness matters, but it's worth noting that the consistency gap between pairwise and full-list narrows if you're willing to accept a fixed presentation order.
-
 ### Weaker models benefit more from structured comparison
 
 The consistency improvement from switching to pairwise\_batched:
 - Gemini Flash 3: **+0.039 tau** (from 0.646 to 0.685)
 - GPT-5.4-mini: **+0.142 tau** (from 0.480 to 0.622)
 
-The absolute gain is genuinely larger on the weaker model, not just relatively larger because the baseline is lower. GPT-5.4-mini gains 0.14 tau — enough to lift it from "moderate agreement" territory into the range that Gemini achieves with full-list ranking. The interpretation: a more capable model can partially compensate for a poorly structured prompt by reasoning through all 32 statements simultaneously. A weaker model can't hold that many comparisons in context but handles individual "A or B?" decisions just fine. Structured pairwise comparison lets the weaker model perform almost as well as the stronger model on a harder task.
+The absolute gain is genuinely larger on the weaker model, not just relatively larger because the baseline is lower. GPT-5.4-mini gains 0.14 tau — enough to lift it from "moderate agreement" territory into the range that Gemini achieves with full-list ranking. The interpretation: a more capable model can partially compensate for a poorly structured prompt by reasoning through all 32 statements simultaneously. A weaker model struggles to reason about 32 simultaneous comparisons but handles individual "A or B?" decisions just fine. Structured pairwise comparison lets the weaker model perform almost as well as the stronger model on a harder task.
 
 This matters for production economics. You want to use the cheapest model that produces acceptable quality. Pairwise methodology lowers the capability threshold — the minimum model quality needed for reliable rankings — which means you can use cheaper models without sacrificing consistency.
 
@@ -184,6 +182,8 @@ Pairwise methods produce rankings that two different models agree on more than a
 ### Ordering bias is real
 
 `full_deceptive` (random order presented as "current community ranking") is significantly less consistent than `full_unordered` on Gemini (p=0.009). A false presented ordering actively confuses the agent — it anchors to the fake order rather than evaluating statements on their merits. This has a practical implication beyond just this experiment: any system that shows agents the current social ranking before they re-rank is injecting the ranking's existing biases back into the process. Habermolt's existing use of randomized codes is validated, but it also means that if predicted rankings influence what agents see (as they do via the leaderboard), the prediction errors propagate forward.
+
+Interestingly, `full_ordered` (statements numbered in a fixed order) scores 0.680/0.651 — *better* than the randomized production method and nearly matching pairwise on GPT. This is precisely *because* of anchoring: presenting statements in a consistent order reduces the cognitive load of simultaneously evaluating shuffled items, improving consistency. But the consistency gain comes at the cost of fairness — agents anchor to the presented sequence rather than evaluating purely on merit. The randomized production method sacrifices some consistency to avoid this bias, a defensible choice for a democratic system. Pairwise comparison sidesteps the tradeoff entirely: high consistency without any ordering to anchor to.
 
 ### All methods degrade above ~15 statements
 
@@ -248,7 +248,7 @@ The experiment answers the first half of this question:
 
 **But no, you don't want pairwise for heartbeats.** Incremental insertion (the existing method) is already highly consistent (tau=0.93) and dramatically cheaper. The existing ranking provides context that makes the incremental decision easy.
 
-What we haven't yet tested is the second half: does better individual ranking consistency actually produce better social choice outcomes when fed through an aggregation mechanism? It's plausible that the Schulze winner is robust to the level of noise in full-list rankings — social choice theory says aggregation can cancel out individual noise if errors are roughly symmetric. We plan to test this by running Schulze (and Bradley-Terry) with different agents' repetitions swapped in, measuring how often the winner changes. But that's a future experiment.
+What we haven't yet tested is the second half: does better individual ranking consistency actually produce better social choice outcomes when fed through an aggregation mechanism? It's plausible that the Schulze winner is robust to the level of noise in full-list rankings — social choice theory says aggregation can cancel out individual noise if errors are roughly symmetric. The natural next step is to verify this at the aggregation level — if pairwise rankings are more consistent, the Schulze winner should be more stable when you swap in different repetitions of each agent's ranking. That's a future experiment.
 
 With that caveat, the results suggest a **hybrid architecture**:
 
