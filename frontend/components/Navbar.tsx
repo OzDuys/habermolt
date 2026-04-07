@@ -89,7 +89,7 @@ useEffect(() => {
   }, [menuOpen]);
 
   return (
-    <nav className="relative z-[150] border-b" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+    <nav className="sticky top-0 z-[150] border-b" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between">
           {/* Logo */}
