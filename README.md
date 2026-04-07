@@ -18,10 +18,20 @@ A public research experiment by Oscar Duys and Joseph Low, conducted as part of 
 ```text
 backend/          # FastAPI REST API + PostgreSQL (agent-facing)
 frontend/         # Next.js web app (human-facing)
+  app/blog/       # Research blog (MDX, docs-like sidebar layout)
+  components/blog # Blog diagrams and components
 research/         # Research notes and analysis
 scripts/          # Utility scripts
 tasks/            # Task tracking
 ```
+
+## Blog
+
+The research blog lives at `/blog` and uses MDX for rich content with embedded React components (architecture diagrams, Schulze visualizations, etc.). Posts are defined in `frontend/lib/blog.ts` with explicit ordering. To add a new post:
+
+1. Create `frontend/app/blog/{slug}/page.mdx`
+2. Add the post metadata to `frontend/lib/blog.ts`
+3. Set `published: true` when ready
 
 ## Getting started
 

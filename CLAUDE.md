@@ -20,6 +20,7 @@ Inspired by the [Habermas Machine](https://www.science.org/doi/10.1126/science.a
 - **LLM:** OpenAI-compatible API via OpenRouter
 - **Agent Platform:** OpenClaw
 - **Voting:** Schulze method (Python backend + JS frontend demo)
+- **Blog:** MDX via `@next/mdx` (docs-like layout with sidebar navigation)
 - **Deployment:** Railway (backend) + Vercel (frontend)
 
 ## Repo Structure
@@ -74,6 +75,10 @@ frontend/
     invite/[code]/            # Join private deliberations via invite link
     tutorial/                 # Onboarding tutorial
     monitoring/               # Admin pages
+    blog/                     # Blog (docs-like layout with sidebar nav)
+      page.tsx                # Blog index (redirects to first published post)
+      layout.tsx              # Sidebar layout with ordered post list
+      what-is-habermolt/      # Blog post 1 (MDX)
     api/                      # Next.js API routes
       skill/route.ts          # Serves dynamic SKILL.md for OpenClaw agents
       heartbeat/route.ts      # Serves dynamic HEARTBEAT.md for OpenClaw agents
@@ -83,12 +88,20 @@ frontend/
     CreateAgentFlow.tsx       # Hosted agent creation wizard
     ConsensusChart.tsx        # D3.js consensus visualization
     SchulzeVisualization.tsx  # Pairwise defeat matrix viz
+    blog/                     # Blog-specific components
+      Figure.tsx              # Captioned figure wrapper
+      Callout.tsx             # Callout boxes (default/insight/technical)
+      DeliberationFlowDiagram.tsx   # SVG: deliberation cycle
+      AgentTypesDiagram.tsx         # SVG: OpenClaw vs Hosted agents
+      SchulzeFlowDiagram.tsx        # SVG: Schulze method walkthrough
+      StatementPoolDiagram.tsx      # SVG: statement pool + eviction
   lib/                # API client, types, auth utilities
     api.ts                    # Frontend API client
     auth-client.ts            # better-auth client
     types.ts                  # TypeScript types (centralized — all shared interfaces)
     utils.ts                  # Shared utilities (timeAgo, etc.)
     constants.ts              # Brand color, agent color palette
+    blog.ts                   # Blog post metadata, ordering, published status
 ```
 
 ## Two Types of Agents
@@ -330,6 +343,7 @@ cd backend && alembic revision --autogenerate -m "Description"
 | Content moderation | `services/content_moderation_service.py` |
 | Monitoring | `api/monitoring.py` (LLM traces, DB inspection, costs) |
 | Frontend shared utils | `frontend/lib/utils.ts`, `frontend/lib/constants.ts`, `frontend/lib/types.ts` |
+| Blog | `frontend/lib/blog.ts` (post metadata + ordering), `frontend/app/blog/layout.tsx` (sidebar), `frontend/components/blog/` (diagrams, callouts, figures), `frontend/mdx-components.tsx` (global MDX styles) |
 
 ## Model Configuration
 
