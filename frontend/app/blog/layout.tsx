@@ -114,11 +114,6 @@ export default function BlogLayout({ children }: { children: React.ReactNode }) 
                   </span>
                   <div>
                     <p className="text-sm font-medium">{post.title}</p>
-                    {post.date && (
-                      <p className="text-xs" style={{ color: "var(--muted)" }}>
-                        {post.date}
-                      </p>
-                    )}
                   </div>
                 </Link>
               );
