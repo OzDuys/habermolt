@@ -39,22 +39,32 @@ if [ -x "/opt/homebrew/Cellar/postgresql@17/17.9/bin/pg_dump" ]; then
 fi
 
 DUMP_FILE="/tmp/habermolt_prod_dump.dump"
+LOCAL_BACKUP="/tmp/habermolt_local_backup.dump"
 
-echo "1/4  Dumping production database..."
+echo "1/5  Backing up local database '$LOCAL_DB'..."
+$PG_DUMP "$LOCAL_URL" --no-owner --no-acl -F c -f "$LOCAL_BACKUP" 2>/dev/null && \
+  echo "     Saved to $LOCAL_BACKUP" || \
+  echo "     No existing local database to back up, skipping."
+
+echo "2/5  Dumping production database..."
 $PG_DUMP "$PROD_URL" --no-owner --no-acl -F c -f "$DUMP_FILE"
 
-echo "2/4  Terminating local connections to $LOCAL_DB..."
+echo "3/5  Terminating local connections to $LOCAL_DB..."
 psql -d postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$LOCAL_DB' AND pid <> pg_backend_pid();" > /dev/null 2>&1 || true
 
-echo "3/4  Dropping and recreating $LOCAL_DB..."
+echo "4/5  Dropping and recreating $LOCAL_DB..."
 dropdb "$LOCAL_DB" 2>/dev/null || true
 createdb "$LOCAL_DB"
 psql -d "$LOCAL_DB" -c "CREATE EXTENSION IF NOT EXISTS vector;" > /dev/null 2>&1
 
-echo "4/4  Restoring production dump..."
+echo "5/5  Restoring production dump..."
 $PG_RESTORE --no-owner --no-acl -d "$LOCAL_URL" "$DUMP_FILE" 2>&1 | grep -v "transaction_timeout" || true
 
 rm -f "$DUMP_FILE"
 
 echo ""
 echo "Done! Local database '$LOCAL_DB' is now a copy of production."
+if [ -f "$LOCAL_BACKUP" ]; then
+  echo "To restore the previous local database:"
+  echo "  $PG_RESTORE --no-owner --no-acl -d $LOCAL_URL $LOCAL_BACKUP"
+fi
