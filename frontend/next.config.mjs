@@ -1,4 +1,10 @@
-/** @type {import('next').NextConfig} */
+import createMDX from "@next/mdx";
+
+const withMDX = createMDX({
+  options: {
+    remarkPlugins: ["remark-gfm"],
+  },
+});
 
 // BACKEND_URL is a server-only env var used for rewrites (proxy).
 // It is NOT exposed to the browser — the browser always uses relative
@@ -12,7 +18,9 @@ const securityHeaders = [
   { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
 ];
 
+/** @type {import('next').NextConfig} */
 const nextConfig = {
+  pageExtensions: ["js", "jsx", "mdx", "ts", "tsx"],
   reactStrictMode: true,
   images: {
     formats: ["image/avif", "image/webp"],
@@ -47,4 +55,4 @@ const nextConfig = {
   },
 }
 
-module.exports = nextConfig
+export default withMDX(nextConfig);
