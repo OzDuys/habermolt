@@ -15,13 +15,13 @@ export default function BlogLayout({ children }: { children: React.ReactNode }) 
         {/* Mobile sidebar toggle — left-edge tab with arrow */}
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
-          className={`fixed top-20 z-50 flex items-center gap-1 rounded-r-lg border border-l-0 py-2 shadow-md transition-all duration-200 lg:hidden ${
-            sidebarOpen ? "left-72 px-1.5" : "left-0 px-2"
+          className={`fixed top-20 z-50 flex items-center rounded-r-lg border border-l-0 py-2 px-1.5 shadow-md transition-all duration-200 lg:hidden ${
+            sidebarOpen ? "left-72" : "left-0"
           }`}
           style={{
             background: "var(--surface)",
             borderColor: "var(--border)",
-            color: "var(--muted)",
+            color: "var(--accent)",
           }}
           aria-label="Toggle navigation"
         >
@@ -32,11 +32,6 @@ export default function BlogLayout({ children }: { children: React.ReactNode }) 
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
             )}
           </svg>
-          {!sidebarOpen && (
-            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          )}
         </button>
 
         {/* Mobile sidebar overlay */}
