@@ -12,20 +12,31 @@ export default function BlogLayout({ children }: { children: React.ReactNode }) 
   return (
     <div className="full-bleed">
       <div className="mx-auto flex max-w-7xl">
-        {/* Mobile sidebar toggle */}
+        {/* Mobile sidebar toggle — left-edge tab with arrow */}
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
-          className="fixed bottom-6 right-6 z-50 flex h-12 w-12 items-center justify-center rounded-full shadow-lg lg:hidden"
-          style={{ background: "var(--accent)", color: "white" }}
+          className={`fixed top-20 z-50 flex items-center gap-1 rounded-r-lg border border-l-0 py-2 shadow-md transition-all duration-200 lg:hidden ${
+            sidebarOpen ? "left-72 px-1.5" : "left-0 px-2"
+          }`}
+          style={{
+            background: "var(--surface)",
+            borderColor: "var(--border)",
+            color: "var(--muted)",
+          }}
           aria-label="Toggle navigation"
         >
-          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
             {sidebarOpen ? (
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
             ) : (
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
             )}
           </svg>
+          {!sidebarOpen && (
+            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          )}
         </button>
 
         {/* Mobile sidebar overlay */}
