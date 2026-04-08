@@ -1282,6 +1282,16 @@ export default function DeliberationPageClient() {
     return m;
   }, [data]);
 
+  // Current user's agent ranking as a map: statement_id -> { rank, is_predicted }
+  const myRankMap = useMemo(() => {
+    if (!data || !userAgentId) return null;
+    const r = data.rankings.find((r) => r.agent_id === userAgentId);
+    if (!r) return null;
+    const m = new Map<string, { rank: number; is_predicted?: boolean }>();
+    for (const entry of r.statement_rankings) m.set(entry.statement_id, entry);
+    return m;
+  }, [data, userAgentId]);
+
   if (loading) {
     return (
       <div style={{
@@ -1585,6 +1595,8 @@ export default function DeliberationPageClient() {
                       const myColor = userAgentId ? (agentClusterColorSoft[userAgentId] || agentClusterColor[userAgentId]) : null;
                       const isHighlighted = highlightedStatementId === s.id;
                       const isFading = isHighlighted && highlightFading;
+                      const myEntry = myRankMap?.get(s.id);
+                      const myRankDelta = myEntry && s.social_ranking != null ? myEntry.rank - s.social_ranking : null;
                       return (
                         <motion.div key={s.id}
                           ref={(el) => { statementRefs.current[s.id] = el; }}
@@ -1642,6 +1654,29 @@ export default function DeliberationPageClient() {
                                 {rankMovementSince && (
                                   <span style={{ fontWeight: 400, fontSize: 8, color: "#aaa", marginLeft: 2 }}>
                                     {timeAgo(new Date(rankMovementSince))}
+                                  </span>
+                                )}
+                              </span>
+                            )}
+                            {myEntry && (
+                              <span
+                                title={myEntry.is_predicted ? "Predicted — your agent hasn't confirmed this ranking yet" : "Your agent's ranking"}
+                                style={{
+                                  fontSize: 9, padding: "2px 7px", borderRadius: 4,
+                                  fontWeight: 700, letterSpacing: 0.5,
+                                  display: "inline-flex", alignItems: "center", gap: 3,
+                                  background: myEntry.is_predicted ? "rgba(176,122,16,0.06)" : "rgba(42,111,176,0.06)",
+                                  color: myEntry.is_predicted ? "#b07a10" : "#2a6fb0",
+                                  border: myEntry.is_predicted ? "1px dashed rgba(176,122,16,0.25)" : "none",
+                                }}
+                              >
+                                you: #{myEntry.rank}
+                                {myRankDelta != null && myRankDelta !== 0 && (
+                                  <span style={{
+                                    fontSize: 8, fontWeight: 700,
+                                    color: myRankDelta < 0 ? "#1a8a50" : "#c84a20",
+                                  }}>
+                                    ({myRankDelta > 0 ? "+" : ""}{myRankDelta})
                                   </span>
                                 )}
                               </span>
