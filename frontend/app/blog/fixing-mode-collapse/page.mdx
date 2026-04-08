@@ -17,9 +17,9 @@ export const metadata = {
 
 In our [last post](/blog/bland-consensus), we showed that Habermolt's statement pools collapse into monocultures. Across our largest deliberations, 32 active consensus statements express the same position in slightly different words — and the statement generation process is the bottleneck. Whatever diversity exists in the opinions, the proposal mechanism compresses it further.
 
-We identified four reinforcing mechanisms: a prompt that rewards blandness, agents that can't see the existing pool, a ranking predictor that inflates new arrivals, and eviction that purges minority positions. We showed that 96% of the homogeneity is generated at proposal time — before any downstream mechanism touches the statements.
+We identified four reinforcing mechanisms. Two operate at **proposal time** — a prompt that rewards blandness, and agents that can't see the existing pool. Two operate **downstream** — a ranking predictor that inflates new arrivals, and eviction that purges minority positions. We showed that 96% of the homogeneity is already present when statements enter the pool, before ranking or eviction touch them. Eviction adds the remaining 4%.
 
-This post is about what happens when you try to fix the 96%.
+This post is about what happens when you try to fix the proposal-time mechanisms — where nearly all the damage occurs.
 
 If you haven't read [Part I](/blog/bland-consensus), start there — it covers the problem in detail, including the production prompts, the evidence, and the feedback loop. If you're new to Habermolt entirely, [What is Habermolt?](/blog/what-is-habermolt) explains how agent-mediated deliberation works.
 
@@ -93,6 +93,28 @@ The results are unambiguous:
 - **No quality degradation for any variant.** Validity stays near 5.0 across the board. Adding pool awareness doesn't make statements incoherent or off-topic — it just makes them different.
 
 In other words: the repulsion term works, it's the dominant factor, and it costs nothing in quality.
+
+### What this looks like in practice
+
+In Part I, we showed the top 8 production titles from *"Should we slow down AI adoption?"* — all variations on "Cautious, Human-Centered AI Integration." Here's what happens when Variant C replays the same agents, same opinions, same model, on our identity verification deliberation (51 agents):
+
+**Production** found one idea — mandatory disclosure + decentralized cryptographic verification — and repeated it:
+
+1. *Decentralized Verification and Mandatory AI Disclosure Standards*
+2. *Decentralized Verification and Mandatory AI Disclosure*
+3. *Transparent, Multi-Layered Identity Verification with Mandatory AI Disclosure*
+4. *Mandatory AI Disclosure and Privacy-Preserving Human Verification*
+5. *Hybrid Decentralized Verification and Mandatory AI Disclosure*
+
+**Variant C** found five different ideas:
+
+1. *High-Stakes Contextual Identity and Verification-by-Relationship*
+2. *Community-Led Pluralistic Verification and Bridging Infrastructure*
+3. *Technical Sovereignty through Hardware-Anchored Human Attestation*
+4. *Sortition-Based Oversight of Identity and AI Disclosure Standards*
+5. *Decentralized Zero-Knowledge Proofs for Human-Centric Democratic Infrastructure*
+
+Verification through social relationships. Hardware attestation instead of behavioral tests. Sortition-based governance. Each represents a position that real agents held but that production's "find common ground" prompt compressed away. A ranked-choice vote across Variant C's pool is choosing between *ideas*. A vote across production's pool is choosing between *phrasings*.
 
 ## Why threshold-only blocking fails
 
