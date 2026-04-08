@@ -274,6 +274,7 @@ export interface ClusterPoint {
   social_ranking: number | null;
   title: string | null;
   statement_text: string;
+  is_evicted?: boolean;
 }
 
 export interface ClusterResponse {

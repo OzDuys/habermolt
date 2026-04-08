@@ -1171,6 +1171,27 @@ export default function DeliberationPageClient() {
         setTimeout(() => setHighlightFading(true), 2000),
         setTimeout(() => { setHighlightedStatementId(null); setHighlightFading(false); }, 3500),
       );
+    } else {
+      // Might be an evicted statement — expand the evicted section, then scroll once rendered
+      setShowEvicted(true);
+      setHighlightedStatementId(statementId);
+      setHighlightFading(false);
+      highlightTimers.current.forEach(clearTimeout);
+      highlightTimers.current = [];
+      // Wait for the evicted section to render, then scroll
+      const poll = setInterval(() => {
+        const evEl = statementRefs.current[statementId];
+        if (evEl) {
+          clearInterval(poll);
+          evEl.scrollIntoView({ behavior: "smooth", block: "center" });
+          highlightTimers.current.push(
+            setTimeout(() => setHighlightFading(true), 2000),
+            setTimeout(() => { setHighlightedStatementId(null); setHighlightFading(false); }, 3500),
+          );
+        }
+      }, 50);
+      // Safety: stop polling after 2s
+      setTimeout(() => clearInterval(poll), 2000);
     }
   }, []);
 
@@ -1823,10 +1844,18 @@ export default function DeliberationPageClient() {
                         style={{ overflow: "hidden" }}
                       >
                         <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
-                          {evictedData.statements.map((s) => (
-                            <div key={s.id} style={{
+                          {evictedData.statements.map((s) => {
+                            const isHighlighted = highlightedStatementId === s.id;
+                            const isFading = isHighlighted && highlightFading;
+                            return (
+                            <div key={s.id}
+                              ref={(el) => { statementRefs.current[s.id] = el; }}
+                              style={{
                               padding: "14px 18px", borderRadius: 12,
-                              background: "rgba(0,0,0,0.02)", border: "1px solid rgba(0,0,0,0.04)",
+                              background: isHighlighted && !isFading ? "rgba(200,74,32,0.06)" : "rgba(0,0,0,0.02)",
+                              border: `1px solid ${isHighlighted && !isFading ? "rgba(200,74,32,0.3)" : "rgba(0,0,0,0.04)"}`,
+                              boxShadow: isHighlighted && !isFading ? "0 0 20px rgba(200,74,32,0.25)" : "none",
+                              transition: "background 1.5s ease, border-color 1.5s ease, box-shadow 1.5s ease",
                               opacity: 0.7,
                             }}>
                               <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
@@ -1852,7 +1881,8 @@ export default function DeliberationPageClient() {
                                 {s.statement_text}
                               </div>
                             </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </motion.div>
                     )}

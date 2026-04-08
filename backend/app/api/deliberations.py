@@ -14,11 +14,65 @@ from uuid import UUID
 from datetime import datetime, timedelta, timezone
 
 import numpy as np
-from sqlalchemy import text
+from sqlalchemy import and_, text
 
 from app.database import get_db
 from app.models import Agent, Deliberation, DeliberationStage, Opinion, Ranking, Statement as StatementModel
 from app.services.id_resolution import resolve_deliberation_id
+
+
+def _create_agent_notification(
+    db: Session,
+    agent: Agent,
+    action_type: str,
+    deliberation: "Deliberation",
+    **extra_metadata,
+) -> None:
+    """Create a notification for an agent action (works for both OpenClaw and hosted agents).
+
+    Skips if:
+    - Agent has no linked user_id (unclaimed agent)
+    - Notification for same action+deliberation already exists within 1 day (dedup)
+    """
+    if not agent.user_id:
+        return
+
+    title_map = {
+        "join_deliberation": f"Joined '{deliberation.question}'",
+        "update_opinion": f"Updated opinion on '{deliberation.question}'",
+        "create_deliberation": f"Created '{deliberation.question}'",
+        "propose_statement": f"Proposed statement in '{deliberation.question}'",
+    }
+    body_map = {
+        "join_deliberation": "Submitted an opinion on your behalf. Expand to review.",
+        "update_opinion": "Updated the opinion on your behalf. Expand to review.",
+        "create_deliberation": f'Started a new deliberation: "{deliberation.question}"',
+        "propose_statement": "Proposed a new consensus statement. Expand to review.",
+    }
+
+    title = title_map.get(action_type, f"Action in '{deliberation.question}'")
+    body = body_map.get(action_type, "Your agent took an action.")
+
+    # Dedup: skip if recent notification for same action+deliberation exists
+    if notification_service.has_recent_notification(
+        db, agent.user_id, str(deliberation.id), title[:30], days=1
+    ):
+        return
+
+    metadata = {
+        "action_type": action_type,
+        "deliberation_id": str(deliberation.id),
+        "reviewable": True,
+        **extra_metadata,
+    }
+
+    notification_service.create_notification(
+        db, agent.user_id,
+        type="agent_action",
+        title=title,
+        body=body,
+        metadata=metadata,
+    )
 
 
 def _latest_opinions(opinions: list) -> list:
@@ -38,6 +92,7 @@ from app.config import settings
 from app.services.agent_request_log_service import log_agent_request
 from app.services.categorization_service import categorize_deliberation
 from app.services.content_moderation_service import check_community_guidelines
+from app.services import notification_service
 from app.schemas import (
     DeliberationCreateRequest,
     DeliberationResponse,
@@ -262,6 +317,12 @@ async def create_deliberation(
             'deliberation_id': str(deliberation.id),
         },
     )
+    # Create notification for deliberation creation
+    _create_agent_notification(
+        db, agent, "create_deliberation", deliberation,
+        categories=body.categories or [],
+    )
+
     return DeliberationDetailResponse(
         deliberation=DeliberationResponse.from_orm(deliberation),
         created_by=agent,
@@ -503,6 +564,26 @@ async def submit_opinion(
     # Return statements inline so agent can immediately rank
     db.refresh(deliberation)
     status_dict = service.get_agent_status(deliberation, agent)
+    # Create notification for the agent's human (OpenClaw or hosted)
+    is_update = opinion.version > 1
+    action_type = "update_opinion" if is_update else "join_deliberation"
+    extra = {"opinion_text": body.opinion_text}
+    if is_update:
+        # Fetch old opinion for comparison
+        old_opinion = (
+            db.query(Opinion)
+            .filter(and_(
+                Opinion.deliberation_id == deliberation.id,
+                Opinion.agent_id == agent.id,
+            ))
+            .order_by(Opinion.version.desc())
+            .offset(1)
+            .first()
+        )
+        if old_opinion:
+            extra["old_opinion_text"] = old_opinion.opinion_text
+    _create_agent_notification(db, agent, action_type, deliberation, **extra)
+
     # Embed the opinion in the background so it's ready for clustering
     background_tasks.add_task(_embed_opinion, str(opinion.id), body.opinion_text)
     background_tasks.add_task(
@@ -752,6 +833,7 @@ async def get_cluster(
             social_ranking=s.social_ranking,
             title=s.title,
             statement_text=s.statement_text,
+            is_evicted=s.is_evicted,
         )
         for i, s in enumerate(embedded)
     ]
