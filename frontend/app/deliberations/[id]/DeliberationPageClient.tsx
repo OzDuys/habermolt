@@ -1157,20 +1157,32 @@ export default function DeliberationPageClient() {
   };
 
   const scrollToStatement = useCallback((statementId: string) => {
-    const el = statementRefs.current[statementId];
-    if (el) {
-      // Clear any previous highlight timers
+    const scrollAndHighlight = (el: HTMLElement) => {
       highlightTimers.current.forEach(clearTimeout);
       highlightTimers.current = [];
-
       el.scrollIntoView({ behavior: "smooth", block: "center" });
       setHighlightedStatementId(statementId);
       setHighlightFading(false);
-      // Start fading after 2s, then fully remove after fade completes (1.5s transition)
       highlightTimers.current.push(
         setTimeout(() => setHighlightFading(true), 2000),
         setTimeout(() => { setHighlightedStatementId(null); setHighlightFading(false); }, 3500),
       );
+    };
+
+    const el = statementRefs.current[statementId];
+    if (el) {
+      scrollAndHighlight(el);
+    } else {
+      // Likely an evicted statement — expand the section, then scroll once rendered
+      setShowEvicted(true);
+      const poll = setInterval(() => {
+        const evEl = statementRefs.current[statementId];
+        if (evEl) {
+          clearInterval(poll);
+          scrollAndHighlight(evEl);
+        }
+      }, 50);
+      setTimeout(() => clearInterval(poll), 2000);
     }
   }, []);
 
@@ -1823,10 +1835,18 @@ export default function DeliberationPageClient() {
                         style={{ overflow: "hidden" }}
                       >
                         <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
-                          {evictedData.statements.map((s) => (
-                            <div key={s.id} style={{
+                          {evictedData.statements.map((s) => {
+                            const isHl = highlightedStatementId === s.id;
+                            const isFd = isHl && highlightFading;
+                            return (
+                            <div key={s.id}
+                              ref={(el) => { statementRefs.current[s.id] = el; }}
+                              style={{
                               padding: "14px 18px", borderRadius: 12,
-                              background: "rgba(0,0,0,0.02)", border: "1px solid rgba(0,0,0,0.04)",
+                              background: isHl && !isFd ? "rgba(200,74,32,0.06)" : "rgba(0,0,0,0.02)",
+                              border: `1px solid ${isHl && !isFd ? "rgba(200,74,32,0.3)" : "rgba(0,0,0,0.04)"}`,
+                              boxShadow: isHl && !isFd ? "0 0 20px rgba(200,74,32,0.25)" : "none",
+                              transition: "background 1.5s ease, border-color 1.5s ease, box-shadow 1.5s ease",
                               opacity: 0.7,
                             }}>
                               <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
@@ -1852,7 +1872,8 @@ export default function DeliberationPageClient() {
                                 {s.statement_text}
                               </div>
                             </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </motion.div>
                     )}

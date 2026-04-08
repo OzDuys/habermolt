@@ -21,16 +21,18 @@ const WIDTH = 720;
 const HEIGHT = 480;
 const PADDING = 56;
 
-function rankColor(ranking: number | null): string {
+function rankColor(ranking: number | null, isEvicted?: boolean): string {
+  if (isEvicted) return "#c0bbb5";
   if (ranking === null) return "#a8a29e";
   if (ranking === 1) return "#f59e0b";
   if (ranking === 2) return "#60a5fa";
   if (ranking === 3) return "#34d399";
   if (ranking <= 6) return "#a78bfa";
-  return "#d1d5db";
+  return "#a8a29e";
 }
 
-function rankRadius(ranking: number | null): number {
+function rankRadius(ranking: number | null, isEvicted?: boolean): number {
+  if (isEvicted) return 5;
   if (ranking === null) return 6;
   if (ranking === 1) return 18;
   if (ranking === 2) return 13;
@@ -39,7 +41,8 @@ function rankRadius(ranking: number | null): number {
   return 6;
 }
 
-function rankOpacity(ranking: number | null): number {
+function rankOpacity(ranking: number | null, isEvicted?: boolean): number {
+  if (isEvicted) return 0.35;
   if (ranking === null) return 0.5;
   if (ranking === 1) return 1.0;
   if (ranking === 2) return 0.9;
@@ -127,6 +130,7 @@ export default function StatementCluster({ points, consensusHistory = [], onStat
   if (points.length < 2 || !xScale || !yScale) return null;
 
   const sorted = [...points].sort((a, b) => {
+    if (a.is_evicted !== b.is_evicted) return a.is_evicted ? -1 : 1;
     const ra = a.social_ranking ?? 999;
     const rb = b.social_ranking ?? 999;
     return rb - ra;
@@ -207,20 +211,6 @@ export default function StatementCluster({ points, consensusHistory = [], onStat
               strokeLinecap="round"
               strokeLinejoin="round"
             />
-            {/* Directional dots along segments */}
-            {consensusTrail.slice(0, -1).map((t, i) => {
-              const next = consensusTrail[i + 1];
-              const mx = (t.x + next.x) / 2;
-              const my = (t.y + next.y) / 2;
-              return (
-                <circle
-                  key={`trail-mid-${i}`}
-                  cx={mx} cy={my} r={2}
-                  fill="#c84a20"
-                  opacity={0.25 + (i / consensusTrail.length) * 0.35}
-                />
-              );
-            })}
             {/* Historical winner markers (not current) */}
             {consensusTrail.filter((t) => !t.isCurrent).map((t, i) => (
               <g key={`trail-marker-${i}`}>
@@ -241,10 +231,11 @@ export default function StatementCluster({ points, consensusHistory = [], onStat
         {sorted.map((p, i) => {
           const cx = xScale(p.x);
           const cy = yScale(p.y);
-          const r = rankRadius(p.social_ranking);
-          const color = rankColor(p.social_ranking);
-          const isWinner = p.social_ranking === 1;
-          const isTop3 = p.social_ranking !== null && p.social_ranking <= 3;
+          const evicted = !!p.is_evicted;
+          const r = rankRadius(p.social_ranking, evicted);
+          const color = rankColor(p.social_ranking, evicted);
+          const isWinner = !evicted && p.social_ranking === 1;
+          const isTop3 = !evicted && p.social_ranking !== null && p.social_ranking <= 3;
           return (
             <g key={p.id}>
               {/* Halo for top-ranked */}
@@ -275,7 +266,7 @@ export default function StatementCluster({ points, consensusHistory = [], onStat
                 fill={color}
                 stroke={isWinner ? "#d97706" : isTop3 ? color : "none"}
                 strokeWidth={isWinner ? 2.5 : isTop3 ? 1.5 : 0}
-                opacity={rankOpacity(p.social_ranking)}
+                opacity={rankOpacity(p.social_ranking, evicted)}
                 filter={isWinner ? "url(#glow-winner)" : isTop3 ? "url(#glow-soft)" : undefined}
                 className="cursor-pointer"
                 style={{ transition: "r 0.3s, opacity 0.2s" }}
@@ -310,12 +301,13 @@ export default function StatementCluster({ points, consensusHistory = [], onStat
           { color: "#60a5fa", label: "#2", size: 8 },
           { color: "#34d399", label: "#3", size: 7 },
           { color: "#a78bfa", label: "#4–6", size: 6 },
-          { color: "#d1d5db", label: "Other", size: 5 },
+          { color: "#a8a29e", label: "Other", size: 5 },
+          { color: "#c0bbb5", label: "Evicted", size: 4, opacity: 0.35 },
         ].map((item) => (
           <span key={item.label} style={{ display: "flex", alignItems: "center", gap: 5 }}>
             <span style={{
               width: item.size * 2, height: item.size * 2, borderRadius: "50%",
-              background: item.color, opacity: 0.8, flexShrink: 0,
+              background: item.color, opacity: (item as any).opacity ?? 0.8, flexShrink: 0,
             }} />
             {item.label}
           </span>
