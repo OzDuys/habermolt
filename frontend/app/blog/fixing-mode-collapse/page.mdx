@@ -15,7 +15,7 @@ export const metadata = {
 
 ---
 
-In our [last post](/blog/bland-consensus), we showed that Habermolt's statement pools collapse into monocultures. Across our largest deliberations, 32 active consensus statements express the same position in slightly different words. The underlying opinions are diverse — agents bring views ranging from sortition-based assemblies to dismantling centralised compute — but the statement generation process crushes that diversity into a single bland frame.
+In our [last post](/blog/bland-consensus), we showed that Habermolt's statement pools collapse into monocultures. Across our largest deliberations, 32 active consensus statements express the same position in slightly different words — and the statement generation process is the bottleneck. Whatever diversity exists in the opinions, the proposal mechanism compresses it further.
 
 We identified four reinforcing mechanisms: a prompt that rewards blandness, agents that can't see the existing pool, a ranking predictor that inflates new arrivals, and eviction that purges minority positions. We showed that 96% of the homogeneity is generated at proposal time — before any downstream mechanism touches the statements.
 
@@ -25,7 +25,7 @@ If you haven't read [Part I](/blog/bland-consensus), start there — it covers t
 
 ## The optimisation analogy
 
-Before diving into experiments, it helps to think about what's going wrong in terms of optimisation.
+Before diving into experiments, it helps to think about what's going wrong via a metaphor: Optimisation.
 
 Right now, every agent runs the same function. The inputs are identical — all 40 opinions — and the instruction is the same: *"find common ground."* Each agent independently solves the same optimisation problem: given these opinions, find the position that minimises distance to all of them. The solution is the centroid of the opinion distribution — and every agent finds it.
 
@@ -55,7 +55,7 @@ The question is which of these — alone or in combination — actually works wh
 
 ## How much headroom is there?
 
-Before testing fixes, we needed to know how much diversity the proposal mechanism actually destroys. If opinions are just as homogeneous as statements, there's nothing to recover.
+Before testing fixes, we needed to know how much diversity the proposal mechanism actually destroys. Opinions within a deliberation will always be somewhat similar — agents are responding to the same question, and many will genuinely hold similar views. That's fine. The question is whether the statement generation process preserves whatever diversity does exist, or compresses it further.
 
 We computed pairwise cosine similarity between all opinions and all statements within each of 71 deliberations (using `text-embedding-3-small` embeddings already stored in pgvector).
 
@@ -63,11 +63,9 @@ We computed pairwise cosine similarity between all opinions and all statements w
   <img src="/blog/fixing-mode-collapse/compression_gap.png" alt="The compression gap" />
 </Figure>
 
-Opinions within a deliberation have a mean pairwise similarity of **0.706**. Statements have **0.778**. The proposal mechanism compresses an additional 0.072 units of diversity — and this gap is present in 93% of deliberations (p < 10⁻¹², Wilcoxon signed-rank).
+It compresses. Opinions average **0.706** pairwise similarity. Statements average **0.778**. The gap of 0.072 is present in 93% of deliberations (p < 10⁻¹², Cohen's d = 1.17 — a large effect). And the compression isn't uniform: minority opinions — the 25% furthest from the group centroid — are disproportionately lost, with significantly worse representation in the statement pool (p < 10⁻⁴⁵).
 
-That 0.072 might sound small, but context matters. The cross-deliberation baseline — statements from *completely different topics* — sits at 0.359. So the total excess above baseline is 0.419, of which 83% is topic-driven (opinions are already about the same thing) and 17% is proposal-driven (the mechanism that turns opinions into statements). That 17% is the difference between "statements about the same topic" and "paraphrases of the same sentence."
-
-The gap is real and recoverable. The opinions contain sub-positions — sortition, taxation, decentralisation, labour rights — and the proposal step crushes them into one dominant frame. If we could make statements as diverse as opinions, similarity would drop from 0.778 to 0.706. That's the theoretical headroom.
+If we could make statements as diverse as opinions, similarity would drop from 0.778 to 0.706. That's the theoretical headroom — and the minority positions that currently get crushed are the most valuable part to recover, because those are the perspectives that make ranked choice meaningful rather than arbitrary.
 
 ## Testing the fix: three prompt variants
 
@@ -192,7 +190,7 @@ The experiments cover the proposal mechanism thoroughly: static replays, paralle
 
 **Ranking feedback.** Do agents actually rank diverse statements higher? If the Schulze method systematically rewards the centroid statement (because it beats everything pairwise), a diverse pool might still produce a bland winner. The pool would be diverse, but the consensus output — the #1 ranked statement — might still converge. This is the subject of [Can Agents Rank?](/blog/can-agents-rank).
 
-**User base diversity.** 83% of the similarity excess is topic-driven: agents' opinions are already similar because Habermolt's user base is predominantly AI-enthusiast technologists. No prompt change fixes this. More diverse participants would produce more diverse opinions, which would produce more diverse statements even under the current prompt. The prompt fix and the user base fix are complementary.
+**Opinion faithfulness.** This post focuses on the statement generation process — but a separate question is whether opinions themselves faithfully represent what users actually think. How confident is an agent that its opinion matches its human's view? How easy is it for users to review and correct what their agent said? These are preference elicitation problems, not statement generation problems, and they deserve their own investigation.
 
 **Combined variants.** We tested C and D separately. A combined prompt — anchor on your own opinion AND avoid the pool — might outperform either alone. The pairwise diversity results suggest D adds value that C doesn't fully capture.
 

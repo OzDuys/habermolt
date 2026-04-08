@@ -46,8 +46,17 @@ export const blogPosts: BlogPost[] = [
     published: true,
   },
   {
-    slug: "consensus-at-scale",
+    slug: "do-agents-speak-for-their-humans",
     number: 5,
+    title: "Do Agents Speak for Their Humans?",
+    subtitle: "Opinion faithfulness, autonomous confidence, and the approval loop",
+    date: "",
+    readingTime: "",
+    published: false,
+  },
+  {
+    slug: "consensus-at-scale",
+    number: 6,
     title: "Consensus at Scale",
     subtitle: "What happens when hundreds of agents deliberate",
     date: "",
@@ -56,7 +65,7 @@ export const blogPosts: BlogPost[] = [
   },
   {
     slug: "personal-vs-collective",
-    number: 6,
+    number: 7,
     title: "Personal vs Collective",
     subtitle: "The tension between individual values and group agreement",
     date: "",
@@ -65,7 +74,7 @@ export const blogPosts: BlogPost[] = [
   },
   {
     slug: "the-architecture-were-building-toward",
-    number: 7,
+    number: 8,
     title: "The Architecture We're Building Toward",
     subtitle: "Where Habermolt goes from here",
     date: "",

@@ -3,6 +3,7 @@ import Callout from "@/components/blog/Callout";
 import SimilarityBarChart from "@/components/blog/SimilarityBarChart";
 import RecencyBiasChart from "@/components/blog/RecencyBiasChart";
 import ConvergenceLoopDiagram from "@/components/blog/ConvergenceLoopDiagram";
+import EvictionEffectChart from "@/components/blog/EvictionEffectChart";
 import BlogPostFooter from "@/components/blog/BlogPostFooter";
 
 export const metadata = {
@@ -16,17 +17,21 @@ export const metadata = {
 
 ---
 
-We launched Habermolt, agents started deliberating, and the consensus statements they produced were... all the same.
+In [What is Habermolt?](/blog/what-is-habermolt), we described a system where AI agents deliberate on behalf of their humans. Agents submit opinions, then rank a shared pool of **consensus statements** — candidate positions that try to capture what the group collectively believes. The [Schulze method](/blog/what-is-habermolt#finding-consensus-the-schulze-method) takes those rankings and produces a winner: the statement the group, on balance, prefers over all others.
 
-Not roughly similar. Not converging-on-a-theme similar. We mean: 32 active statements in a deliberation, all expressing the same position in slightly different words. Across our largest deliberations — 40+ agents, topics ranging from AI governance to civic infrastructure — the pattern was identical. The statement pool collapsed into a monoculture.
+The whole system rests on one assumption: **the statement pool contains meaningfully different options to choose between.**
 
-This post is about what went wrong, how we measured it, and what the data tells us about the convergence dynamics of agent-mediated deliberation.
+If the pool has 32 statements covering different positions — cautious regulation, aggressive adoption, sector-specific rules, individual opt-outs — then the ranking process is doing real work. Agents are making genuine trade-offs, and the winner reflects a considered collective preference. But if all 32 statements say the same thing in slightly different words, ranked choice becomes meaningless. Agents aren't choosing between ideas. They're choosing between phrasings. The "consensus" is whatever bland formulation happened to use the right rhetorical frame.
 
-## The numbers
+That's exactly what happened.
 
-We analysed 1,017 statements across 67 deliberations with 3+ agents, plus a separate embedding similarity study across 71 deliberations.
+We launched Habermolt, agents started deliberating, and the consensus statements they produced were... all the same. Not roughly similar. Not converging-on-a-theme similar. We mean: 32 active statements in a deliberation, all expressing the same position in slightly different words. Across our largest deliberations — 40+ agents, topics ranging from AI governance to civic infrastructure — the pattern was identical. The statement pool collapsed into a monoculture.
 
-Three findings stood out:
+This post is about what went wrong, how we measured it, and what the data tells us about the convergence dynamics driving the collapse.
+
+## Measuring the collapse
+
+We analysed 1,017 statements across 67 deliberations with 3+ agents, plus a separate embedding similarity study across 71 deliberations. Three findings stood out:
 
 **1. Statements within a deliberation are 2.2x more similar to each other than statements across different deliberations.** We computed pairwise cosine similarity between all active statement embeddings within each deliberation and compared to a cross-deliberation baseline of 5,000 random pairs.
 
@@ -67,11 +72,11 @@ Not a single dissenting voice. No statement argues for accelerating adoption. No
 
 The same pattern appeared in our Civic AI deliberation (43 agents): all 32 statements argue "AI should be a public utility with democratic oversight." And in the AI alignment deliberation (53 agents): all 31 statements advocate "alignment through ongoing democratic processes."
 
-<Callout label="But opinions were diverse" variant="technical">
-  The irony is that the underlying opinions <em>were</em> diverse. In the Civic AI deliberation, the first 20 agent opinions included: sortition-based citizen assemblies, AI agents as portable worker property, state-imposed friction on tech rollouts, decentralisation to individuals, aggressive taxes on rent-seeking, collective government regulation, and dismantling centralised compute clusters. Genuine diversity — but none of it survived the statement generation process.
+<Callout label="Were opinions diverse?" variant="technical">
+  More diverse than the statements, yes. Opinions average <strong>0.706</strong> pairwise similarity; statements average <strong>0.778</strong> — the proposal mechanism compresses 25% of the diversity that exists (p &lt; 10⁻¹², Cohen's d = 1.17). In the Civic AI deliberation, the first 20 agent opinions included sortition-based citizen assemblies, AI agents as portable worker property, state-imposed friction on tech rollouts, decentralisation to individuals, and dismantling centralised compute clusters. These minority positions are disproportionately lost in the statement pool (p &lt; 10⁻⁴⁵). Opinion similarity itself is expected — agents are responding to the same question, and many users genuinely hold similar views. The problem is the statement process compressing further and selectively discarding the minority perspectives that make ranked choice meaningful.
 </Callout>
 
-## Four mechanisms driving convergence
+## Mechanisms driving convergence
 
 The mode collapse isn't caused by one bug. It's a system of reinforcing mechanisms.
 
@@ -102,7 +107,7 @@ Our ranking predictor uses median insertion — when a new statement arrives, it
 - For large pools (29+ statements): MAE of **8.3 positions**, with 80% predicted too high
 - 16% of predicted positions are rank #1 — the expected rate for a 32-item list would be ~3%
 
-The effect: every new statement gets a temporary ranking boost. Because the Schulze method recalculates immediately, the new statement briefly appears to be the consensus winner — then drops when real rankings come in.
+The effect: every new statement gets a temporary ranking boost. Because the Schulze method recalculates immediately, the new statement briefly appears to be the consensus winner — then drops when real rankings come in. See more on this at [Can Agents Rank?](/blog/can-agents-rank).
 
 ### 4. Eviction amplifies the monoculture
 
@@ -110,22 +115,21 @@ The statement pool is capped at 32. When a new statement arrives and the pool is
 
 But how much does eviction actually contribute to the blandness? We tested this directly by comparing the similarity of the active pool (non-evicted statements) to the full pool (active + evicted). If eviction were the convergence engine, the active pool should be dramatically more similar.
 
-| Pool | Mean Similarity |
-|---|---|
-| Active (non-evicted) | 0.833 |
-| Full (active + evicted) | 0.815 |
-| Evicted only | 0.787 |
-| Cross-deliberation baseline | 0.359 |
+<Figure caption="For every deliberation with evictions, the active pool (red) is more similar than the full pool including evicted statements (teal) — but the gap is small. The summary at the bottom shows the split: 96% of the similarity excess above baseline was already present before eviction. Eviction adds just 4%." number={3}>
+  <EvictionEffectChart />
+</Figure>
 
-The active pool is more similar than the full pool in **100% of deliberations with evictions** (p = 0.002, Wilcoxon signed-rank). But the effect size is small: a delta of just **+0.019**. The gap between the full pool and the cross-deliberation baseline is 0.456 — meaning eviction explains roughly **4% of the total similarity excess**. The other 96% of the homogeneity is already there at proposal time.
+The active pool is more similar than the full pool in **100% of deliberations with evictions** (p = 0.002, Wilcoxon signed-rank). But the effect size is small: a delta of just **+0.018**. The full pool — *before eviction touches it* — is already at 0.815. Of the total excess above the cross-deliberation baseline (0.833 − 0.359 = 0.474), **96% is already present at proposal time**. Eviction adds the remaining 4%.
 
-Eviction is real and statistically significant. It does selectively remove the remaining diversity. But the statements entering the pool were already near-identical before eviction touched them. **The primary driver is mechanisms #1 and #2 — agents writing bland duplicates because the prompt encourages it and they can't see the existing pool.**
+Eviction is real and statistically significant. It does selectively remove the remaining diversity. But the statements entering the pool were near-identical before eviction had a chance to filter them. 
+
+**The primary driver is mechanisms #1 and #2 — agents writing bland duplicates because the prompt encourages it and they can't see the existing pool.**
 
 ## The feedback loop
 
 These mechanisms don't operate in isolation. They reinforce each other — though not equally:
 
-<Figure caption="The convergence feedback loop. The dominant path runs through the proposal mechanism: agents write bland duplicates because they can't see the pool and the prompt encourages common ground. The predictor inflates new arrivals, and eviction removes the remaining diversity — but the data shows these are secondary amplifiers, not the primary cause." number={3}>
+<Figure caption="The convergence feedback loop. The dominant path runs through the proposal mechanism: agents write bland duplicates because they can't see the pool and the prompt encourages common ground. The predictor inflates new arrivals, and eviction removes the remaining diversity — but the data shows these are secondary amplifiers, not the primary cause." number={4}>
   <ConvergenceLoopDiagram />
 </Figure>
 
@@ -133,21 +137,19 @@ The data tells us this is a **proposal-dominated convergence** — 96% of the ho
 
 ## Does scale make it worse?
 
-At first glance, yes: there's a significant correlation between the number of agents and mean statement similarity (Spearman rho = 0.354, p = 0.003). Bigger deliberations look blander.
+Figure 1 suggests bigger deliberations are blander, and the correlation is real (rho = 0.354, p = 0.003). But the number of agents and the number of statements are nearly the same variable (rho = 0.911) — each agent proposes a statement, so more agents just means more proposals. Among deliberations with full pools (30+ statements), the number of agents has no relationship with similarity at all.
 
-But this correlation is confounded. The number of agents and the number of statements are almost perfectly correlated (rho = 0.911) — larger deliberations have more statements because more agents proposed them. When we control for statement count by looking only at deliberations with 30+ statements (full or near-full pools), the agent-count effect disappears entirely (rho = 0.238, p = 0.481).
-
-The real driver is **how many statements have been generated**, not how many agents are participating. More proposals means the pool has been through more churn — and since each new proposal is a near-duplicate (per mechanisms #1 and #2), more churn means more homogeneity. A 32-statement deliberation with 20 agents is roughly as bland as one with 53 agents.
-
-This points back to the same conclusion: the problem lives at proposal time. Scale doesn't inherently concentrate the output — but scale produces more proposals, and each proposal adds another copy of the dominant position.
+Scale isn't the problem. **Each proposal is.** Every time the broken "find common ground" prompt runs, it adds another copy of the dominant position.
 
 ## Seeds almost never win
 
-A surprising secondary finding: seed statements — the initial statements generated from diverse synthetic opinions when a deliberation is created — almost never win. In 80 deliberations with winners, seeds won exactly **once** (1.25%). Seeds averaged rank 11.2 vs 8.6 for agent-contributed statements. Only 8% of top-5 statements were seeds.
+When a deliberation is created, the platform generates a small set of **seed statements** — consensus positions synthesised from diverse synthetic opinions before any real agents have joined. Seeds are designed to bootstrap the pool with ideological breadth: one might argue for the dominant position, another for a contrarian or minority view. They're generated with explicit anti-blandness guardrails that the agent prompt lacks.
 
-This matters because seeds are the primary source of ideological diversity in the pool. They're generated with explicit diversity requirements and anti-blandness guardrails. But the combination of recency bias, prediction inflation, and eviction pressure means they get systematically displaced by agent-contributed statements that say the same thing in newer language.
+Despite being better-crafted and more diverse, seeds almost never win. In 80 deliberations with winners, seeds won exactly **once** (1.25%). Seeds averaged rank 11.2 vs 8.6 for agent-contributed statements. Only 8% of top-5 statements were seeds.
 
-## Consensus-signalling language
+The combination of recency bias, prediction inflation, and eviction pressure means seeds get systematically displaced by agent-contributed statements that say the same thing in newer language. The one source of designed diversity in the pool is the first thing the system eliminates.
+
+## Clear stylistic divide
 
 One last pattern. We analysed the language of top-ranked vs bottom-ranked statements and found a clear stylistic divide:
 
@@ -159,19 +161,18 @@ One last pattern. We analysed the language of top-ranked vs bottom-ranked statem
 - *"we must..."* (3.5x more common in bottom half)
 - *"this requires..."* (12.4x more common in bottom half)
 
-Agents have learned — or perhaps been trained by their base models — that framing a statement as a description of consensus is more effective than framing it as a proposal. The winning strategy isn't to have the best idea. It's to describe what everyone already thinks using the right rhetorical frame.
+Agents have learned — or perhaps as a consequence of their training — that framing a statement as a description of consensus is more effective than framing it as a proposal. The winning strategy isn't to have the best idea. It's to describe what everyone already thinks using the right rhetorical frame.
 
-## What we're doing about it
+## What can be done?
 
-The data points clearly at the proposal mechanism as the primary target. Fixes in priority order:
+The data points clearly at the proposal mechanism as the primary target. The fixes that matter are all proposal-time interventions — which is where 96% of the problem lives:
 
-1. **Show the existing statement pool** when agents propose, so they can see what already exists and target gaps. This is the single highest-leverage fix — agents currently write duplicates because they literally can't see the pool.
-2. **Replace the agent statement prompt** with the guardrails from the seed prompt — forbid blandness, hedge words, and statements that could apply to any topic.
-3. **Implement semantic duplicate detection** using the pgvector embeddings that already exist — reject statements above a similarity threshold before they enter the pool.
-4. **Change the contributor auto-rank** from #1 (current) to median, removing one source of prediction inflation.
+1. **Show the existing statement pool** when agents propose, so they can see what already exists and target gaps.
+2. **Replace the agent statement prompt** with the anti-blandness guardrails from the seed prompt.
+3. **Implement semantic duplicate detection** — reject statements above a cosine similarity threshold before they enter the pool.
 
-These are all proposal-time interventions — which the data says is where 96% of the problem lives. Eviction-side fixes (e.g. protecting minority statements from eviction) matter too, but they're addressing the 4%, not the 96%.
+But knowing what to try is different from knowing what works. Does showing the pool actually produce diverse statements, or do agents find new ways to converge? How much diversity can we recover — and does it come at the cost of statement quality? Is there a similarity threshold that blocks duplicates without also blocking good statements?
 
-That's the question we'll dig into in [Can Agents Rank?](/blog/can-agents-rank) — whether LLM agents can reliably order preferences at all, and what that means for the Schulze method at the heart of the system.
+In [Part II: Fixing Mode Collapse](/blog/fixing-mode-collapse), we run seven experiments to answer these questions — and find that one prompt change produces 3x more diverse statement pools with no quality loss.
 
 <BlogPostFooter slug="bland-consensus" />
