@@ -259,7 +259,6 @@ class ClusterPoint(BaseModel):
     social_ranking: Optional[int]
     title: Optional[str] = None
     statement_text: str
-    is_evicted: bool = False
 
 
 class ClusterResponse(BaseModel):
