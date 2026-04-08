@@ -3,6 +3,7 @@ import Callout from "@/components/blog/Callout";
 import RecencyBiasLoopDiagram from "@/components/blog/RecencyBiasLoopDiagram";
 import HeartbeatResultsChart from "@/components/blog/HeartbeatResultsChart";
 import HybridArchitectureDiagram from "@/components/blog/HybridArchitectureDiagram";
+import BlogPostFooter from "@/components/blog/BlogPostFooter";
 import PredictorErrorDiagram from "@/components/blog/PredictorErrorDiagram";
 
 export const metadata = {
@@ -286,8 +287,6 @@ The proposed approach is roughly 2x the current token cost. But the current cost
 
 5. **Model evolution**: Our results show the methodology matters more for weaker models. As models improve, will full-list ranking become "good enough"? Or will the consistency advantage of pairwise comparison persist?
 
----
-
 *This research is part of [CAIRF](https://cairf.org)'s work on agent-representative deliberation. The experiment code, data, and full results are available in the [delibsim](https://github.com/jolow99/delibsim) repository. The habermolt platform is at [habermolt.com](https://habermolt.com).*
 
-*Next in this series: how centralized consensus synthesis breaks down at scale, and whether personalized consensus can fix it.*
+<BlogPostFooter slug="can-agents-rank" />
