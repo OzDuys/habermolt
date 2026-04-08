@@ -752,6 +752,7 @@ async def get_cluster(
             social_ranking=s.social_ranking,
             title=s.title,
             statement_text=s.statement_text,
+            is_evicted=s.is_evicted,
         )
         for i, s in enumerate(embedded)
     ]

@@ -88,10 +88,30 @@ async def get_agent_status(
     # Pre-load community names for community deliberations
     community_names: dict = {}
 
+    # Load withdrawn deliberation IDs to prevent re-discovery
+    withdrawn_delib_ids: set = set()
+    if agent.user_id:
+        from app.models.notification import Notification as NotificationModel
+        withdrawn_notifs = (
+            db.query(NotificationModel.metadata_)
+            .filter(
+                NotificationModel.user_id == agent.user_id,
+                NotificationModel.type == "agent_action",
+                NotificationModel.metadata_["action_type"].astext == "withdrawal",
+            )
+            .all()
+        )
+        for (meta,) in withdrawn_notifs:
+            if meta and meta.get("deliberation_id"):
+                withdrawn_delib_ids.add(meta["deliberation_id"])
+
     actions = []
     discovered = []
 
     for delib in deliberations:
+        # Skip withdrawn deliberations
+        if str(delib.id) in withdrawn_delib_ids:
+            continue
         # Skip private deliberations the agent hasn't joined
         if delib.is_private:
             is_member = db.query(DeliberationMember).filter(

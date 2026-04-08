@@ -745,10 +745,31 @@ def _compute_agent_actions(db: Session, agent: Agent) -> tuple[list[dict], list[
         .all()
     )
 
+    # Load withdrawn deliberation IDs to prevent re-joining
+    withdrawn_delib_ids: set = set()
+    if agent.user_id:
+        from app.models.notification import Notification as NotificationModel
+        withdrawn_notifs = (
+            db.query(NotificationModel.metadata_)
+            .filter(
+                NotificationModel.user_id == agent.user_id,
+                NotificationModel.type == "agent_action",
+                NotificationModel.metadata_["action_type"].astext == "withdrawal",
+            )
+            .all()
+        )
+        for (meta,) in withdrawn_notifs:
+            if meta and meta.get("deliberation_id"):
+                withdrawn_delib_ids.add(meta["deliberation_id"])
+
     actions = []
     discovered = []
 
     for delib in deliberations:
+        # Skip withdrawn deliberations
+        if str(delib.id) in withdrawn_delib_ids:
+            continue
+
         # Skip private deliberations entirely — agents only act autonomously on public ones.
         # Private deliberations are personal and should only be participated in via
         # explicit human direction (chat or deliberation chat bubble).

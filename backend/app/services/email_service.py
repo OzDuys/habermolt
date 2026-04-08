@@ -191,7 +191,7 @@ def send_agent_ready_email(db: Session, user_id: str, agent_name: str) -> bool:
           which deliberations it joined, what positions it took, and any consensus wins.
         </p>
         <div style="text-align: center; margin: 0 0 24px;">
-          <a href="{settings.FRONTEND_URL}/agent-activity"
+          <a href="{settings.FRONTEND_URL}/inbox"
              style="display: inline-block; background: {BRAND_COLOR}; color: #fff; padding: 12px 28px;
                     border-radius: 6px; text-decoration: none; font-weight: 600;">
             See {agent_name}'s Activity
@@ -225,6 +225,62 @@ def send_agent_ready_email(db: Session, user_id: str, agent_name: str) -> bool:
 # Weekly summary email
 # ---------------------------------------------------------------------------
 
+def _render_opinion_card(action: dict, agent_name: str) -> str:
+    """Render a single opinion action card for the email."""
+    question = action.get("question", "")
+    opinion_text = action.get("opinion_text", "")
+    delib_id = action.get("deliberation_id", "")
+    inbox_url = f"{settings.FRONTEND_URL}/inbox"
+
+    return f"""
+    <div style="background: #f9f9f9; border-left: 3px solid {BRAND_COLOR}; border-radius: 0 6px 6px 0; padding: 16px; margin: 12px 0;">
+      <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #999; margin-bottom: 6px;">
+        {agent_name} joined a deliberation
+      </div>
+      <div style="font-size: 14px; font-weight: 600; color: #333; margin-bottom: 8px;">
+        {question}
+      </div>
+      <div style="font-size: 13px; color: #555; line-height: 1.6; font-style: italic; margin-bottom: 12px;">
+        &ldquo;{opinion_text}&rdquo;
+      </div>
+      <div style="display: flex; gap: 8px;">
+        <a href="{inbox_url}" style="display: inline-block; background: #22c55e; color: #fff; padding: 6px 16px; border-radius: 4px; text-decoration: none; font-size: 12px; font-weight: 600;">
+          &#10003; Approve
+        </a>
+        <a href="{inbox_url}" style="display: inline-block; background: #fff; color: #ef4444; padding: 6px 16px; border-radius: 4px; text-decoration: none; font-size: 12px; font-weight: 600; border: 1px solid #fca5a5;">
+          &#10007; Disapprove
+        </a>
+      </div>
+    </div>"""
+
+
+def _render_statement_card(action: dict, agent_name: str) -> str:
+    """Render a single statement proposal card for the email."""
+    question = action.get("question", "")
+    title = action.get("statement_title", "")
+    text = action.get("statement_text", "")
+    inbox_url = f"{settings.FRONTEND_URL}/inbox"
+
+    title_html = f'<div style="font-size: 13px; font-weight: 600; color: #333; margin-bottom: 4px;">{title}</div>' if title else ""
+
+    return f"""
+    <div style="background: #f9f9f9; border-left: 3px solid #6366f1; border-radius: 0 6px 6px 0; padding: 16px; margin: 12px 0;">
+      <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #999; margin-bottom: 6px;">
+        {agent_name} proposed a consensus statement
+      </div>
+      <div style="font-size: 12px; color: #888; margin-bottom: 8px;">
+        in &ldquo;{question}&rdquo;
+      </div>
+      {title_html}
+      <div style="font-size: 13px; color: #555; line-height: 1.6; font-style: italic; margin-bottom: 12px;">
+        &ldquo;{text}&rdquo;
+      </div>
+      <a href="{inbox_url}" style="display: inline-block; color: {BRAND_COLOR}; font-size: 12px; font-weight: 600; text-decoration: none;">
+        Review in inbox &rarr;
+      </a>
+    </div>"""
+
+
 def render_weekly_summary_html(
     user_name: str,
     agent_name: str,
@@ -234,76 +290,99 @@ def render_weekly_summary_html(
     """Build the full weekly summary email HTML. Used by both send and preview."""
     first_name = user_name.split()[0] if user_name else "there"
 
-    # Build activity list
-    activity_items = []
+    # Build activity summary line
+    activity_parts = []
     if summary.get("deliberations_joined"):
         count = len(summary["deliberations_joined"])
-        activity_items.append(f"Joined <strong>{count}</strong> new deliberation{'s' if count != 1 else ''}")
-    if summary.get("opinions_count"):
-        activity_items.append(f"Submitted <strong>{summary['opinions_count']}</strong> opinion{'s' if summary['opinions_count'] != 1 else ''}")
+        activity_parts.append(f"joined <strong>{count}</strong> deliberation{'s' if count != 1 else ''}")
     if summary.get("rankings_count"):
-        activity_items.append(f"Ranked statements in <strong>{summary['rankings_count']}</strong> deliberation{'s' if summary['rankings_count'] != 1 else ''}")
+        activity_parts.append(f"ranked statements in <strong>{summary['rankings_count']}</strong> deliberation{'s' if summary['rankings_count'] != 1 else ''}")
     if summary.get("statements_proposed"):
-        activity_items.append(f"Proposed <strong>{summary['statements_proposed']}</strong> consensus statement{'s' if summary['statements_proposed'] != 1 else ''}")
+        activity_parts.append(f"proposed <strong>{summary['statements_proposed']}</strong> consensus statement{'s' if summary['statements_proposed'] != 1 else ''}")
 
-    activity_html = "".join(
-        f'<li style="color: #555; line-height: 1.8;">{item}</li>' for item in activity_items
-    )
+    if activity_parts:
+        activity_summary = f"This week, {agent_name} " + ", ".join(activity_parts) + "."
+    else:
+        activity_summary = f"{agent_name} was quiet this week, but there are actions waiting for your review."
 
     # Consensus wins highlight
     wins_html = ""
     if summary.get("consensus_wins"):
         wins_list = "".join(
-            f'<li style="color: #555; line-height: 1.6;"><em>{w["statement_title"]}</em> in "{w["question"]}"</li>'
+            f'<li style="color: #555; line-height: 1.6;"><em>{w["statement_title"]}</em> in &ldquo;{w["question"]}&rdquo;</li>'
             for w in summary["consensus_wins"]
         )
         wins_html = f"""
         <div style="background: #fef7f0; border-left: 3px solid {BRAND_COLOR}; padding: 12px 16px; margin: 16px 0; border-radius: 0 4px 4px 0;">
-          <strong style="color: {BRAND_COLOR};">Consensus wins this week:</strong>
+          <strong style="color: {BRAND_COLOR};">&#127942; Consensus wins this week:</strong>
           <ul style="margin: 8px 0 0; padding-left: 20px;">{wins_list}</ul>
         </div>"""
 
-    # Highlight: best-performing proposed statement
-    highlight_html = ""
-    highlight = summary.get("highlight")
-    if highlight:
-        rank_label = f"#{highlight['rank']}" if highlight["rank"] > 1 else "the consensus winner"
-        highlight_html = f"""
-        <div style="background: #f8f8f8; border-radius: 6px; padding: 14px 16px; margin: 16px 0;">
-          <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #999; margin-bottom: 6px;">
-            Top statement by {agent_name} &mdash; ranked {rank_label}
+    # Opinion action cards — the hook
+    opinion_cards_html = ""
+    opinion_actions = summary.get("opinion_actions", [])
+    for action in opinion_actions[:5]:  # Limit to 5 to keep email reasonable
+        opinion_cards_html += _render_opinion_card(action, agent_name)
+
+    # Statement action cards
+    statement_cards_html = ""
+    statement_actions = summary.get("statement_actions", [])
+    for action in statement_actions[:3]:
+        statement_cards_html += _render_statement_card(action, agent_name)
+
+    # Pending review nudge
+    pending_html = ""
+    pending_count = summary.get("pending_review_count", 0)
+    if pending_count > 0:
+        pending_html = f"""
+        <div style="background: #fef3c7; border-radius: 6px; padding: 14px 16px; margin: 16px 0; text-align: center;">
+          <div style="font-size: 14px; color: #92400e; font-weight: 600; margin-bottom: 4px;">
+            {pending_count} action{'s' if pending_count != 1 else ''} waiting for your review
           </div>
-          <div style="font-size: 14px; color: #333; font-style: italic; margin-bottom: 4px;">
-            &ldquo;{highlight['text']}&rdquo;
+          <div style="font-size: 12px; color: #a16207;">
+            Make sure {agent_name} is representing you well.
           </div>
-          <div style="font-size: 12px; color: #888;">
-            in &ldquo;{highlight['deliberation_question']}&rdquo;
-          </div>
+        </div>"""
+
+    # Section header for opinions
+    opinions_header = ""
+    if opinion_cards_html:
+        opinions_header = f"""
+        <div style="font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: #999; font-weight: 600; margin: 20px 0 4px; padding-top: 16px; border-top: 1px solid #eee;">
+          Here&rsquo;s what {agent_name} said on your behalf
+        </div>"""
+
+    # Section header for statements
+    statements_header = ""
+    if statement_cards_html:
+        statements_header = f"""
+        <div style="font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: #999; font-weight: 600; margin: 20px 0 4px; padding-top: 16px; border-top: 1px solid #eee;">
+          Consensus statements proposed
         </div>"""
 
     body = f"""
     <tr>
       <td style="padding: 24px 32px;">
-        <h2 style="margin: 0 0 16px; font-size: 22px; color: #333;">Weekly update for {agent_name}</h2>
-        <p style="color: #555; line-height: 1.6; margin: 0 0 16px;">
-          Hi {first_name}, here's what {agent_name} has been up to this week:
+        <h2 style="margin: 0 0 12px; font-size: 22px; color: #333;">Weekly update for {agent_name}</h2>
+        <p style="color: #555; line-height: 1.6; margin: 0 0 8px;">
+          Hi {first_name}, {activity_summary}
         </p>
-        <ul style="margin: 0 0 16px; padding-left: 20px;">
-          {activity_html}
-        </ul>
         {wins_html}
-        {highlight_html}
-        <div style="text-align: center; margin: 24px 0;">
-          <a href="{settings.FRONTEND_URL}/agent-activity"
-             style="display: inline-block; background: {BRAND_COLOR}; color: #fff; padding: 12px 28px;
-                    border-radius: 6px; text-decoration: none; font-weight: 600;">
-            View Full Activity
+        {pending_html}
+        {opinions_header}
+        {opinion_cards_html}
+        {statements_header}
+        {statement_cards_html}
+        <div style="text-align: center; margin: 28px 0 16px;">
+          <a href="{settings.FRONTEND_URL}/inbox"
+             style="display: inline-block; background: {BRAND_COLOR}; color: #fff; padding: 14px 32px;
+                    border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 14px;">
+            Open Inbox
           </a>
         </div>
-        <p style="color: #888; font-size: 13px; margin: 16px 0 0; line-height: 1.5;">
-          Want {agent_name} to take a different stance or focus on new topics?
-          <a href="{settings.FRONTEND_URL}/agent-activity" style="color: {BRAND_COLOR};">Chat with your lobster</a>
-          to give feedback or update its instructions.
+        <p style="color: #888; font-size: 13px; margin: 16px 0 0; line-height: 1.5; text-align: center;">
+          Want {agent_name} to take a different stance?
+          <a href="{settings.FRONTEND_URL}/inbox" style="color: {BRAND_COLOR};">Review and correct in your inbox</a>.
         </p>
       </td>
     </tr>

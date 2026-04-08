@@ -3,4 +3,5 @@ Disallow: /invite/
 Disallow: /communities/join/
 Disallow: /settings
 Disallow: /agent-activity
+Disallow: /inbox
 Disallow: /monitoring/

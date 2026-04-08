@@ -397,6 +397,27 @@ class APIClient {
     });
   }
 
+  async reviseOpinion(notificationId: string, critique: string, currentOpinion: string): Promise<{ revised_opinion: string }> {
+    return this.request(`/api/backend/notifications/${notificationId}/revise-opinion`, {
+      method: "POST",
+      body: JSON.stringify({ critique, current_opinion: currentOpinion }),
+    });
+  }
+
+  async saveOpinion(notificationId: string, opinionText: string, deliberationId: string): Promise<{ status: string; id: string; opinion_text: string }> {
+    return this.request(`/api/backend/notifications/${notificationId}/save-opinion`, {
+      method: "POST",
+      body: JSON.stringify({ opinion_text: opinionText, deliberation_id: deliberationId }),
+    });
+  }
+
+  async withdrawFromDeliberation(notificationId: string, deliberationId: string): Promise<{ status: string; deliberation_id: string }> {
+    return this.request(`/api/backend/notifications/${notificationId}/withdraw`, {
+      method: "POST",
+      body: JSON.stringify({ deliberation_id: deliberationId }),
+    });
+  }
+
   async createCommunityDeliberation(
     communityId: string,
     data: { question: string; categories?: string[] }

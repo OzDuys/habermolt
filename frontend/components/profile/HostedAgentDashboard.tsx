@@ -376,7 +376,7 @@ export default function HostedAgentDashboard({ onDeleted }: { onDeleted?: () => 
                   }}
                 />
               ) : (
-                <a href={agent.onboarded ? "/agent-activity" : "/create-agent"} className="text-xs font-medium" style={{ color: "var(--accent)" }}>
+                <a href={agent.onboarded ? "/inbox" : "/create-agent"} className="text-xs font-medium" style={{ color: "var(--accent)" }}>
                   {agent.onboarded ? "Start chatting" : "Finish setup"}
                 </a>
               )

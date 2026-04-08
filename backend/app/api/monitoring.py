@@ -1114,7 +1114,7 @@ async def send_weekly_summaries(
                 continue
 
             # Get summary
-            summary = get_weekly_summary(db, agent_id)
+            summary = get_weekly_summary(db, agent_id, user_id=user_id)
             if summary["is_empty"]:
                 skipped += 1
                 details.append({"user_id": user_id, "agent": agent_name, "status": "empty"})
@@ -1162,7 +1162,7 @@ async def preview_weekly_summary(
         raise HTTPException(status_code=404, detail="No agent found for this user")
     agent_id, agent_name = resolved
 
-    summary = get_weekly_summary(db, agent_id)
+    summary = get_weekly_summary(db, agent_id, user_id=user_id)
 
     row = db.execute(
         text('SELECT name, email FROM "user" WHERE id = :uid'),
@@ -1193,7 +1193,7 @@ async def render_weekly_summary(
         raise HTTPException(status_code=404, detail="No agent found for this user")
     agent_id, agent_name = resolved
 
-    summary = get_weekly_summary(db, agent_id)
+    summary = get_weekly_summary(db, agent_id, user_id=user_id)
 
     row = db.execute(
         text('SELECT name, email FROM "user" WHERE id = :uid'),
@@ -1237,7 +1237,7 @@ async def send_weekly_summary_to_user(
     pref = get_or_create_email_preference(db, user_id)
     db.commit()
 
-    summary = get_weekly_summary(db, agent_id)
+    summary = get_weekly_summary(db, agent_id, user_id=user_id)
 
     ok = send_weekly_summary_email(
         db, row[1], row[0] or "there", agent_name, summary, pref.unsubscribe_token,

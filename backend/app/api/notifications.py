@@ -187,21 +187,250 @@ async def disapprove_notification(
     if not notification:
         raise HTTPException(status_code=404, detail="Notification not found")
 
-    # Trigger immediate correction cycle if user has a hosted agent
+    # For OpenClaw agents: trigger async correction cycle (they can't revise inline)
+    meta = notification.metadata_ or {}
     try:
         from app.models.hosted_agent import HostedAgent
-        from app.services.hosted_agent_runner import run_correction_cycle
-
         hosted_agent = db.query(HostedAgent).filter(HostedAgent.user_id == user_id).first()
-        if hosted_agent and hosted_agent.is_active:
-            correction_result = run_correction_cycle(db, hosted_agent, notification)
-            return {
-                "status": "disapproved",
-                "id": str(notification.id),
-                "correction": correction_result,
-            }
+        if not hosted_agent:
+            # OpenClaw agent — run async correction
+            from app.services.hosted_agent_runner import run_correction_cycle
+            from app.models.agent import Agent
+            agent = db.query(Agent).filter(Agent.user_id == user_id).first()
+            # Can't correct OpenClaw agents inline, disapproval is stored for next heartbeat
     except Exception as e:
-        # Correction failed but disapproval was saved — agent will retry on next heartbeat
-        logger.error(f"Immediate correction failed for notification {notification_id}: {e}", exc_info=True)
+        logger.error(f"Disapproval handling failed for notification {notification_id}: {e}", exc_info=True)
 
     return {"status": "disapproved", "id": str(notification.id)}
+
+
+class ReviseOpinionRequest(BaseModel):
+    critique: str
+    current_opinion: str
+
+
+@router.post("/{notification_id}/revise-opinion")
+async def revise_opinion(
+    notification_id: str, body: ReviseOpinionRequest, req: Request, db: Session = Depends(get_db)
+):
+    """Generate a revised opinion based on user critique. Does NOT save — returns draft for review."""
+    user_id = require_user_id(req)
+
+    from app.models.notification import Notification as NotificationModel
+    notification = db.query(NotificationModel).filter(
+        NotificationModel.id == notification_id, NotificationModel.user_id == user_id
+    ).first()
+    if not notification:
+        raise HTTPException(status_code=404, detail="Notification not found")
+
+    # Only works for hosted agents
+    from app.models.hosted_agent import HostedAgent
+    hosted_agent = db.query(HostedAgent).filter(HostedAgent.user_id == user_id).first()
+    if not hosted_agent:
+        raise HTTPException(status_code=400, detail="Inline revision only available for hosted agents")
+
+    from app.services.hosted_agent_service import get_llm_client, check_token_limit
+    if not check_token_limit(hosted_agent):
+        raise HTTPException(status_code=429, detail="Token limit reached")
+
+    meta = notification.metadata_ or {}
+    question = notification.title  # e.g. "Joined 'Should AI be regulated?'"
+
+    client = get_llm_client(hosted_agent)
+    client.set_trace_context(
+        trace_type="opinion_revision",
+        hosted_agent_id=hosted_agent.id,
+        agent_id=hosted_agent.agent_id,
+    )
+
+    profile = hosted_agent.user_profile or ""
+
+    prompt = f"""You are revising an opinion that was submitted on behalf of a human in a deliberation.
+
+## The Human's Profile
+{profile}
+
+## Deliberation Topic
+{question}
+
+## Current Opinion
+{body.current_opinion}
+
+## Human's Critique
+{body.critique}
+
+Write a revised opinion that addresses the critique while still representing this person's values and perspective.
+Write ONLY the revised opinion text, nothing else. No preamble, no "Here's the revised opinion:", just the opinion itself.
+Keep it concise (2-4 sentences)."""
+
+    revised = client.sample_text(prompt=prompt, temperature=0.4, max_tokens=500)
+    if not revised or not revised.strip():
+        raise HTTPException(status_code=500, detail="Failed to generate revised opinion")
+
+    # Track tokens
+    from app.services.hosted_agent_service import track_tokens_from_latest_trace
+    track_tokens_from_latest_trace(db, hosted_agent)
+
+    return {"revised_opinion": revised.strip()}
+
+
+class WithdrawRequest(BaseModel):
+    deliberation_id: str
+
+
+@router.post("/{notification_id}/withdraw")
+async def withdraw_from_deliberation(
+    notification_id: str, body: WithdrawRequest, req: Request, db: Session = Depends(get_db)
+):
+    """Withdraw the agent from a deliberation: remove opinion, ranking, anonymize statements, recalculate Schulze."""
+    user_id = require_user_id(req)
+
+    from app.models.notification import Notification as NotificationModel
+    notification = db.query(NotificationModel).filter(
+        NotificationModel.id == notification_id, NotificationModel.user_id == user_id
+    ).first()
+    if not notification:
+        raise HTTPException(status_code=404, detail="Notification not found")
+
+    from app.models.agent import Agent
+    from app.models.hosted_agent import HostedAgent
+    from app.models.deliberation import Deliberation
+    from app.models.opinion import Opinion
+    from app.models.ranking import Ranking
+    from app.models.statement import Statement
+    from app.services.schulze_service import SchulzeService
+
+    # Find the agent
+    agent = None
+    hosted_agent = db.query(HostedAgent).filter(HostedAgent.user_id == user_id).first()
+    if hosted_agent:
+        agent = hosted_agent.agent
+    else:
+        agent = db.query(Agent).filter(Agent.user_id == user_id).first()
+    if not agent:
+        raise HTTPException(status_code=404, detail="No agent found")
+
+    delib = db.query(Deliberation).filter(Deliberation.id == body.deliberation_id).first()
+    if not delib:
+        raise HTTPException(status_code=404, detail="Deliberation not found")
+
+    # 1. Delete all opinion versions for this agent in this deliberation
+    db.query(Opinion).filter(
+        Opinion.deliberation_id == delib.id,
+        Opinion.agent_id == agent.id,
+    ).delete()
+
+    # 2. Delete rankings
+    db.query(Ranking).filter(
+        Ranking.deliberation_id == delib.id,
+        Ranking.agent_id == agent.id,
+    ).delete()
+
+    # 3. Anonymize proposed statements (keep them, just remove attribution)
+    db.query(Statement).filter(
+        Statement.deliberation_id == delib.id,
+        Statement.contributed_by_agent_id == agent.id,
+    ).update({"contributed_by_agent_id": None})
+
+    # 4. Decrement participant count
+    if delib.num_citizens and delib.num_citizens > 0:
+        delib.num_citizens -= 1
+
+    db.flush()
+
+    # 5. Recalculate Schulze rankings
+    try:
+        schulze = SchulzeService()
+        schulze.aggregate_from_db(db, str(delib.id))
+    except Exception as e:
+        logger.warning(f"Schulze recalculation after withdrawal failed: {e}")
+
+    # 6. Mark notification as withdrawn
+    notification.approval_status = "withdrawn"
+    from datetime import datetime
+    notification.read = True
+    notification.read_at = datetime.utcnow()
+
+    # 7. Create a withdrawal record notification (used by agent-status to prevent re-discovery)
+    notification_service.create_notification(
+        db, user_id,
+        type="agent_action",
+        title=f"Withdrew from '{delib.question}'",
+        body="You withdrew from this deliberation.",
+        metadata={
+            "action_type": "withdrawal",
+            "deliberation_id": str(delib.id),
+        },
+    )
+
+    db.commit()
+
+    return {"status": "withdrawn", "deliberation_id": str(delib.id)}
+
+
+class SaveOpinionRequest(BaseModel):
+    opinion_text: str
+    deliberation_id: str
+
+
+@router.post("/{notification_id}/save-opinion")
+async def save_revised_opinion(
+    notification_id: str, body: SaveOpinionRequest, req: Request, db: Session = Depends(get_db)
+):
+    """Save a revised or manually edited opinion and approve the notification."""
+    user_id = require_user_id(req)
+
+    from app.models.notification import Notification as NotificationModel
+    notification = db.query(NotificationModel).filter(
+        NotificationModel.id == notification_id, NotificationModel.user_id == user_id
+    ).first()
+    if not notification:
+        raise HTTPException(status_code=404, detail="Notification not found")
+
+    # Find the agent (hosted or OpenClaw)
+    from app.models.agent import Agent
+    from app.models.hosted_agent import HostedAgent
+    from app.models.deliberation import Deliberation
+    from app.services.continuous_deliberation_service import ContinuousDeliberationService
+
+    agent = None
+    hosted_agent = db.query(HostedAgent).filter(HostedAgent.user_id == user_id).first()
+    if hosted_agent:
+        agent = hosted_agent.agent
+    else:
+        agent = db.query(Agent).filter(Agent.user_id == user_id).first()
+
+    if not agent:
+        raise HTTPException(status_code=404, detail="No agent found")
+
+    delib = db.query(Deliberation).filter(Deliberation.id == body.deliberation_id).first()
+    if not delib:
+        raise HTTPException(status_code=404, detail="Deliberation not found")
+
+    # Submit the revised opinion
+    service = ContinuousDeliberationService(db)
+    try:
+        service.submit_opinion(delib, agent, body.opinion_text, source="human_edit")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    # Mark notification as approved with the new opinion text
+    notification.approval_status = "approved"
+    notification.read = True
+    from datetime import datetime
+    notification.read_at = datetime.utcnow()
+    # Update metadata to reflect the final opinion
+    meta = notification.metadata_ or {}
+    meta["opinion_text"] = body.opinion_text
+    meta["revised"] = True
+    notification.metadata_ = meta
+    db.commit()
+
+    # Update profile with confirmed position
+    if hosted_agent:
+        try:
+            _update_profile_from_approval(db, hosted_agent, notification.title, body.opinion_text)
+        except Exception as e:
+            logger.error(f"Profile update from save-opinion failed: {e}", exc_info=True)
+
+    return {"status": "approved", "id": str(notification.id), "opinion_text": body.opinion_text}

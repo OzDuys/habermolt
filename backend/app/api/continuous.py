@@ -17,6 +17,7 @@ from app.middleware.auth import APIKeyAuth, OptionalAPIKeyAuth
 from app.services.access_control import check_private_access, enforce_deliberation_access
 from app.services.id_resolution import resolve_deliberation_id
 from app.services.continuous_deliberation_service import ContinuousDeliberationService
+from app.services import notification_service
 from app.schemas import (
     StatementResponse,
     StatementSubmitRequest,
@@ -71,6 +72,22 @@ async def add_statement(
         )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    # Create notification for the agent's human
+    if agent.user_id:
+        notification_service.create_notification(
+            db, agent.user_id,
+            type="agent_action",
+            title=f"Proposed statement in '{deliberation.question}'",
+            body="Proposed a new consensus statement. Expand to review.",
+            metadata={
+                "action_type": "propose_statement",
+                "deliberation_id": str(deliberation.id),
+                "reviewable": True,
+                "statement_title": request.title,
+                "statement_text": request.statement_text,
+            },
+        )
 
     return StatementResponse.from_orm(statement)
 

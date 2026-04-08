@@ -19,25 +19,12 @@ const navLinks = [
     ),
   },
   {
-    href: "/agent-activity",
-    label: "Agent Activity",
-    authOnly: false,
+    href: "/inbox",
+    label: "Inbox",
+    authOnly: true,
     icon: (
       <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-        {/* Antenna stem */}
-        <line x1="12" y1="2" x2="12" y2="5" strokeLinecap="round" />
-        {/* Antenna ball */}
-        <circle cx="12" cy="1.5" r="1" strokeWidth={1.6} />
-        {/* Head */}
-        <rect x="3" y="6" width="18" height="13" rx="3" strokeLinejoin="round" />
-        {/* Eyes */}
-        <circle cx="9" cy="11" r="1.2" fill="currentColor" stroke="none" />
-        <circle cx="15" cy="11" r="1.2" fill="currentColor" stroke="none" />
-        {/* Smile */}
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9.5 15c.8.8 4.2.8 5 0" />
-        {/* Ears */}
-        <line x1="3" y1="11" x2="1" y2="11" strokeLinecap="round" strokeWidth={2} />
-        <line x1="21" y1="11" x2="23" y2="11" strokeLinecap="round" strokeWidth={2} />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
       </svg>
     ),
   },
