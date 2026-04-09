@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.middleware.auth import require_user_id
 from app.services import notification_service
+from app.services import grounding_log_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/notifications", tags=["notifications"])
@@ -61,9 +62,10 @@ Respond with ONLY the bullet point, nothing else."""
 
     value_statement = client.sample_text(prompt=prompt, temperature=0.2, max_tokens=250)
     if not value_statement or not value_statement.strip():
-        return
+        return None
 
     # Append to profile under a confirmed positions section
+    version_before = hosted_agent.profile_version
     profile = hosted_agent.user_profile or ""
     section_header = "\n\n## Confirmed Positions (approved by human)"
     if section_header.strip() not in profile:
@@ -73,6 +75,12 @@ Respond with ONLY the bullet point, nothing else."""
     hosted_agent.user_profile = profile
     hosted_agent.profile_version += 1
     db.commit()
+
+    return {
+        "value_statement": value_statement.strip(),
+        "profile_version_before": version_before,
+        "profile_version_after": hosted_agent.profile_version,
+    }
 
 
 class MarkReadRequest(BaseModel):
@@ -188,16 +196,41 @@ async def approve_notification(notification_id: str, req: Request, db: Session =
     opinion_text = meta.get("opinion_text")
     question = notification.title  # e.g. "Joined 'Should we go out drinking...'"
 
+    # Log the approval
+    from app.models.agent import Agent
+    agent = db.query(Agent).filter(Agent.user_id == user_id).first()
+    grounding_log_service.log_event(
+        db, user_id, "approve",
+        agent_id=agent.id if agent else None,
+        notification_id=notification.id,
+        deliberation_id=meta.get("deliberation_id"),
+        opinion_text_before=opinion_text,
+        opinion_text_after=opinion_text,
+        metadata={"action_type": action_type},
+    )
+
     if opinion_text and action_type in ("join_deliberation", "update_opinion"):
         try:
             from app.models.hosted_agent import HostedAgent
             hosted_agent = db.query(HostedAgent).filter(HostedAgent.user_id == user_id).first()
             if hosted_agent:
-                _update_profile_from_approval(db, hosted_agent, question, opinion_text)
+                profile_result = _update_profile_from_approval(db, hosted_agent, question, opinion_text)
+                if profile_result:
+                    grounding_log_service.log_event(
+                        db, user_id, "profile_updated",
+                        agent_id=agent.id if agent else None,
+                        hosted_agent_id=hosted_agent.id,
+                        notification_id=notification.id,
+                        deliberation_id=meta.get("deliberation_id"),
+                        output_text=profile_result["value_statement"],
+                        profile_version_before=profile_result["profile_version_before"],
+                        profile_version_after=profile_result["profile_version_after"],
+                        metadata={"trigger": "approval"},
+                    )
         except Exception as e:
-            # Profile update failed but approval was saved — not critical
             logger.error(f"Profile update from approval failed: {e}", exc_info=True)
 
+    db.commit()
     return {"status": "approved", "id": str(notification.id)}
 
 
@@ -210,19 +243,20 @@ async def disapprove_notification(
     if not notification:
         raise HTTPException(status_code=404, detail="Notification not found")
 
-    # For OpenClaw agents: trigger async correction cycle (they can't revise inline)
     meta = notification.metadata_ or {}
-    try:
-        from app.models.hosted_agent import HostedAgent
-        hosted_agent = db.query(HostedAgent).filter(HostedAgent.user_id == user_id).first()
-        if not hosted_agent:
-            # OpenClaw agent — run async correction
-            from app.services.hosted_agent_runner import run_correction_cycle
-            from app.models.agent import Agent
-            agent = db.query(Agent).filter(Agent.user_id == user_id).first()
-            # Can't correct OpenClaw agents inline, disapproval is stored for next heartbeat
-    except Exception as e:
-        logger.error(f"Disapproval handling failed for notification {notification_id}: {e}", exc_info=True)
+    from app.models.agent import Agent
+    agent = db.query(Agent).filter(Agent.user_id == user_id).first()
+
+    grounding_log_service.log_event(
+        db, user_id, "disapprove",
+        agent_id=agent.id if agent else None,
+        notification_id=notification.id,
+        deliberation_id=meta.get("deliberation_id"),
+        input_text=body.reason,
+        opinion_text_before=meta.get("opinion_text"),
+        metadata={"action_type": meta.get("action_type")},
+    )
+    db.commit()
 
     return {"status": "disapproved", "id": str(notification.id)}
 
@@ -299,7 +333,32 @@ Keep it concise (2-4 sentences)."""
     from app.services.hosted_agent_service import track_untracked_tokens
     track_untracked_tokens(db, hosted_agent)
 
-    return {"revised_opinion": revised.strip()}
+    revised_text = revised.strip()
+
+    # Log the critique and the revision
+    grounding_log_service.log_event(
+        db, user_id, "critique",
+        agent_id=hosted_agent.agent_id,
+        hosted_agent_id=hosted_agent.id,
+        notification_id=notification.id,
+        deliberation_id=meta.get("deliberation_id"),
+        input_text=body.critique,
+        opinion_text_before=body.current_opinion,
+    )
+    grounding_log_service.log_event(
+        db, user_id, "revision_generated",
+        agent_id=hosted_agent.agent_id,
+        hosted_agent_id=hosted_agent.id,
+        notification_id=notification.id,
+        deliberation_id=meta.get("deliberation_id"),
+        input_text=body.critique,
+        output_text=revised_text,
+        opinion_text_before=body.current_opinion,
+        opinion_text_after=revised_text,
+    )
+    db.commit()
+
+    return {"revised_opinion": revised_text}
 
 
 class WithdrawRequest(BaseModel):
@@ -391,6 +450,22 @@ async def withdraw_from_deliberation(
         },
     )
 
+    # Log the withdrawal
+    opinions_deleted = db.query(Opinion).filter(
+        Opinion.deliberation_id == delib.id, Opinion.agent_id == agent.id,
+    ).count()  # already deleted above, so this will be 0 — count before delete was not captured
+    grounding_log_service.log_event(
+        db, user_id, "withdraw",
+        agent_id=agent.id,
+        hosted_agent_id=hosted_agent.id if hosted_agent else None,
+        notification_id=notification.id,
+        deliberation_id=delib.id,
+        opinion_text_before=(notification.metadata_ or {}).get("opinion_text"),
+        metadata={
+            "deliberation_question": delib.question,
+        },
+    )
+
     db.commit()
 
     return {"status": "withdrawn", "deliberation_id": str(delib.id)}
@@ -455,14 +530,47 @@ async def save_revised_opinion(
     notification.metadata_ = meta
     db.commit()
 
+    # Log the save event
+    original_opinion = (notification.metadata_ or {}).get("opinion_text", "")
+    grounding_log_service.log_event(
+        db, user_id, "save",
+        agent_id=agent.id,
+        hosted_agent_id=hosted_agent.id if hosted_agent else None,
+        notification_id=notification.id,
+        deliberation_id=delib.id,
+        opinion_text_before=original_opinion,
+        opinion_text_after=body.opinion_text,
+        metadata={
+            "source": "revision" if body.critiques else "human_edit",
+            "total_critiques": len(body.critiques),
+            "all_critiques": body.critiques,
+        },
+    )
+
     # Update profile with confirmed position
     if hosted_agent:
         try:
-            _update_profile_from_approval(
+            profile_result = _update_profile_from_approval(
                 db, hosted_agent, notification.title, body.opinion_text,
                 critiques=body.critiques if body.critiques else None,
             )
+            if profile_result:
+                grounding_log_service.log_event(
+                    db, user_id, "profile_updated",
+                    agent_id=agent.id,
+                    hosted_agent_id=hosted_agent.id,
+                    notification_id=notification.id,
+                    deliberation_id=delib.id,
+                    output_text=profile_result["value_statement"],
+                    profile_version_before=profile_result["profile_version_before"],
+                    profile_version_after=profile_result["profile_version_after"],
+                    metadata={
+                        "trigger": "save_with_critiques" if body.critiques else "save_edit",
+                        "total_critiques": len(body.critiques),
+                    },
+                )
         except Exception as e:
             logger.error(f"Profile update from save-opinion failed: {e}", exc_info=True)
 
+    db.commit()
     return {"status": "approved", "id": str(notification.id), "opinion_text": body.opinion_text}
