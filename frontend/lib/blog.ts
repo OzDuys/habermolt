@@ -83,8 +83,17 @@ export const blogPosts: BlogPost[] = [
     published: false,
   },
   {
-    slug: "representation-is-a-tracking-problem",
+    slug: "exploring-interview-styles",
     number: 9,
+    title: "Exploring Interview Styles",
+    subtitle: "",
+    date: "",
+    readingTime: "",
+    published: false,
+  },
+  {
+    slug: "representation-is-a-tracking-problem",
+    number: 10,
     title: "Formalising Representation",
     subtitle: "From mode collapse and ranking noise to a formal model of delegated deliberation",
     date: "2026-04-08",
