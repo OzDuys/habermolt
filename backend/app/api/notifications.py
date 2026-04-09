@@ -16,8 +16,14 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
 
-def _update_profile_from_approval(db: Session, hosted_agent, question: str, opinion_text: str) -> None:
-    """Extract the confirmed position from an approved opinion and append it to the profile."""
+def _update_profile_from_approval(
+    db: Session, hosted_agent, question: str, opinion_text: str, critiques: list[str] = None,
+) -> None:
+    """Extract the confirmed position from an approved opinion and append it to the profile.
+
+    If critiques are provided (from the inline correction loop), the LLM also
+    synthesizes what the human cares about based on the pattern of corrections.
+    """
     from app.services.hosted_agent_service import get_llm_client
 
     client = get_llm_client(hosted_agent)
@@ -27,7 +33,24 @@ def _update_profile_from_approval(db: Session, hosted_agent, question: str, opin
         agent_id=hosted_agent.agent_id,
     )
 
-    prompt = f"""The human approved the following opinion their agent submitted on their behalf.
+    if critiques:
+        critique_text = "\n".join(f"  {i+1}. \"{c}\"" for i, c in enumerate(critiques))
+        prompt = f"""The human's agent submitted an opinion on their behalf. The human critiqued it {len(critiques)} time(s) before approving the final version.
+
+Topic: {question}
+
+Final approved opinion: {opinion_text}
+
+Their critiques (in order):
+{critique_text}
+
+Based on the final opinion AND the pattern of critiques, extract:
+1. A confirmed position bullet point: "- On [topic]: [what they believe]"
+2. A preference lesson bullet point: "- Preference: [how they want to be represented, based on what they corrected]"
+
+Write ONLY the two bullet points, nothing else. If the critiques don't reveal a meaningful preference beyond the opinion itself, just write the one position bullet point."""
+    else:
+        prompt = f"""The human approved the following opinion their agent submitted on their behalf.
 
 Topic: {question}
 Opinion: {opinion_text}
@@ -36,7 +59,7 @@ Extract a concise value statement (1-2 sentences) that captures this confirmed p
 Write it as a bullet point starting with "- On [topic]: ..."
 Respond with ONLY the bullet point, nothing else."""
 
-    value_statement = client.sample_text(prompt=prompt, temperature=0.2, max_tokens=150)
+    value_statement = client.sample_text(prompt=prompt, temperature=0.2, max_tokens=250)
     if not value_statement or not value_statement.strip():
         return
 
@@ -376,6 +399,7 @@ async def withdraw_from_deliberation(
 class SaveOpinionRequest(BaseModel):
     opinion_text: str
     deliberation_id: str
+    critiques: list[str] = []
 
 
 @router.post("/{notification_id}/save-opinion")
@@ -434,7 +458,10 @@ async def save_revised_opinion(
     # Update profile with confirmed position
     if hosted_agent:
         try:
-            _update_profile_from_approval(db, hosted_agent, notification.title, body.opinion_text)
+            _update_profile_from_approval(
+                db, hosted_agent, notification.title, body.opinion_text,
+                critiques=body.critiques if body.critiques else None,
+            )
         except Exception as e:
             logger.error(f"Profile update from save-opinion failed: {e}", exc_info=True)
 

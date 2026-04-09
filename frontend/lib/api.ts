@@ -404,10 +404,10 @@ class APIClient {
     });
   }
 
-  async saveOpinion(notificationId: string, opinionText: string, deliberationId: string): Promise<{ status: string; id: string; opinion_text: string }> {
+  async saveOpinion(notificationId: string, opinionText: string, deliberationId: string, critiques?: string[]): Promise<{ status: string; id: string; opinion_text: string }> {
     return this.request(`/api/backend/notifications/${notificationId}/save-opinion`, {
       method: "POST",
-      body: JSON.stringify({ opinion_text: opinionText, deliberation_id: deliberationId }),
+      body: JSON.stringify({ opinion_text: opinionText, deliberation_id: deliberationId, critiques: critiques || [] }),
     });
   }
 

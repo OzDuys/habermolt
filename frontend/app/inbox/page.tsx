@@ -258,6 +258,7 @@ function ActionCard({
   // Card-local state for the inline correction loop
   const [mode, setMode] = useState<"idle" | "critiquing" | "revising" | "editing">("idle");
   const [critique, setCritique] = useState("");
+  const [critiqueHistory, setCritiqueHistory] = useState<string[]>([]);
   const [currentOpinion, setCurrentOpinion] = useState(meta.opinion_text || "");
   const [editText, setEditText] = useState(meta.opinion_text || "");
   const [loading, setLoading] = useState(false);
@@ -279,8 +280,8 @@ function ActionCard({
   const handleApprove = async () => {
     setLoading(true);
     try {
-      if (currentOpinion !== meta.opinion_text && meta.deliberation_id) {
-        await api.saveOpinion(n.id, currentOpinion, meta.deliberation_id);
+      if ((currentOpinion !== meta.opinion_text || critiqueHistory.length > 0) && meta.deliberation_id) {
+        await api.saveOpinion(n.id, currentOpinion, meta.deliberation_id, critiqueHistory);
       } else {
         await api.approveNotification(n.id);
       }
@@ -300,7 +301,9 @@ function ActionCard({
     setError(null);
     setMode("revising");
     try {
-      const result = await api.reviseOpinion(n.id, critique.trim(), currentOpinion);
+      const thisCritique = critique.trim();
+      const result = await api.reviseOpinion(n.id, thisCritique, currentOpinion);
+      setCritiqueHistory((prev) => [...prev, thisCritique]);
       setCurrentOpinion(result.revised_opinion);
       setEditText(result.revised_opinion);
       setCritique("");
@@ -317,7 +320,7 @@ function ActionCard({
     if (!editText.trim() || !meta.deliberation_id) return;
     setLoading(true);
     try {
-      await api.saveOpinion(n.id, editText.trim(), meta.deliberation_id);
+      await api.saveOpinion(n.id, editText.trim(), meta.deliberation_id, critiqueHistory);
       markRead();
       setCurrentOpinion(editText.trim());
       setMode("idle");
