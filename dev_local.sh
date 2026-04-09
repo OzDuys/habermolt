@@ -20,6 +20,6 @@ lsof -ti :8000 | xargs kill -9 2>/dev/null
 (cd frontend && npm run dev) 2>&1 | sed 's/^/[frontend] /' &
 
 # Backend
-(cd backend && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000) 2>&1 | sed 's/^/[backend]  /' &
+(cd backend && source .venv/bin/activate && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000) 2>&1 | sed 's/^/[backend]  /' &
 
 wait

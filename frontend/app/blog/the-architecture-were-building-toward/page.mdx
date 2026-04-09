@@ -1,0 +1,122 @@
+import Figure from "@/components/blog/Figure";
+import Callout from "@/components/blog/Callout";
+import SeriesSynthesisDiagram from "@/components/blog/SeriesSynthesisDiagram";
+import TwoTimescaleDiagram from "@/components/blog/TwoTimescaleDiagram";
+import DriftDecayChart from "@/components/blog/DriftDecayChart";
+import BlogPostFooter from "@/components/blog/BlogPostFooter";
+
+export const metadata = {
+  title: "The Architecture We're Building Toward | Blog",
+  description:
+    "From mode collapse and ranking noise to a formal model of delegated deliberation — extending Jarrett et al.'s framework with a two-timescale review loop.",
+};
+
+# The Architecture We're Building Toward
+
+*From mode collapse and ranking noise to a formal model of delegated deliberation*
+
+---
+
+## Four problems with the same shape
+
+Across four posts, we kept finding failures that look different on the surface but share a common structure underneath: the agent's snapshot of the human decays.
+
+**Mode collapse** (posts 2 and 3): agents propose consensus statements that all sound the same — hedged, moderate, interchangeable. The statement pool loses diversity because each agent generates in isolation from the current pool state. The fix that worked was pool-aware prompting: showing the agent what's already there so it can fill gaps instead of repeating what exists. That fix works precisely because it re-grounds the agent against the *current* state of something that has changed since the agent last looked.
+
+**Ranking noise** (post 4): agents produce inconsistent rankings — the same agent, given the same statements, returns different orderings on different runs. The representation of the human's preferences is imprecise, and without a correction mechanism, the imprecision just sits there. Nobody tells the agent it got the ordering wrong because nobody is watching.
+
+**Predictor failure** (posts 2 and 4): when a new statement enters the pool, the system predicts how every existing agent would rank it. At scale, these predictions hit an 87% error rate. A static snapshot of an agent's preferences — itself a noisy approximation of a human — trying to predict how that agent would respond to a statement it has never seen. The snapshot was already stale; the prediction compounds the staleness.
+
+These aren't three bugs. They're three symptoms of a single structural problem. The agent's model of the human was set once and then left to coast. Every failure we found was a failure of maintenance — the representation drifting out of alignment with the thing it's supposed to represent.
+
+<Figure caption="Three surface-level failures from posts 2–4 converge on a shared root cause: the agent's frozen snapshot falls behind the drifting human. The two-timescale model developed in this post formalizes that gap." number={1}>
+  <SeriesSynthesisDiagram />
+</Figure>
+
+## What Jarrett et al. did
+
+Their paper is about a specific question: if a language model is going to act as a participant's stand-in inside a collective decision mechanism, what exactly does it mean for that model to "represent" the participant well? This is harder than it looks. The intuitive answer — train a clone that produces the outputs the human would produce — sounds right but turns out to be both too strong and too weak as a definition.
+
+They formalize the setting as a Markov decision process. There is a mechanism that takes utterances from a fixed group of participants and rolls out an episode that ends in some collective outcome — in their case study, a draft consensus statement, then critiques, then a revised consensus. Each participant has a true behavior that determines what they would say at each step. A *digital representative* is a learned policy intended to approximate that true behavior in the context of that specific mechanism. The question is which approximations count as good enough.
+
+They contrast three notions of equivalence between a model policy and a true policy, each progressively weaker:
+
+- **Digital clones** — the model's action distribution matches the human's at every state. Same conditional, everywhere. This is the strongest notion, and what likelihood-based fine-tuning targets directly.
+- **Transition equivalence** — the model and the human have the same effect on the mechanism's transition operator. The conditionals can differ, as long as they wash out into identical one-step dynamics.
+- **Trajectory equivalence** — the model and the human, when run through the full mechanism over an entire episode, induce the same distribution over outcomes. Conditionals can differ, per-step dynamics can differ, as long as the final payoffs match in expectation.
+
+Their Proposition 1 makes the formal claim: the trajectory class is generally larger than the transition class, which is larger than the clone class. And they argue the trajectory class is the right notion of representation, because what we ultimately care about in collective decision-making is *outcomes* — not whether the agent uttered exactly the words the human would have, but whether the group ends up where the human's participation would have taken it.
+
+Their framework answers "what does good representation mean at a moment?" It does not ask what happens over thousands of moments.
+
+## What the formalism leaves out
+
+Jarrett et al. evaluate their digital representatives once. A model gets fine-tuned on a participant's data, then evaluated against held-out critiques from the same participant. Representativity is a number computed from a static comparison: at this moment, with this trained model and this fixed human, how close are the outcomes?
+
+This is the right thing to measure if you grant two assumptions. First, that the human's preferences are stable over the lifetime of the agent. Second, that the agent doesn't need anything from the human after training. Neither survives contact with a deployed system.
+
+The mode collapse in posts 2 and 3 is exactly what a system looks like when the agent's snapshot is never refreshed — it keeps generating from the same stale model of what matters, unable to see that the pool has moved on. The ranking noise in post 4 is what preferences look like when the representation is imprecise and nobody corrects it — the agent ranks confidently but inconsistently, and the inconsistency compounds through the Schulze calculation.
+
+The gap is the time dimension. Representativity in the wild isn't a property; it's a process. It has to be sustained.
+
+## The two-timescale extension
+
+Habermolt is built around a specific operational pattern: a human creates an agent, gives it a starting profile, and sends it into deliberations. The agent participates — writes opinions, ranks statements, proposes consensus. Between episodes, the human is mostly absent. But periodically, they come back: read what their agent wrote, scan its rankings, and correct things. Each correction is a small update to the agent's representation. This asynchronous review loop is the mechanism by which representation gets maintained against drift.
+
+The natural way to formalize this is to keep Jarrett et al.'s setup as the inner loop and add an outer loop on top. Inside an episode, nothing changes: the agent acts in the mechanism with some policy, parameterized by an explicit representation of what it currently believes the human wants. Call that representation **θ̂** — think of it as a vector of preferences, or a profile, or whatever data the agent uses to decide what to say. The episode plays out exactly as in the original framework.
+
+Between episodes, two things happen. First, the human's *true* preference state, **θ\***, drifts — slowly, randomly, but persistently. Modeling it as a random walk with per-step variance σ² is the simplest assumption that captures the right intuition: preferences aren't fixed, and they don't evolve in any direction the agent can predict. Second, the human may or may not review the agent's recent activity. If they do, their review produces a correction *cₖ* — an edit, a rerank, a flag — and the agent updates its representation: **θ̂ₖ₊₁ = Update(θ̂ₖ, cₖ)**. If they don't, θ̂ is unchanged.
+
+<Figure caption="Two interacting timescales. Inside each episode (the inner loop) Jarrett et al.'s MDP runs unchanged: the agent acts with a policy parameterized by θ̂. Between episodes (the outer loop), the human's true preferences θ* drift while θ̂ stays frozen — until the human returns, reviews, and emits a correction that updates θ̂." number={2}>
+  <TwoTimescaleDiagram />
+</Figure>
+
+The quantity to track is the gap **δₖ = ‖θ̂ₖ − θ\*ₖ‖** — how far the agent's snapshot has fallen behind the human's current preferences. Without correction, δₖ is a tracking error against a moving target: the random walk pushes θ\* around while θ̂ sits still. The expected gap grows. With correction at some rate ρ — the fraction of episodes the human actually reviews — the gap is repeatedly knocked back down.
+
+## The central claim
+
+Informally: without periodic correction, expected representativity decays without bound as more episodes elapse. With correction at rate ρ, the gap is bounded by a function of σ²/ρ.
+
+<Figure caption="Schematic. Without review (red), the gap between the agent's frozen θ̂ and the drifting θ* grows roughly like √k — the standard tracking error of a fixed estimator chasing a random walk. With periodic review (orange), each correction snaps the gap back toward zero, keeping it bounded by a function of the drift-to-refresh ratio σ²/ρ." number={3}>
+  <DriftDecayChart />
+</Figure>
+
+This is in the spirit of Jarrett et al.'s Proposition 1, but doing different work. Theirs picks out the right *definition* of representation. Ours picks out the right *temporal regime*: you can't have sustained representation without sustained input from the human, and the rate at which input is needed scales with how fast the human's preferences drift.
+
+The three failures from Section 1 map directly onto this framework:
+
+- **Mode collapse** is δ growing in the statement-generation dimension — the agent's model of "what matters" diverges from what the pool actually needs, and without refresh it keeps proposing the same thing.
+- **Ranking noise** is δ in the preference-ordering dimension — the agent's snapshot of relative priorities is imprecise and never corrected, so inconsistency accumulates.
+- **Predictor failure** is δ compounding across agents — each agent's snapshot is individually stale, and predicting one stale snapshot's response from another stale snapshot multiplies the error.
+
+The result is not novel in the abstract. It's the standard form of a tracking error result from control theory, where a fixed estimator chasing a random walk has unbounded variance unless it gets refreshed and bounded variance if it does. Importing it here just means recognizing that representativity in a deployed agent is a tracking problem, not an estimation problem. That reframing is the contribution; the math has been around for decades.
+
+The point of stating it formally is what you get to defend with it: the claim that the human review loop is *structurally necessary*. Not a feature, not a polish item, not something to add later. The system can't have the property it's supposed to have without it.
+
+<Callout label="The intellectual neighborhood" variant="insight">
+  Once you frame representativity as a tracking problem, you inherit a lot of company. Adaptive filtering, drift-aware online learning, and sample-efficient RL with non-stationary rewards all study versions of "how often do I have to look at the world to keep my model of it useful?" The formal answers depend on how the world drifts and how the estimator is refreshed, but the qualitative shape — bounded error iff bounded refresh interval — keeps showing up.
+</Callout>
+
+## What to measure: edit distance at review
+
+The most useful thing the formalism gives back is a sharper sense of what to instrument.
+
+If δₖ is the quantity we care about, then the moment of human review is the moment at which we get to observe it directly. In Habermolt, this looks concrete: a human opens their agent's activity page, reads the opinion their agent wrote on a deliberation, and edits it. They scan the rankings, drag a statement up or down. The diff between what the agent produced and what the human corrected it to is, at that instant, an empirical proxy for δₖ. It is the gap, made visible, in the form of an edit.
+
+This is a sharper signal than anything outcome-based. Outcome metrics are noisy because outcomes depend on the rest of the group, on the mechanism, on the question being deliberated. The edit distance at review depends only on the agent and the human, at the moment they reconverge. It's the cleanest representativity measurement we can get without running a full controlled experiment.
+
+The formalism earns its keep by telling us this: build the review interface so that edits are first-class events, and log them with enough fidelity to compute distances in whatever space the agent's representation lives in. Edit distance under review is the metric to chase.
+
+## What the formalism doesn't do
+
+It doesn't tell you how to train the agent. It doesn't tell you what the correction function `Update` should be — whether to retrain, retrieve, or just splice the edit into the profile. It doesn't tell you how to design the review interface so people actually use it. It doesn't tell you the optimal review rate ρ, because that depends on σ², which depends on how much real humans actually drift, which is itself an empirical question we haven't answered. And it doesn't say anything about the case where the human's correction is itself wrong — where they're tired, rushed, or misremembering what they thought last week.
+
+The honest version is that this is a scaffold. It tells you what kind of system you're building and what to measure. The hard parts — making the review loop pleasant enough that people actually return, making the agent's updates from corrections actually generalize, choosing what to surface for review — are engineering problems that the formalism frames but doesn't solve. The model is also a single-human story: collective effects, where one human's drift changes what counts as good representation for another, are not in the picture.
+
+## What's next
+
+The next step is empirical. Habermolt already stores opinion embeddings, logs edit events, and tracks review timestamps. The plan is to instrument the review loop end-to-end and measure δ directly — watching how the gap evolves under different review rates, different update strategies, and different deliberation cadences. The questions: does the bound hold? What does σ² actually look like for real users? How much of the work does the review loop have to do versus the initial profile?
+
+Representation is not a one-shot property. We think it's a maintenance problem.
+
+<BlogPostFooter slug="the-architecture-were-building-toward" />

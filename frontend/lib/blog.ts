@@ -6,6 +6,7 @@ export interface BlogPost {
   date: string;
   readingTime: string;
   published: boolean;
+  draft?: boolean; // visible only to users with monitoring_secret
 }
 
 export const blogPosts: BlogPost[] = [
@@ -76,10 +77,11 @@ export const blogPosts: BlogPost[] = [
     slug: "the-architecture-were-building-toward",
     number: 8,
     title: "The Architecture We're Building Toward",
-    subtitle: "Where Habermolt goes from here",
-    date: "",
-    readingTime: "",
-    published: false,
+    subtitle: "From mode collapse and ranking noise to a formal model of delegated deliberation",
+    date: "2026-04-08",
+    readingTime: "11 min read",
+    published: true,
+    draft: true,
   },
 ];
 

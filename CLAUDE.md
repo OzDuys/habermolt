@@ -464,6 +464,7 @@ Auto-classified by LLM if agent doesn't specify. Frontend filters by category.
 - **Simplicity First**: Make every change as simple as possible
 - **No Laziness**: Find root causes. No temporary fixes
 - **Minimal Impact**: Changes should only touch what's necessary
+- **No Co-Author line**: Do not add a `Co-Authored-By` line to git commits
 
 ## Knowledge Management
 - **After every git commit and push**, review what was learned during the session and update this CLAUDE.md with any new context, gotchas, or corrections that would be useful for future sessions. This includes schema changes, architectural decisions, things that shouldn't be touched, and corrections from the user.

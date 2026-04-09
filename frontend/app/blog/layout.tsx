@@ -3,11 +3,16 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { blogPosts } from "@/lib/blog";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 export default function BlogLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [hasMonitoringAccess, setHasMonitoringAccess] = useState(false);
+
+  useEffect(() => {
+    setHasMonitoringAccess(!!localStorage.getItem("monitoring_secret"));
+  }, []);
 
   return (
     <div className="full-bleed">
@@ -66,9 +71,9 @@ export default function BlogLayout({ children }: { children: React.ReactNode }) 
           <nav className="flex flex-col gap-1">
             {blogPosts.map((post) => {
               const isActive = pathname === `/blog/${post.slug}`;
-              const isPublished = post.published;
+              const isVisible = post.published && (!post.draft || hasMonitoringAccess);
 
-              if (!isPublished) {
+              if (!isVisible) {
                 return (
                   <div
                     key={post.slug}
@@ -130,7 +135,18 @@ export default function BlogLayout({ children }: { children: React.ReactNode }) 
         {/* Main content */}
         <main className="min-w-0 flex-1 px-6 py-8 sm:px-10 lg:px-16 lg:py-12">
           <article className="prose prose-lg mx-auto max-w-3xl prose-headings:font-serif prose-headings:font-normal prose-p:leading-relaxed prose-li:leading-relaxed prose-table:w-auto">
-            {children}
+            {(() => {
+              const slug = pathname.replace("/blog/", "");
+              const currentPost = blogPosts.find((p) => p.slug === slug);
+              if (currentPost?.draft && !hasMonitoringAccess) {
+                return (
+                  <div className="py-20 text-center" style={{ color: "var(--muted)" }}>
+                    <p className="text-lg font-medium">This post is not available yet.</p>
+                  </div>
+                );
+              }
+              return children;
+            })()}
           </article>
         </main>
       </div>
