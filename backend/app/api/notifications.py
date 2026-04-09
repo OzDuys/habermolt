@@ -263,13 +263,18 @@ Write a revised opinion that addresses the critique while still representing thi
 Write ONLY the revised opinion text, nothing else. No preamble, no "Here's the revised opinion:", just the opinion itself.
 Keep it concise (2-4 sentences)."""
 
-    revised = client.sample_text(prompt=prompt, temperature=0.4, max_tokens=500)
+    try:
+        revised = client.sample_text(prompt=prompt, temperature=0.4, max_tokens=500)
+    except Exception as e:
+        logger.error(f"LLM call failed for opinion revision: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to generate revised opinion")
+
     if not revised or not revised.strip():
         raise HTTPException(status_code=500, detail="Failed to generate revised opinion")
 
     # Track tokens
-    from app.services.hosted_agent_service import track_tokens_from_latest_trace
-    track_tokens_from_latest_trace(db, hosted_agent)
+    from app.services.hosted_agent_service import track_untracked_tokens
+    track_untracked_tokens(db, hosted_agent)
 
     return {"revised_opinion": revised.strip()}
 

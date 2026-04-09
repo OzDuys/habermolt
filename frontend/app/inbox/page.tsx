@@ -263,6 +263,7 @@ function ActionCard({
   const [loading, setLoading] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
   const [confirmWithdraw, setConfirmWithdraw] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const markRead = async () => {
     if (n.read) return;
@@ -293,6 +294,7 @@ function ActionCard({
   const handleRevise = async () => {
     if (!critique.trim()) return;
     setLoading(true);
+    setError(null);
     setMode("revising");
     try {
       const result = await api.reviseOpinion(n.id, critique.trim(), currentOpinion);
@@ -300,8 +302,10 @@ function ActionCard({
       setEditText(result.revised_opinion);
       setCritique("");
       setMode("idle"); // Back to idle with the new opinion shown
-    } catch {
-      setMode("critiquing"); // Stay in critique mode on error
+    } catch (e) {
+      console.error("Revise opinion failed:", e);
+      setError(e instanceof Error ? e.message : "Failed to revise opinion");
+      setMode("critiquing");
     }
     finally { setLoading(false); }
   };
@@ -524,6 +528,9 @@ function ActionCard({
             autoFocus
             disabled={mode === "revising"}
           />
+          {error && (
+            <p className="mt-1.5 text-xs" style={{ color: "#ef4444" }}>{error}</p>
+          )}
           <div className="mt-2 flex items-center gap-2">
             <button
               onClick={handleRevise}
