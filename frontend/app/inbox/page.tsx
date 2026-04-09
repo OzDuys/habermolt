@@ -264,6 +264,7 @@ function ActionCard({
   const [withdrawing, setWithdrawing] = useState(false);
   const [confirmWithdraw, setConfirmWithdraw] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [animatingOut, setAnimatingOut] = useState<"approved" | "withdrawn" | null>(null);
 
   const markRead = async () => {
     if (n.read) return;
@@ -278,15 +279,17 @@ function ActionCard({
   const handleApprove = async () => {
     setLoading(true);
     try {
-      // If the opinion was revised during this session, save the current version
       if (currentOpinion !== meta.opinion_text && meta.deliberation_id) {
         await api.saveOpinion(n.id, currentOpinion, meta.deliberation_id);
       } else {
         await api.approveNotification(n.id);
       }
       markRead();
-      onUpdate(n.id, { approval_status: "approved", read: true, metadata: { ...meta, opinion_text: currentOpinion } });
       setMode("idle");
+      setAnimatingOut("approved");
+      setTimeout(() => {
+        onUpdate(n.id, { approval_status: "approved", read: true, metadata: { ...meta, opinion_text: currentOpinion } });
+      }, 600);
     } catch {}
     finally { setLoading(false); }
   };
@@ -317,8 +320,11 @@ function ActionCard({
       await api.saveOpinion(n.id, editText.trim(), meta.deliberation_id);
       markRead();
       setCurrentOpinion(editText.trim());
-      onUpdate(n.id, { approval_status: "approved", read: true, metadata: { ...meta, opinion_text: editText.trim(), revised: true } });
       setMode("idle");
+      setAnimatingOut("approved");
+      setTimeout(() => {
+        onUpdate(n.id, { approval_status: "approved", read: true, metadata: { ...meta, opinion_text: editText.trim(), revised: true } });
+      }, 600);
     } catch {}
     finally { setLoading(false); }
   };
@@ -329,8 +335,11 @@ function ActionCard({
     try {
       await api.withdrawFromDeliberation(n.id, meta.deliberation_id);
       markRead();
-      onUpdate(n.id, { approval_status: "withdrawn" as any, read: true });
       setConfirmWithdraw(false);
+      setAnimatingOut("withdrawn");
+      setTimeout(() => {
+        onUpdate(n.id, { approval_status: "withdrawn" as any, read: true });
+      }, 600);
     } catch {}
     finally { setWithdrawing(false); }
   };
@@ -340,12 +349,27 @@ function ActionCard({
 
   return (
     <div
-      className="rounded-xl border transition-shadow hover:shadow-sm"
+      className="rounded-xl border transition-all duration-500 hover:shadow-sm"
       style={{
-        borderColor: isReviewable ? "var(--accent)" : "var(--border)",
-        background: "var(--surface)",
-        opacity: subdued ? 0.7 : 1,
-        borderWidth: isReviewable ? "1.5px" : "1px",
+        borderColor: animatingOut === "approved"
+          ? "#22c55e"
+          : animatingOut === "withdrawn"
+            ? "#ef4444"
+            : isReviewable
+              ? "var(--accent)"
+              : "var(--border)",
+        background: animatingOut === "approved"
+          ? "#f0fdf4"
+          : animatingOut === "withdrawn"
+            ? "#fef2f2"
+            : "var(--surface)",
+        opacity: animatingOut ? 0 : subdued ? 0.7 : 1,
+        transform: animatingOut ? "scale(0.97) translateY(-4px)" : "scale(1) translateY(0)",
+        maxHeight: animatingOut ? "0px" : "2000px",
+        overflow: animatingOut ? "hidden" : "visible",
+        marginBottom: animatingOut ? "0px" : undefined,
+        padding: animatingOut ? "0px" : undefined,
+        borderWidth: animatingOut ? "0px" : isReviewable ? "1.5px" : "1px",
       }}
     >
       {/* Card header */}
