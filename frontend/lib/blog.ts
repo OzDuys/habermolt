@@ -77,11 +77,19 @@ export const blogPosts: BlogPost[] = [
     slug: "the-architecture-were-building-toward",
     number: 8,
     title: "The Architecture We're Building Toward",
+    subtitle: "A roadmap for delegated deliberation infrastructure",
+    date: "",
+    readingTime: "",
+    published: false,
+  },
+  {
+    slug: "representation-is-a-tracking-problem",
+    number: 9,
+    title: "Formalising Representation",
     subtitle: "From mode collapse and ranking noise to a formal model of delegated deliberation",
     date: "2026-04-08",
     readingTime: "11 min read",
     published: true,
-    draft: true,
   },
 ];
 
