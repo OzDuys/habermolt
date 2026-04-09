@@ -79,7 +79,7 @@ export default function TwoTimescaleDiagram() {
 
       {/* θ̂ piecewise-constant strip between episodes */}
       <text x={startX} y={216} fontSize="10" fill={accent} fontWeight="600">
-        θ̂ₖ (agent's representation — frozen until review)
+        {"θ̂ₖ (agent's representation — frozen until review)"}
       </text>
       {/* Three flat segments for θ̂: ep0-1, ep2-5 (after c₁), ep6-7 (after c₂) */}
       {[
