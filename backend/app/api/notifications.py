@@ -19,11 +19,12 @@ router = APIRouter(prefix="/notifications", tags=["notifications"])
 
 def _update_profile_from_approval(
     db: Session, hosted_agent, question: str, opinion_text: str, critiques: list[str] = None,
-) -> None:
-    """Extract the confirmed position from an approved opinion and append it to the profile.
+) -> dict | None:
+    """Integrate a confirmed position into the profile by rewriting the entire profile.
 
-    If critiques are provided (from the inline correction loop), the LLM also
-    synthesizes what the human cares about based on the pattern of corrections.
+    The LLM receives the current profile + new information and produces a clean,
+    well-organized rewrite. Never removes existing information unless it directly
+    contradicts the new human-confirmed position.
     """
     from app.services.hosted_agent_service import get_llm_client
 
@@ -34,47 +35,51 @@ def _update_profile_from_approval(
         agent_id=hosted_agent.agent_id,
     )
 
+    current_profile = hosted_agent.user_profile or ""
+
+    # Build the new information block
+    new_info_parts = [f"Topic: {question}", f"Approved opinion: {opinion_text}"]
     if critiques:
         critique_text = "\n".join(f"  {i+1}. \"{c}\"" for i, c in enumerate(critiques))
-        prompt = f"""The human's agent submitted an opinion on their behalf. The human critiqued it {len(critiques)} time(s) before approving the final version.
+        new_info_parts.append(f"Human critiques before approving (reveals preferences):\n{critique_text}")
 
-Topic: {question}
+    new_info = "\n".join(new_info_parts)
 
-Final approved opinion: {opinion_text}
+    prompt = f"""You are updating a user profile for an AI agent that represents this human in deliberations.
 
-Their critiques (in order):
-{critique_text}
+## Current Profile
+{current_profile}
 
-Based on the final opinion AND the pattern of critiques, extract:
-1. A confirmed position bullet point: "- On [topic]: [what they believe]"
-2. A preference lesson bullet point: "- Preference: [how they want to be represented, based on what they corrected]"
+## New Information to Integrate
+{new_info}
 
-Write ONLY the two bullet points, nothing else. If the critiques don't reveal a meaningful preference beyond the opinion itself, just write the one position bullet point."""
-    else:
-        prompt = f"""The human approved the following opinion their agent submitted on their behalf.
+## Instructions
+Rewrite the COMPLETE profile, integrating the new information in the appropriate place.
 
-Topic: {question}
-Opinion: {opinion_text}
+Rules:
+1. NEVER remove existing information unless it DIRECTLY contradicts the new human-confirmed position (new info wins since it's more recent).
+2. If the new info relates to an existing section or topic, update/merge it there — don't create a duplicate.
+3. If the new info is on a new topic, add it under the most appropriate section.
+4. Keep the profile well-organized with clear markdown headers.
+5. If the human's critiques reveal how they want to be represented (tone, framing, things to avoid), capture that as a preference.
+6. Keep bullet points concise (1-2 sentences each).
+7. Output ONLY the complete rewritten profile — no preamble, no explanation.
+8. Preserve the overall structure and voice of the existing profile."""
 
-Extract a concise value statement (1-2 sentences) that captures this confirmed position.
-Write it as a bullet point starting with "- On [topic]: ..."
-Respond with ONLY the bullet point, nothing else."""
-
-    value_statement = client.sample_text(prompt=prompt, temperature=0.2, max_tokens=250)
-    if not value_statement or not value_statement.strip():
+    rewritten = client.sample_text(prompt=prompt, temperature=0.2, max_tokens=2000)
+    if not rewritten or not rewritten.strip():
         return None
 
-    # Append to profile under a confirmed positions section
     version_before = hosted_agent.profile_version
-    profile = hosted_agent.user_profile or ""
-    section_header = "\n\n## Confirmed Positions (approved by human)"
-    if section_header.strip() not in profile:
-        profile += section_header
-    profile += "\n" + value_statement.strip()
-
-    hosted_agent.user_profile = profile
+    hosted_agent.user_profile = rewritten.strip()
     hosted_agent.profile_version += 1
     db.commit()
+
+    return {
+        "value_statement": rewritten.strip(),
+        "profile_version_before": version_before,
+        "profile_version_after": hosted_agent.profile_version,
+    }
 
     return {
         "value_statement": value_statement.strip(),
