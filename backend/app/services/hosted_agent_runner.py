@@ -1196,10 +1196,26 @@ def _do_add_statement(db: Session, hosted_agent: HostedAgent, delib_id: UUID) ->
     )
 
     delib_question = sanitize_prompt_text(delib.question)
+
+    # Use deliberation's prompt_config to customize the statement prompt
+    from app.services.prompt_presets import get_system_prompt
+    custom_system_prompt = get_system_prompt(delib.prompt_config)
+
+    if custom_system_prompt:
+        # For custom presets (e.g. nomination), use the preset's system prompt
+        # but still inject the profile and opinions context
+        system_prompt = (
+            f"## Human's Profile\n{profile}\n\n"
+            f"## All Opinions\n{opinions_text}\n\n"
+            f"{custom_system_prompt}"
+        )
+    else:
+        system_prompt = STATEMENT_SYSTEM_PROMPT.format(profile=profile, opinions=opinions_text)
+
     prompt = f"Deliberation question: \"{delib_question}\"\n\n{opinions_text}\n\nPropose a consensus statement."
     response = client.sample_text(
         prompt=prompt,
-        system_prompt=STATEMENT_SYSTEM_PROMPT.format(profile=profile, opinions=opinions_text),
+        system_prompt=system_prompt,
         temperature=0.7,
     )
 

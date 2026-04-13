@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Fuse from "fuse.js";
 import { api } from "@/lib/api";
-import type { Deliberation, StatsResponse, PrivateDeliberationListItem, CategoryDef } from "@/lib/types";
+import type { Deliberation, DotdResponse, StatsResponse, PrivateDeliberationListItem, CategoryDef } from "@/lib/types";
 import { timeAgo } from "@/lib/utils";
 import Link from "next/link";
 import Image from "next/image";
@@ -110,6 +110,10 @@ function buildCategoryLabelMap(defs: CategoryDef[]): Record<string, string> {
 }
 
 function matchesCategory(deliberation: Deliberation, category: string, reversed: boolean, participatedIds?: Set<string>): boolean {
+  // Hide resolved meta-deliberations from all tabs except "daily"
+  if (category !== "daily" && deliberation.stage === "resolved" && deliberation.meta_data?.is_meta_dotd) {
+    return false;
+  }
   if (category === "top" || category === "trending" || category === "recent") return true;
   if (category === "joined") {
     const joined = participatedIds?.has(deliberation.id) ?? false;
@@ -540,6 +544,9 @@ export default function HomePage() {
   const [isOnboarded, setIsOnboarded] = useState<boolean>(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [participatedIds, setParticipatedIds] = useState<Set<string>>(new Set());
+  const [dotd, setDotd] = useState<DotdResponse | null>(null);
+  const [metaDeliberation, setMetaDeliberation] = useState<Deliberation | null>(null);
+  const [showResolved, setShowResolved] = useState(false);
 
   // Restore intent after sign-in redirect (e.g. user clicked "Start a Deliberation" while signed out)
   useEffect(() => {
@@ -584,9 +591,28 @@ export default function HomePage() {
     load();
     api.getStats().then(setStats).catch(() => {});
     api.getCategories().then(setCategoryDefs).catch(() => {});
+    api.getDotd().then(setDotd).catch(() => {});
+    api.getMetaDeliberation().then(setMetaDeliberation).catch(() => {});
   }, []);
 
-  const baseDeliberations = deliberations;
+  // Build the base list: on trending/top, prepend DotD + meta at the top (deduplicated)
+  const baseDeliberations = useMemo(() => {
+    const showDotdCards = (activeCategory === "trending" || activeCategory === "top") && !searchQuery.trim();
+    if (!showDotdCards) return deliberations;
+
+    const excludeIds = new Set<string>();
+    const prepend: Deliberation[] = [];
+    if (dotd) {
+      excludeIds.add(dotd.deliberation.id);
+      prepend.push(dotd.deliberation);
+    }
+    if (metaDeliberation) {
+      excludeIds.add(metaDeliberation.id);
+      prepend.push(metaDeliberation);
+    }
+    if (prepend.length === 0) return deliberations;
+    return [...prepend, ...deliberations.filter((d) => !excludeIds.has(d.id))];
+  }, [deliberations, dotd, metaDeliberation, activeCategory, searchQuery]);
 
   // Build derived category structures from backend data
   const topicTabs = useMemo(() => buildCategoryTabs(categoryDefs), [categoryDefs]);
@@ -622,13 +648,26 @@ export default function HomePage() {
     [baseDeliberations.map((d) => d.id).join(",")]
   );
 
+  // Resolved meta-deliberations (shown in collapsible section on "daily" tab)
+  const resolvedMetaDelibs = useMemo(() => {
+    if (activeCategory !== "daily") return [];
+    return baseDeliberations.filter(
+      (d) => d.stage === "resolved" && d.meta_data?.is_meta_dotd
+    );
+  }, [baseDeliberations, activeCategory]);
+
   const filteredDeliberations = (() => {
     const q = searchQuery.trim();
     const candidates = q
       ? fuse.search(q).map((r) => r.item)
       : baseDeliberations;
 
-    const filtered = candidates.filter((d) => matchesCategory(d, activeCategory, categoryReversed, participatedIds));
+    let filtered = candidates.filter((d) => matchesCategory(d, activeCategory, categoryReversed, participatedIds));
+
+    // On the daily tab, exclude resolved meta-delibs from the main grid (shown separately)
+    if (activeCategory === "daily") {
+      filtered = filtered.filter((d) => !(d.stage === "resolved" && d.meta_data?.is_meta_dotd));
+    }
 
     // When searching, preserve Fuse.js relevance ordering
     if (q) return filtered;
@@ -987,20 +1026,42 @@ export default function HomePage() {
                           <div className="flex items-start justify-between" style={{ marginBottom: "clamp(0.4rem, 0.8vw, 0.75rem)", gap: "clamp(0.2rem, 0.4vw, 0.375rem)" }}>
                             {deliberation.categories?.length > 0 ? (
                               <div className="flex flex-wrap" style={{ gap: "clamp(0.2rem, 0.4vw, 0.375rem)" }}>
-                                {deliberation.categories.map((cat) => (
-                                  <span
-                                    key={cat}
-                                    style={{
-                                      fontSize: "clamp(8px, 1vw, 11px)",
-                                      padding: "clamp(1px, 0.3vw, 2px) clamp(4px, 0.8vw, 10px)",
-                                      backgroundColor: CATEGORY_COLORS[cat]?.bg ?? "#f5f5f4",
-                                      color: CATEGORY_COLORS[cat]?.text ?? "#57534e",
-                                    }}
-                                    className="inline-flex rounded-full font-semibold"
-                                  >
-                                    {categoryLabels[cat] || cat}
-                                  </span>
-                                ))}
+                                {deliberation.categories.map((cat) => {
+                                  const isTodaysDotd = cat === "daily" && dotd?.deliberation.id === deliberation.id;
+                                  const isTomorrowsMeta = cat === "daily" && deliberation.meta_data?.is_meta_dotd && deliberation.stage === "active";
+                                  const featuredDate = cat === "daily" && deliberation.meta_data?.dotd_featured_date;
+                                  const isPastDotd = featuredDate && !isTodaysDotd;
+
+                                  let label = categoryLabels[cat] || cat;
+                                  let bg = CATEGORY_COLORS[cat]?.bg ?? "#f5f5f4";
+                                  let fg = CATEGORY_COLORS[cat]?.text ?? "#57534e";
+
+                                  if (isTodaysDotd) {
+                                    label = "Today's DotD";
+                                  } else if (isTomorrowsMeta) {
+                                    label = "Vote for tomorrow's DotD";
+                                    bg = "#fef9c3";
+                                    fg = "#a16207";
+                                  } else if (isPastDotd) {
+                                    const d = new Date(featuredDate + "T00:00:00");
+                                    label = `DotD ${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+                                  }
+
+                                  return (
+                                    <span
+                                      key={cat}
+                                      style={{
+                                        fontSize: "clamp(8px, 1vw, 11px)",
+                                        padding: "clamp(1px, 0.3vw, 2px) clamp(4px, 0.8vw, 10px)",
+                                        backgroundColor: bg,
+                                        color: fg,
+                                      }}
+                                      className="inline-flex rounded-full font-semibold"
+                                    >
+                                      {label}
+                                    </span>
+                                  );
+                                })}
                               </div>
                             ) : <div />}
                             <span className="shrink-0 text-stone-400" style={{ fontSize: "clamp(8px, 0.9vw, 11px)" }}>
@@ -1034,6 +1095,54 @@ export default function HomePage() {
                     >
                       Show more deliberations ({filteredDeliberations.length - visibleCount} remaining)
                     </button>
+                  </div>
+                )}
+
+                {/* Resolved meta-deliberations (daily tab only) */}
+                {resolvedMetaDelibs.length > 0 && (
+                  <div className="mt-6">
+                    <button
+                      onClick={() => setShowResolved(!showResolved)}
+                      className="flex items-center gap-1.5 text-sm font-medium text-stone-400 hover:text-stone-600 transition-colors"
+                    >
+                      <svg
+                        className={`h-3.5 w-3.5 transition-transform ${showResolved ? "rotate-90" : ""}`}
+                        fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
+                      >
+                        <polyline points="9 18 15 12 9 6" />
+                      </svg>
+                      {resolvedMetaDelibs.length} resolved {resolvedMetaDelibs.length === 1 ? "vote" : "votes"}
+                    </button>
+                    {showResolved && (
+                      <div className="mt-3 grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" style={{ gap: `${MASONRY_GAP}px` }}>
+                        {resolvedMetaDelibs.map((deliberation) => (
+                          <Link
+                            key={deliberation.id}
+                            href={`/deliberations/${deliberation.id}`}
+                            className="group block rounded-xl border border-stone-200 bg-stone-50 opacity-60 transition-all hover:opacity-100 hover:border-red-300 hover:shadow-lg"
+                            style={{ padding: "clamp(0.6rem, 1.5vw, 1.25rem)" }}
+                          >
+                            <div className="flex items-start justify-between" style={{ marginBottom: "clamp(0.4rem, 0.8vw, 0.75rem)", gap: "clamp(0.2rem, 0.4vw, 0.375rem)" }}>
+                              <span
+                                className="inline-flex rounded-full font-semibold text-stone-400 bg-stone-200"
+                                style={{ fontSize: "clamp(8px, 1vw, 11px)", padding: "clamp(1px, 0.3vw, 2px) clamp(4px, 0.8vw, 10px)" }}
+                              >
+                                Resolved
+                              </span>
+                              <span className="shrink-0 text-stone-400" style={{ fontSize: "clamp(8px, 0.9vw, 11px)" }}>
+                                {timeAgo(deliberation.created_at)}
+                              </span>
+                            </div>
+                            <h3 className="font-semibold leading-snug text-stone-500 group-hover:text-red-600 group-hover:underline group-hover:decoration-1 group-hover:underline-offset-2" style={{ marginBottom: "clamp(0.3rem, 0.5vw, 0.5rem)", fontSize: "clamp(0.7rem, 1.3vw, 1rem)" }}>
+                              {deliberation.question}
+                            </h3>
+                            <div className="text-stone-400" style={{ fontSize: "clamp(0.55rem, 1vw, 0.75rem)" }}>
+                              {deliberation.num_citizens} participants
+                            </div>
+                          </Link>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
                 </>

@@ -27,6 +27,7 @@ from app.models import (
 from app.config import settings
 from app.services.statement_service import statement_service
 from app.services.schulze_service import schulze_service
+from app.services.prompt_presets import get_system_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +46,7 @@ class ContinuousDeliberationService:
         categories: list = None,
         meta_data: dict = None,
         description: str = None,
+        prompt_config: dict = None,
     ) -> Deliberation:
         """Create a continuous deliberation with seed statements.
 
@@ -63,6 +65,7 @@ class ContinuousDeliberationService:
             num_citizens=0,
             categories=categories or [],
             meta_data=meta_data or {},
+            prompt_config=prompt_config,
         )
         self.db.add(deliberation)
         self.db.commit()
@@ -94,7 +97,8 @@ class ContinuousDeliberationService:
 
         # Generate seed opinions (synthetic diverse perspectives)
         seed_opinions = await self._generate_seed_opinions(
-            question, creator_opinion=initial_opinion, deliberation_id=deliberation.id
+            question, creator_opinion=initial_opinion, deliberation_id=deliberation.id,
+            prompt_config=deliberation.prompt_config,
         )
 
         # Always include the creator's real opinion so the LLM has substantive input
@@ -112,6 +116,9 @@ class ContinuousDeliberationService:
             f"for deliberation {deliberation.id}"
         )
 
+        # Resolve custom system prompt from deliberation's prompt_config
+        system_prompt_override = get_system_prompt(deliberation.prompt_config)
+
         # Generate seed statements — retry up to 2 times
         seed_statements = []
         for attempt in range(2):
@@ -120,6 +127,7 @@ class ContinuousDeliberationService:
                 deliberation,
                 seed_opinions,
                 seed_opinions=seed_opinions,
+                system_prompt_override=system_prompt_override,
             )
             if seed_statements:
                 break
@@ -227,7 +235,7 @@ class ContinuousDeliberationService:
         )
         return deliberation
 
-    async def _generate_seed_opinions(self, question: str, creator_opinion: str = None, deliberation_id=None) -> List[str]:
+    async def _generate_seed_opinions(self, question: str, creator_opinion: str = None, deliberation_id=None, prompt_config: dict = None) -> List[str]:
         """Generate synthetic diverse opinions to seed statement generation.
 
         Retries up to 3 times if the LLM call fails or returns unparseable output.
@@ -235,6 +243,7 @@ class ContinuousDeliberationService:
         at least one substantive opinion in the list.
         """
         from app.services.llm_client import LLMClient
+        from app.services.prompt_presets import resolve_prompt_config
 
         client = LLMClient()
 
@@ -245,19 +254,41 @@ class ContinuousDeliberationService:
                 f"<opinion>{creator_opinion}</opinion>\n\n"
             )
 
-        prompt = (
-            f"A group is deliberating on the following question:\n"
-            f"\"{question}\"\n"
-            f"{creator_context}"
-            f"Generate {settings.CONTINUOUS_NUM_SEED_OPINIONS} diverse perspectives "
-            f"on this topic.\n\n"
-            f"CRITICAL: The two perspectives must represent opposite poles:\n"
-            f"- One strong YES/FOR position\n"
-            f"- One strong NO/AGAINST position\n\n"
-            f"Each perspective should be fundamentally different in its conclusion. "
-            f"Make each one substantive and well-reasoned (2-3 sentences).\n\n"
-            f"Format as a numbered list. Return ONLY the numbered list, one perspective per line."
-        )
+        # Check if this is a nomination-style deliberation
+        resolved = resolve_prompt_config(prompt_config)
+        preset_name = (prompt_config or {}).get("preset", "default") if prompt_config else "default"
+
+        if preset_name == "nomination":
+            prompt = (
+                f"A group is deciding what question to deliberate on next. The meta-question is:\n"
+                f"\"{question}\"\n"
+                f"{creator_context}"
+                f"Generate {settings.CONTINUOUS_NUM_SEED_OPINIONS} diverse proposed questions "
+                f"that the group might want to deliberate on.\n\n"
+                f"CRITICAL RULES:\n"
+                f"- Each proposal MUST be a specific question ending with a question mark (?)\n"
+                f"- The questions should cover different topics or angles\n"
+                f"- Each should be debatable — reasonable people could disagree\n"
+                f"- Keep each to 1-2 sentences: the question itself, optionally followed by brief context\n\n"
+                f"Example format:\n"
+                f"1. Should AI-generated art be eligible for copyright protection? This touches on creativity, ownership, and the future of artistic expression.\n"
+                f"2. Is universal basic income inevitable in an age of automation? As AI replaces more jobs, societies need to rethink economic safety nets.\n\n"
+                f"Format as a numbered list. Return ONLY the numbered list."
+            )
+        else:
+            prompt = (
+                f"A group is deliberating on the following question:\n"
+                f"\"{question}\"\n"
+                f"{creator_context}"
+                f"Generate {settings.CONTINUOUS_NUM_SEED_OPINIONS} diverse perspectives "
+                f"on this topic.\n\n"
+                f"CRITICAL: The two perspectives must represent opposite poles:\n"
+                f"- One strong YES/FOR position\n"
+                f"- One strong NO/AGAINST position\n\n"
+                f"Each perspective should be fundamentally different in its conclusion. "
+                f"Make each one substantive and well-reasoned (2-3 sentences).\n\n"
+                f"Format as a numbered list. Return ONLY the numbered list, one perspective per line."
+            )
 
         max_attempts = 3
         for attempt in range(max_attempts):

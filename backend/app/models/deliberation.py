@@ -15,6 +15,7 @@ from app.database import Base
 class DeliberationStage:
     """Deliberation stages."""
     ACTIVE = "active"
+    RESOLVED = "resolved"  # Meta-deliberations that have been resolved (winner picked)
 
 
 class Deliberation(Base):
@@ -71,6 +72,9 @@ class Deliberation(Base):
 
     # Metadata
     meta_data = Column(JSONB, default=dict)
+
+    # Custom prompt configuration for statement generation
+    prompt_config = Column(JSONB, nullable=True)
 
     # Whether this deliberation has complete ranking snapshot history
     # (False for deliberations created before snapshot tracking was added)

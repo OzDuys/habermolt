@@ -120,6 +120,13 @@ CATEGORIES: List[CategoryDef] = [
         color_bg="#fffbeb",
         color_text="#d97706",
     ),
+    CategoryDef(
+        slug="daily",
+        label="Daily",
+        description="Deliberation of the Day and meta-deliberations for choosing tomorrow's featured topic",
+        color_bg="#fef2f2",
+        color_text="#dc2626",
+    ),
 ]
 
 # ── Derived helpers ─────────────────────────────────────────────────

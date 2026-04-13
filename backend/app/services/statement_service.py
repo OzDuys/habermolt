@@ -152,6 +152,7 @@ class StatementService:
         question: str,
         opinions: list[str],
         deliberation_id=None,
+        system_prompt_override: str | None = None,
     ) -> Tuple[str, str, str]:
         """Generate one candidate statement with retries. Returns (statement, title, reasoning)."""
         # Shuffle opinions to avoid ordering bias
@@ -168,10 +169,12 @@ class StatementService:
             deliberation_id=deliberation_id,
         )
 
+        effective_system_prompt = system_prompt_override or SYSTEM_PROMPT
+
         statement, title, reasoning = "", "", ""
         for attempt in range(self.num_retries):
             response = client.sample_text(
-                user_prompt, system_prompt=SYSTEM_PROMPT, seed=seed
+                user_prompt, system_prompt=effective_system_prompt, seed=seed
             )
             statement, title, reasoning = _parse_response(response)
             if len(statement) > 5 and reasoning != "PARSE_FAILED":
@@ -190,12 +193,17 @@ class StatementService:
         deliberation: Deliberation,
         opinions: list[str],
         seed_opinions: Optional[list[str]] = None,
+        system_prompt_override: Optional[str] = None,
     ) -> List[Statement]:
         """
         Generate num_candidates statements and store them in the database.
 
         Each candidate is assigned a model from the configured model list (cycled
         if there are fewer models than candidates).
+
+        Args:
+            system_prompt_override: If provided, replaces the default SYSTEM_PROMPT
+                for statement generation. Used by deliberation-specific prompt presets.
 
         Returns list of Statement model instances.
         """
@@ -209,6 +217,7 @@ class StatementService:
                 self._generate_single_statement,
                 client, deliberation.question, opinions,
                 deliberation.id,
+                system_prompt_override=system_prompt_override,
             )
             return (stmt, title, reasoning, model_name)
 
@@ -237,8 +246,11 @@ class StatementService:
 
         db.commit()
 
-        # Post-hoc: regenerate titles to ensure they differentiate the statements
-        await self._differentiate_titles(db, statements)
+        # Post-hoc: regenerate titles to ensure they differentiate the statements.
+        # Skip for custom prompts (e.g. nomination preset) where titles are the
+        # primary deliverable and shouldn't be overwritten.
+        if not system_prompt_override:
+            await self._differentiate_titles(db, statements)
 
         logger.info(
             f"Generated {len(statements)} statements for deliberation "

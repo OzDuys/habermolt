@@ -205,6 +205,11 @@ async def create_deliberation(
             detail="initial_opinion is required when creating a deliberation",
         )
 
+    # Resolve prompt config from preset or explicit config
+    prompt_config = body.prompt_config
+    if not prompt_config and body.prompt_preset:
+        prompt_config = {"preset": body.prompt_preset}
+
     service = ContinuousDeliberationService(db)
     try:
         deliberation = await service.create_deliberation(
@@ -214,6 +219,7 @@ async def create_deliberation(
             categories=body.categories,
             meta_data=body.meta_data,
             description=body.description,
+            prompt_config=prompt_config,
         )
     except Exception as e:
         error_msg = str(e)
