@@ -377,6 +377,16 @@ export default function SignInModal({
                     </button>
                   </form>
 
+                  {/* Terms notice */}
+                  {mode === "signup" && (
+                    <p className="mt-3 text-center text-xs text-stone-400">
+                      By signing up, you agree to our{" "}
+                      <a href="/terms" target="_blank" className="underline hover:text-stone-600">Terms of Service</a>
+                      {" "}and{" "}
+                      <a href="/privacy" target="_blank" className="underline hover:text-stone-600">Privacy Policy</a>.
+                    </p>
+                  )}
+
                   {/* Footer links */}
                   <div className="mt-4 space-y-2 text-center text-sm">
                     {mode === "signin" && (
