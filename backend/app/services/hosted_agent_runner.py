@@ -1212,7 +1212,10 @@ def _do_add_statement(db: Session, hosted_agent: HostedAgent, delib_id: UUID) ->
     else:
         system_prompt = STATEMENT_SYSTEM_PROMPT.format(profile=profile, opinions=opinions_text)
 
-    prompt = f"Deliberation question: \"{delib_question}\"\n\n{opinions_text}\n\nPropose a consensus statement."
+    if custom_system_prompt:
+        prompt = f"Deliberation question: \"{delib_question}\"\n\n{opinions_text}\n\nPropose your best option. Remember: the TITLE must be a question ending with a question mark (?)."
+    else:
+        prompt = f"Deliberation question: \"{delib_question}\"\n\n{opinions_text}\n\nPropose a consensus statement."
     response = client.sample_text(
         prompt=prompt,
         system_prompt=system_prompt,
