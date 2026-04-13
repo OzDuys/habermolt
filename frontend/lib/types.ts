@@ -1,6 +1,6 @@
 // TypeScript types matching backend schema
 
-export type DeliberationStage = "active";
+export type DeliberationStage = "active" | "resolved";
 
 export interface CategoryDef {
   slug: string;
