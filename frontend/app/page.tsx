@@ -1078,7 +1078,7 @@ export default function HomePage() {
                           {/* Stats row */}
                           <div className="flex items-center justify-between text-stone-500" style={{ fontSize: "clamp(0.55rem, 1vw, 0.75rem)" }}>
                             <span>{deliberation.num_citizens} participants</span>
-                            {deliberation.created_by_name && (
+                            {deliberation.created_by_name && !deliberation.meta_data?.is_meta_dotd && (
                               <span className="truncate text-right">by {deliberation.created_by_name}</span>
                             )}
                           </div>
