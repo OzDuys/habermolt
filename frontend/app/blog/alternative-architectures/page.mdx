@@ -77,15 +77,37 @@ Given the same data, BT and Schulze produce the same winner **8 out of 10 times*
 
 Single-shot and Habermolt production score identically on specificity (7.7) and near-identically on disagreeability (8.1 vs 7.6). The deliberation loop's advantage isn't better *writing* — it's better *selection*. The ranking process finds the formulation that resonates across agents, even when all formulations are similarly well-written.
 
+## Result 4: But the actions are the same
+
+This is the finding that challenges everything above.
+
+We asked a judge to extract the concrete actions each statement recommends, then compared: would a policymaker make *different decisions* based on the Habermolt winner vs the single-shot synthesis?
+
+| Single-shot vs Habermolt production | Count |
+|---|---|
+| **YES** — different policy directions | 2 deliberations |
+| **MARGINAL** — same direction, minor differences | 6 deliberations |
+| **NO** — identical decisions | 2 deliberations |
+
+In 8 out of 10 deliberations, the two methods recommend essentially the same actions. The "representativeness advantage" we measured is real — agents prefer the Habermolt phrasing — but it doesn't translate into different policy outcomes.
+
+Actionability scores are universally low across all methods: single-shot 1.9, Habermolt 2.1, BT 2.0 (out of 5). Everything lands at "general direction without specifics" — statements like "democratic oversight should be established" without saying who, how, or when. No method, no matter how sophisticated, produces implementation-ready policy from these opinions.
+
+**Why?** Because the bottleneck is upstream. If 35 agents all think "democratic AI governance with safeguards" — slightly different phrasings of the same position, as we showed in [Can Agents Represent You?](/blog/can-agents-represent-you) — no architecture can extract diverse actions from uniform input. The pipeline compresses at every stage:
+
+*Diverse human views → Homogeneous opinions (LLM topic prior) → Homogeneous statements (mode collapse) → Indistinguishable actions*
+
+We fixed the statement stage ([Part II](/blog/fixing-mode-collapse)). We improved the ranking stage ([Can Agents Rank?](/blog/can-agents-rank)). But the opinion stage remains the binding constraint.
+
 ## What this means
 
-### The architecture is justified — but not by output quality alone
+### The architecture is justified — but by process, not output
 
-If you only look at the numbers, the case for Habermolt's architecture is: "it's modestly better than one LLM call on representativeness (p = 0.017), with identical quality." That's a real advantage, but it wouldn't justify the engineering complexity on its own.
+The case for Habermolt's architecture is no longer "it produces better outputs." The outputs are similar across methods — same quality, same actions, with a modest representativeness edge.
 
-The stronger argument is structural. Single-shot is a fundamentally different *governance model*. One LLM reads all opinions and decides what the consensus is. The model's biases, training data, and RLHF preferences determine the output. No agent has a vote. No human is represented by a participant in the process. It's a benevolent dictator, not a democracy.
+The case is structural. Single-shot is a fundamentally different *governance model*. One LLM reads all opinions and decides what the consensus is. The model's biases, training data, and RLHF preferences determine the output. No agent has a vote. No human is represented by a participant in the process. It's a benevolent dictator, not a democracy.
 
-Our representativeness metric asks "does this statement capture your position?" but doesn't ask "did you have a voice in selecting it?" or "could you have advocated for a different position?" These are democratic legitimacy questions that no output metric can capture. Deliberation gives agents — and through them, humans — a role in the process. That matters even when the output is only modestly better.
+Our representativeness metric asks "does this statement capture your position?" but doesn't ask "did you have a voice in selecting it?" or "could you have advocated for a different position?" These are democratic legitimacy questions that no output metric can capture. Deliberation gives agents — and through them, humans — a role in the process. That matters even when the output is similar.
 
 ### The ranking step is where value is created
 
