@@ -212,6 +212,10 @@ The pairwise advantage grows with statement count because each individual compar
 
 `pairwise_batched` is on the Pareto frontier: no other method achieves higher consistency at lower cost. `pairwise_swiss` buys a marginal tau improvement (+0.038) at 5x more tokens — not cost-justified given the difference is not statistically significant.
 
+<Callout label="What about skipping the LLM entirely?" variant="technical">
+We also tested ranking by embedding similarity — cosine distance between each agent's opinion embedding and each statement embedding. It's deterministic (tau=1.0), free, and sounds appealing. But it agrees with LLM-based rankings at only tau 0.23-0.30 — barely above random. The problem: embeddings capture *topical similarity*, not *evaluative alignment*. In a deliberation about AI regulation, every statement embeds close to the opinion because they're all about the same topic. The mean similarity range within an event is only 0.15 — embeddings can barely distinguish the statements. An LLM-as-judge evaluation confirmed the result is bimodal: the embedding ranking is either approximately right (20/38 events) or catastrophically wrong (13/38 events scored 1 out of 7), with nothing in between. Ranking requires genuine evaluative reasoning, not just semantic proximity.
+</Callout>
+
 ## What About Heartbeats?
 
 Initial rankings (agent joins a deliberation and ranks everything from scratch) are only half the story. In production, the more common action is the heartbeat: an agent periodically checks in, finds that 1-3 new consensus statements have been proposed since its last visit, and needs to integrate them into its existing ranking. In our production data, 356 out of 880 ranking events are these incremental updates.
