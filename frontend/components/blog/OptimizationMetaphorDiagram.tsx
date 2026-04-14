@@ -3,14 +3,19 @@
 import React, { useMemo } from 'react';
 
 /**
- * A side-by-side conceptual diagram showing two search behaviours over the exact 
- * same opinion landscape. 
- * Left: Production (single-point convergence, 32 dots piled on one hill).
- * Right: Pool-aware (exploration with repulsion, 32 dots spread across 5 hills).
+ * A side-by-side conceptual diagram showing two search behaviours over the same
+ * consensus-quality landscape.
+ *
+ * Metaphor: height = statement quality. The centroid (bland average of all opinions)
+ * is a shallow basin — a local minimum that's easy to find but not actually good.
+ * The real peaks (specific, substantive consensus positions) require exploring through
+ * regions of disagreement to reach.
+ *
+ * Left: Production — all 32 dots converge to the basin (local minimum).
+ * Right: Pool-aware — repulsion pushes agents outward to discover the real peaks.
  */
 
 export default function OptimizationMetaphorDiagram() {
-  // Light theme palette
   const red = "#ef4444";
   const green = "#10b981";
   const muted = "#64748b";
@@ -18,9 +23,11 @@ export default function OptimizationMetaphorDiagram() {
   const border = "#e2e8f0";
   const surfaceDim = "#f8fafc";
   const surface = "#ffffff";
-  
-  // Landscape colors (subtle warm/neutral topographic tones)
-  const topoColors = ["#f1f5f9", "#e2e8f0", "#cbd5e1", "#94a3b8"];
+
+  // Basin colors — fading inward to indicate flatness/shallowness
+  const basinColors = ["#e2e8f0", "#eef1f5", "#f5f7fa", "#fafbfd"];
+  // Peak colors — deepening inward to indicate height/quality
+  const peakColors = ["#d1fae5", "#a7f3d0", "#6ee7b7", "#34d399"];
 
   const panelW = 330;
   const panelH = 280;
@@ -28,22 +35,23 @@ export default function OptimizationMetaphorDiagram() {
   const leftX = 20;
   const rightX = 370;
 
-  // The 5 viable opinion hills (1 dominant, 4 minority)
-  const hills = [
-    { id: "main", cx: 100, cy: 140, r: 65, peak: 4 },     // Dominant cluster (Center-Left)
-    { id: "min1", cx: 250, cy: 70, r: 35, peak: 3 },      // Minority 1 (Top-Right)
-    { id: "min2", cx: 260, cy: 210, r: 40, peak: 3 },     // Minority 2 (Bottom-Right)
-    { id: "min3", cx: 70, cy: 40, r: 30, peak: 2 },       // Minority 3 (Top-Left)
-    { id: "min4", cx: 160, cy: 230, r: 30, peak: 2 },     // Minority 4 (Bottom-Center)
+  // The central basin (bland centroid — local minimum)
+  const basin = { cx: 140, cy: 145, r: 70 };
+
+  // The 4 peaks (good consensus positions — higher quality, harder to find)
+  const peaks = [
+    { id: "peak1", cx: 255, cy: 65, r: 32, rings: 3 },
+    { id: "peak2", cx: 265, cy: 210, r: 35, rings: 3 },
+    { id: "peak3", cx: 55, cy: 50, r: 28, rings: 2 },
+    { id: "peak4", cx: 155, cy: 240, r: 28, rings: 2 },
   ];
 
-  // Deterministic random number generator for stable point placement
+  // Deterministic seeded random
   const seededRandom = (seed: number) => {
     let x = Math.sin(seed) * 10000;
     return x - Math.floor(x);
   };
 
-  // Box-Muller transform for normal distribution clustering
   const randomNormal = (seed: number, mean: number, stdDev: number) => {
     const u1 = seededRandom(seed);
     const u2 = seededRandom(seed + 1000);
@@ -51,35 +59,33 @@ export default function OptimizationMetaphorDiagram() {
     return z0 * stdDev + mean;
   };
 
-  // Generate the 32 dots for each panel
   const { leftDots, rightDots } = useMemo(() => {
     const lDots: { x: number; y: number }[] = [];
     const rDots: { x: number; y: number }[] = [];
 
-    // LEFT: All 32 dots piled tightly on the main hill
+    // LEFT: All 32 dots clustered in the basin
     for (let i = 0; i < 32; i++) {
       lDots.push({
-        x: randomNormal(i * 2, hills[0].cx, 8), // Tight cluster
-        y: randomNormal(i * 2 + 1, hills[0].cy, 8)
+        x: randomNormal(i * 2, basin.cx, 9),
+        y: randomNormal(i * 2 + 1, basin.cy, 9)
       });
     }
 
-    // RIGHT: Distributed across all 5 hills
-    // Distribution: Main(10), Min1(6), Min2(6), Min3(5), Min4(5)
+    // RIGHT: Distributed across the 4 peaks + a few in the basin
     const distributions = [
-      { hill: 0, count: 10, stdDev: 18 },
-      { hill: 1, count: 6, stdDev: 12 },
-      { hill: 2, count: 6, stdDev: 12 },
-      { hill: 3, count: 5, stdDev: 10 },
-      { hill: 4, count: 5, stdDev: 10 },
+      { cx: basin.cx, cy: basin.cy, count: 6, stdDev: 16 },
+      { cx: peaks[0].cx, cy: peaks[0].cy, count: 8, stdDev: 10 },
+      { cx: peaks[1].cx, cy: peaks[1].cy, count: 7, stdDev: 10 },
+      { cx: peaks[2].cx, cy: peaks[2].cy, count: 6, stdDev: 9 },
+      { cx: peaks[3].cx, cy: peaks[3].cy, count: 5, stdDev: 9 },
     ];
 
-    let seedOffset = 0;
+    let seedOffset = 100;
     distributions.forEach(dist => {
       for (let i = 0; i < dist.count; i++) {
         rDots.push({
-          x: randomNormal(seedOffset, hills[dist.hill].cx, dist.stdDev),
-          y: randomNormal(seedOffset + 1, hills[dist.hill].cy, dist.stdDev)
+          x: randomNormal(seedOffset, dist.cx, dist.stdDev),
+          y: randomNormal(seedOffset + 1, dist.cy, dist.stdDev)
         });
         seedOffset += 2;
       }
@@ -88,28 +94,46 @@ export default function OptimizationMetaphorDiagram() {
     return { leftDots: lDots, rightDots: rDots };
   }, []);
 
-  // Shared component: The Topographic Landscape
+  // Shared landscape: basin in center, peaks around it
   const SharedLandscape = () => (
     <g>
-      {/* Level 0: Base connecting shape */}
-      <path d="M 40,140 C 40,40 180,20 250,50 C 320,80 300,240 220,260 C 140,280 40,240 40,140 Z" fill={topoColors[0]} opacity="0.6" />
-      
-      {/* Generate concentric contour rings for each hill */}
-      {hills.map((hill, i) => (
-        <g key={`hill-${i}`}>
-          {Array.from({ length: hill.peak }).map((_, level) => {
-            const currentR = hill.r * (1 - level * 0.25);
+      {/* Base connecting shape */}
+      <path d="M 30,145 C 30,35 180,10 260,50 C 330,80 310,245 225,265 C 135,285 30,250 30,145 Z" fill="#f1f5f9" opacity="0.5" />
+
+      {/* Basin — concentric rings that get LIGHTER inward (shallow, flat) */}
+      {basinColors.map((color, level) => {
+        const r = basin.r * (1 - level * 0.22);
+        return (
+          <circle
+            key={`basin-${level}`}
+            cx={basin.cx}
+            cy={basin.cy}
+            r={r}
+            fill={color}
+            stroke="#cbd5e1"
+            strokeWidth="0.5"
+            strokeOpacity="0.4"
+            strokeDasharray={level > 0 ? "3 2" : "none"}
+          />
+        );
+      })}
+
+      {/* Peaks — concentric rings that get DARKER inward (height = quality) */}
+      {peaks.map((peak, i) => (
+        <g key={`peak-${i}`}>
+          {Array.from({ length: peak.rings }).map((_, level) => {
+            const r = peak.r * (1 - level * 0.28);
             return (
-              <circle 
-                key={`contour-${i}-${level}`} 
-                cx={hill.cx} 
-                cy={hill.cy} 
-                r={currentR} 
-                fill={topoColors[level + 1]} 
-                opacity={0.3 + level * 0.1}
-                stroke={topoColors[3]}
+              <circle
+                key={`peak-ring-${i}-${level}`}
+                cx={peak.cx}
+                cy={peak.cy}
+                r={r}
+                fill={peakColors[level + 1]}
+                opacity={0.35 + level * 0.15}
+                stroke={peakColors[3]}
                 strokeWidth="0.5"
-                strokeOpacity="0.3"
+                strokeOpacity="0.4"
               />
             );
           })}
@@ -123,7 +147,7 @@ export default function OptimizationMetaphorDiagram() {
       <defs>
         <clipPath id="clipLeft"><rect x={leftX} y={panelY} width={panelW} height={panelH} rx="10" /></clipPath>
         <clipPath id="clipRight"><rect x={rightX} y={panelY} width={panelW} height={panelH} rx="10" /></clipPath>
-        
+
         <marker id="arrowRed" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
           <path d="M0,0 L6,3 L0,6" fill="none" stroke={red} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
         </marker>
@@ -132,7 +156,7 @@ export default function OptimizationMetaphorDiagram() {
         </marker>
       </defs>
 
-      {/* Main Titles */}
+      {/* Title */}
       <text x="360" y="28" textAnchor="middle" fontSize="13" fontWeight="600" fill={textMain} letterSpacing="0.08em">
         OPTIMISATION ANALOGY
       </text>
@@ -146,82 +170,87 @@ export default function OptimizationMetaphorDiagram() {
         Production
       </text>
       <text x={leftX + panelW / 2} y={panelY + 36} textAnchor="middle" fontSize="10" fill={muted}>
-        32 statements, 1 position explored
+        32 statements, all in the local minimum
       </text>
 
       <text x={rightX + panelW / 2} y={panelY + 22} textAnchor="middle" fontSize="12" fontWeight="600" fill={green}>
         With pool awareness
       </text>
       <text x={rightX + panelW / 2} y={panelY + 36} textAnchor="middle" fontSize="10" fill={muted}>
-        32 statements, 5 positions explored
+        32 statements, exploring the real peaks
       </text>
 
-      {/* LEFT PANEL */}
+      {/* ── LEFT PANEL ── */}
       <g clipPath="url(#clipLeft)">
         <g transform={`translate(${leftX}, ${panelY})`}>
           <SharedLandscape />
 
-          {/* Minority Hills: Unexplored indicators & Gradient Arrows */}
-          {hills.slice(1).map((hill, i) => {
-            // Calculate arrow from minority hill to main hill
-            const dx = hills[0].cx - hill.cx;
-            const dy = hills[0].cy - hill.cy;
+          {/* Basin label */}
+          <text x={basin.cx} y={basin.cy - 28} textAnchor="middle" fontSize="8" fontWeight="700" fill={red} opacity="0.8">
+            LOCAL MINIMUM
+          </text>
+          <text x={basin.cx} y={basin.cy - 18} textAnchor="middle" fontSize="7" fill={muted} opacity="0.7">
+            (bland centroid)
+          </text>
+
+          {/* Gradient arrows from peaks DOWN to basin */}
+          {peaks.map((peak, i) => {
+            const dx = basin.cx - peak.cx;
+            const dy = basin.cy - peak.cy;
             const len = Math.sqrt(dx * dx + dy * dy);
-            const startX = hill.cx + (dx / len) * 20;
-            const startY = hill.cy + (dy / len) * 20;
-            const endX = hills[0].cx - (dx / len) * 35;
-            const endY = hills[0].cy - (dy / len) * 35;
+            const startX = peak.cx + (dx / len) * 20;
+            const startY = peak.cy + (dy / len) * 20;
+            const endX = basin.cx - (dx / len) * 35;
+            const endY = basin.cy - (dy / len) * 35;
 
             return (
-              <g key={`l-min-${i}`}>
-                {/* Unexplored dashed circle */}
-                <circle cx={hill.cx} cy={hill.cy} r="14" fill="none" stroke={muted} strokeWidth="1.5" strokeDasharray="3 4" opacity="0.6" />
-                <text x={hill.cx} y={hill.cy + 3} textAnchor="middle" fontSize="8" fill={muted} fontWeight="600" opacity="0.7">
-                  unexplored
+              <g key={`l-arrow-${i}`}>
+                {/* Undiscovered peak indicator */}
+                <circle cx={peak.cx} cy={peak.cy} r="14" fill="none" stroke={muted} strokeWidth="1.5" strokeDasharray="3 4" opacity="0.5" />
+                <text x={peak.cx} y={peak.cy + 3} textAnchor="middle" fontSize="7" fill={muted} fontWeight="600" opacity="0.6">
+                  peak
                 </text>
-                {/* Gradient Arrow to Center */}
-                <line x1={startX} y1={startY} x2={endX} y2={endY} stroke={red} strokeWidth="1.5" strokeDasharray="2 3" opacity="0.4" markerEnd="url(#arrowRed)" />
+                {/* Arrow pointing downhill to basin */}
+                <line x1={startX} y1={startY} x2={endX} y2={endY} stroke={red} strokeWidth="1.5" strokeDasharray="2 3" opacity="0.35" markerEnd="url(#arrowRed)" />
               </g>
             );
           })}
 
-          {/* 32 Clustered Dots */}
+          {/* 32 clustered dots in the basin */}
           {leftDots.map((dot, i) => (
             <circle key={`l-dot-${i}`} cx={dot.x} cy={dot.y} r="3.5" fill={red} stroke={surface} strokeWidth="0.5" opacity="0.9" />
           ))}
         </g>
       </g>
 
-      {/* RIGHT PANEL */}
+      {/* ── RIGHT PANEL ── */}
       <g clipPath="url(#clipRight)">
         <g transform={`translate(${rightX}, ${panelY})`}>
           <SharedLandscape />
 
-          {/* Repulsion Radii (rendering first so they sit under the dots) */}
+          {/* Repulsion radii */}
           {rightDots.map((dot, i) => (
-            <circle key={`r-rad-${i}`} cx={dot.x} cy={dot.y} r="16" fill={green} opacity="0.12" />
+            <circle key={`r-rad-${i}`} cx={dot.x} cy={dot.y} r="16" fill={green} opacity="0.10" />
           ))}
 
-          {/* 32 Distributed Dots */}
+          {/* Distributed dots */}
           {rightDots.map((dot, i) => (
             <circle key={`r-dot-${i}`} cx={dot.x} cy={dot.y} r="3.5" fill={green} stroke={surface} strokeWidth="0.5" opacity="0.9" />
           ))}
 
-          {/* New Agent Deflection Mechanic */}
+          {/* Deflection mechanic: agent headed for basin gets redirected to a peak */}
           <g>
-            {/* The incoming path (intent to go to main hill) */}
-            <path d="M 180,70 Q 150,90 145,100" fill="none" stroke={muted} strokeWidth="1.5" strokeDasharray="3 3" opacity="0.6" />
-            
-            {/* The repulsion curve deflecting to Minority Hill 1 */}
-            <path d="M 145,100 Q 135,130 190,110 T 235,80" fill="none" stroke={green} strokeWidth="2" markerEnd="url(#arrowGreen)" />
-            
-            {/* The incoming new agent dot */}
-            <circle cx={145} cy={100} r="4.5" fill={surface} stroke={green} strokeWidth="2" />
-            <circle cx={145} cy={100} r="1.5" fill={green} />
-            
-            <rect x={115} y={75} width="60" height="14" rx="3" fill={surface} opacity="0.8" />
-            <text x={145} y={85} textAnchor="middle" fontSize="8" fontWeight="600" fill={green}>
-              deflected by pool
+            {/* Initial path toward basin */}
+            <path d="M 190,70 Q 165,95 155,110" fill="none" stroke={muted} strokeWidth="1.5" strokeDasharray="3 3" opacity="0.5" />
+            {/* Repulsion curve deflecting to peak 1 */}
+            <path d="M 155,110 Q 150,135 200,110 T 240,75" fill="none" stroke={green} strokeWidth="2" markerEnd="url(#arrowGreen)" />
+            {/* The new agent dot */}
+            <circle cx={155} cy={110} r="4.5" fill={surface} stroke={green} strokeWidth="2" />
+            <circle cx={155} cy={110} r="1.5" fill={green} />
+
+            <rect x={122} y={80} width="66" height="14" rx="3" fill={surface} opacity="0.85" />
+            <text x={155} y={90} textAnchor="middle" fontSize="8" fontWeight="600" fill={green}>
+              deflected to peak
             </text>
           </g>
         </g>
@@ -230,10 +259,10 @@ export default function OptimizationMetaphorDiagram() {
       {/* Bottom Annotations */}
       <rect x="40" y={panelY + panelH + 15} width="640" height="34" rx="6" fill={surface} stroke={border} strokeWidth="1" />
       <text x="360" y={panelY + panelH + 29} textAnchor="middle" fontSize="9" fill={muted}>
-        Left: every agent climbs the same gradient, piling into a single dominant consensus and leaving valid sub-positions empty.
+        Left: every agent follows the same gradient into the basin — the bland centroid — ignoring the quality peaks around it.
       </text>
       <text x="360" y={panelY + panelH + 41} textAnchor="middle" fontSize="9" fill={muted}>
-        Right: repulsion fields from existing statements deflect new agents outward, naturally discovering all valid minority positions.
+        Right: repulsion fields push new agents outward past the local minimum, discovering the specific, substantive consensus positions.
       </text>
     </svg>
   );
