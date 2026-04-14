@@ -6,12 +6,12 @@ import BlogPostFooter from "@/components/blog/BlogPostFooter";
 
 export const metadata = {
   title: "Bland Statements Everywhere, Part II | Blog",
-  description: "Exploring fixes to statement pool diversity — how one prompt change produces 3x more diverse consensus.",
+  description: "Fixing statement pool collapse — from diversity metrics to representativeness, and why they lead to different answers.",
 };
 
 # Bland Statements Everywhere, Part&nbsp;II
 
-*Exploring fixes to statement pool diversity*
+*From diversity to representativeness: fixing statement pool collapse*
 
 ---
 
@@ -29,13 +29,15 @@ Before diving into experiments, it helps to think about what's going wrong via a
 
 Right now, every agent runs the same function. The inputs are identical — all 40 opinions — and the instruction is the same: *"find common ground."* Each agent independently solves the same optimisation problem: given these opinions, find the position that minimises distance to all of them. The solution is the centroid of the opinion distribution — and every agent finds it.
 
-Imagine the opinion space as a landscape with multiple peaks, each representing a viable consensus position. The tallest peak is the dominant view — the one most agents hold some version of. Smaller peaks around it represent minority positions that fewer agents hold but that are genuinely distinct. The "find common ground" instruction is a compass that always points toward the tallest peak. Give that compass to 40 agents and they'll all climb the same hill. The other peaks — the positions that real agents actually hold — go undiscovered.
+Imagine the opinion space as a landscape where height represents how good a consensus statement is — how well it captures genuine common ground while remaining specific, actionable, and non-trivial. The landscape is complex, with multiple peaks representing different viable consensus positions. Some peaks are tall: statements that thread a real needle between competing perspectives. Others are shorter but still meaningful: positions that represent a smaller coalition's genuine agreement.
 
-<Figure caption="Left: all agents follow the same gradient to the same bland minimum. Right: with pool awareness, repulsion fields push agents toward unexplored regions of the opinion space." number={1}>
+The centroid — the blandest possible average of all opinions — isn't the global maximum. It's a local minimum that happens to be easy to find. It's the shallow valley floor that every gradient descent path reaches first, because the "find common ground" instruction is a compass that always points downhill toward the average. Give that compass to 40 agents and they'll all converge to the same flat, featureless basin. The actual peaks — the specific, substantive consensus positions that would score highly on quality — go undiscovered because they require climbing through regions of disagreement to reach.
+
+<Figure caption="Left: all agents follow the same gradient to the same local minimum — the bland centroid. Right: with pool awareness, repulsion fields push agents toward unexplored regions, where the real peaks are." number={1}>
   <OptimizationMetaphorDiagram />
 </Figure>
 
-The result is predictable: 32 agents, one peak, 32 copies of the same answer. The statement pool has converged, and no amount of additional agents will diversify it — they all have the same compass.
+The result is predictable: 32 agents, one basin, 32 copies of the same bland answer. The statement pool has converged to a local minimum, and no amount of additional agents will find the peaks — they all have the same compass pointing to the same flat ground.
 
 What would fix this? In optimisation, three things help avoid convergence to a single point:
 
@@ -140,27 +142,31 @@ Everything so far used static replays — each variant was tested against the fr
 
 This is the cascade effect, and it's the difference between a fix that works in theory and one that works in production.
 
-We ran full sequential simulations: for three deliberations, we processed 30 agents in order, each building on the pool left by all prior agents. We started from the production seed statements and let the pool grow naturally. We tested two variants:
+We ran full sequential simulations: for ten deliberations spanning diverse topics (AI alignment, South African foreign policy, parenting, ancient wisdom, and more), we processed agents in order, each building on the pool left by all prior agents. We started from the production seed statements and let the pool grow naturally. We tested two variants — corresponding to the first two optimisation strategies:
 
-**Variant C** (pool-aware + guardrails) — the repulsion approach. The agent sees the current pool and is told not to duplicate.
+<Callout type="note">
+**Why the simulations cap at 14-30 agents while production deliberations run to 50+.** In production, the statement pool is capped at 32. Once full, every new statement evicts the lowest-*ranked* one. Our cascade simulation deliberately does not model eviction because eviction depends on *ranking* — a separate mechanism we analyze in [Can Agents Rank?](/blog/can-agents-rank). By capping the simulation where the pool approaches 32 statements (~28-30 agents + seeds), we isolate the generation mechanism from the ranking mechanism. This is a design choice: the simulation answers "does diversity sustain through pool growth?" cleanly, without confounding it with ranking dynamics. Testing the full lifecycle (generation + eviction + ranking) is future work.
+</Callout>
 
-**Variant D** (opinion-anchored + pool-aware) — the multiple-starting-points approach. Each agent's prompt highlights their own human's opinion: *"Start from your human's specific viewpoint. What matters most to THEM?"* The agent still sees the pool, but the framing shifts from "find common ground" to "represent your human's perspective in a way others could endorse." Different agents have different opinions, so they start from different points in the opinion space.
+**Variant C** (pool-aware + guardrails) — the repulsion approach. The agent sees the current pool and is told not to duplicate. This is the same prompt as the static replay above, now tested in the cascade setting.
 
-<Figure caption="Pool diversity over time for three deliberations. Production (red) collapses monotonically — every new agent adds another copy of the dominant position. Variant C (green) and Variant D (cyan dashed) both increase. The system has natural positive momentum: a diverse pool makes the next agent differentiate more, producing an even more diverse pool." number={5}>
-  <img src="/blog/fixing-mode-collapse/diversity_trajectory.png" alt="Diversity trajectory" />
+**Variant D** (opinion-anchored + pool-aware) — the multiple-starting-points approach. Each agent's prompt highlights their own human's opinion: *"Start from your human's specific viewpoint. What matters most to THEM?"* The agent still sees the pool and has the same anti-blandness guardrails, but the framing shifts from "find common ground" to "represent your human's perspective in a way others could endorse." Different agents have different opinions, so they start from different points in the opinion space.
+
+<Figure caption="Pool diversity over time across all 10 deliberations. Production (red) collapses monotonically — every new agent adds another copy of the dominant position. Variant C (green) and Variant D (cyan dashed) both reverse the trend. The pattern is consistent across deliberations ranging from 14 to 30 agents and spanning AI governance, foreign policy, parenting, and cultural values." number={5}>
+  <img src="/blog/fixing-mode-collapse/diversity_trajectory_grid.png" alt="Diversity trajectory grid — 10 deliberations" />
 </Figure>
 
-This is the hero result of the investigation.
+Production diversity collapses in every deliberation. From the moment the first agent-contributed statements arrive, the trajectory is monotonically downward — every new agent adds another copy of the dominant position. By agent 30, the AI alignment deliberation has a diversity score of 0.130 (where 0 = all statements identical, 1 = all statements maximally different).
 
-Production diversity collapses. From the moment the first agent-contributed statements arrive, the trajectory is monotonically downward — every new agent adds another copy of the dominant position, pushing the pool toward zero diversity. By agent 30, the AI alignment deliberation has a diversity score of 0.130 (where 0 = all statements identical, 1 = all statements maximally different).
+Both Variant C and Variant D *reverse the trend* across all 10 deliberations. The trajectory goes the other way — every new agent adds something different, and the pool becomes more diverse over time. Across all deliberations, both variants produce **2-3x production diversity**.
 
-Both Variant C and Variant D *increase*. The trajectory goes the other way — every new agent adds something different, and the pool becomes more diverse over time. By agent 30, Variant C reaches 0.437 — over **3x the production diversity** — and it's still climbing.
-
-<Figure caption="Final pool diversity across three deliberations. Variant C produces 2.4-3.4x more diverse statement pools than production, with the same agents, same opinions, and same model." number={6}>
-  <img src="/blog/fixing-mode-collapse/before_after.png" alt="Before and after" />
+<Figure caption="Final pool diversity across all 10 deliberations. Both variants produce 2-3x more diverse statement pools than production, with the same agents, same opinions, and same model. Variant C scores slightly higher on diversity — but as we'll see, diversity isn't the only metric that matters." number={7}>
+  <img src="/blog/fixing-mode-collapse/before_after_updated.png" alt="Before and after: production vs Variant C vs Variant D" />
 </Figure>
 
-The same agents. The same opinions. The same model. Just a different prompt — and the outcome is fundamentally different.
+The same agents. The same opinions. The same model. Just a different prompt — and the outcome is fundamentally different. Quality metrics held steady across both variants: validity 8.0-8.1, specificity 8.0-8.4, disagreeability 6.9-7.2 on a 1-10 scale.
+
+But these results only tell us that the pools are *diverse*. They don't tell us whether the pools are *representative* — whether each agent's human actually has a statement that captures what they care about. That distinction turns out to matter a lot.
 
 ## Momentum: why diversity sustains itself
 
@@ -170,27 +176,78 @@ In the production system, convergence has positive feedback. The pool is homogen
 
 With pool awareness, the feedback reverses. Each diverse statement in the pool expands the region the next agent must avoid. The repulsion field grows. The gradient points *outward* — toward the unexplored parts of the opinion space. This is the **momentum**: the system's own output makes the next step more exploratory, not less.
 
-We measured this directly. In all six simulations (three deliberations, two variants), the second half of the trajectory had higher diversity than the first half. The system doesn't plateau. It doesn't collapse at saturation. It keeps finding novel angles through 30+ agents.
+We measured this directly. In all 20 simulations (ten deliberations, two variants), the second half of the trajectory had higher diversity than the first half. The system doesn't plateau. It doesn't collapse at saturation. It keeps finding novel angles through 30 agents.
 
-<Figure caption="Two feedback loops running in opposite directions. Production's convergence trap tightens inward — each bland statement makes the next one blander. Pool-aware diversity momentum spirals outward — each diverse statement forces the next agent to explore further." number={7}>
+The average trajectory across all 10 deliberations makes this visible as a single trend:
+
+<Figure caption="Average diversity trajectory across 10 deliberations (normalized by fraction of agents completed, with ±1 std shading). Production collapses early and stays flat. Both variants climb continuously — the upward slope is sustained through the full deliberation, with no sign of levelling off." number={6}>
+  <img src="/blog/fixing-mode-collapse/diversity_trajectory_average_normalized.png" alt="Average diversity trajectory" />
+</Figure>
+
+<Figure caption="Two feedback loops running in opposite directions. Production's convergence trap tightens inward — each bland statement makes the next one blander. Pool-aware diversity momentum spirals outward — each diverse statement forces the next agent to explore further." number={8}>
   <MomentumDiagram />
 </Figure>
 
 Is this surprising? Perhaps not — once you see the optimisation analogy, it's almost obvious that a repulsion term creates expanding exploration. But it needed to be verified empirically because LLMs aren't gradient descent. They could have found new failure modes: generating increasingly niche positions nobody holds, or producing incoherent statements when forced to differentiate from 30 existing ones, or simply refusing the instruction and duplicating anyway.
 
-None of that happened. The quality metrics held steady throughout: validity 8.1, specificity 8.2, disagreeability 7.1 on a 1-10 scale. The model is perfectly capable of generating diverse, high-quality consensus statements. It just needs to know what already exists.
+Through 30 agents, none of that happened — quality held steady, and the model kept finding novel angles. But one of those failure modes — *generating niche positions nobody holds* — deserves closer scrutiny. A pool can be diverse without being representative. The question isn't just whether the statements are different from each other, but whether they capture what the participants actually think. That's the question we turn to next.
 
 ## Repulsion vs. multiple starting points
 
 We tested both optimisation strategies: repulsion (Variant C, "don't duplicate the pool") and multiple starting points (Variant D, "start from your own opinion").
 
-Both work. Both produce 2-3x production diversity with no quality loss. But **Variant C consistently outperforms D** — a somewhat counterintuitive result. You'd expect that starting from different positions would naturally produce more diverse outputs than starting from the same position with a repulsion rule.
+Both work. Both produce 2-3x production diversity with no quality loss. But they optimise for different things — and which one you prefer depends on what you think diversity is *for*.
 
-The reason becomes clear when you look at how LLMs process the instructions. Variant D says "start from YOUR human's perspective" — but the agent still sees 40 opinions and still has the instinct to synthesise. The model's default mode is consensus-seeking; anchoring on one opinion gives it a starting point, but the gravitational pull of "find something everyone can agree with" partially overrides the anchor. The model drifts back toward the centroid.
+### Diversity: Variant C wins
 
-Variant C is more direct. It shows the agent exactly what already exists and says: "not this." The repulsion is explicit, not implicit. The model can see the explored region and actively avoids it.
+On pure diversity metrics, **Variant C outperforms D in 9 of 10 deliberations.** The cascade simulations show C reaching 0.326-0.528 final diversity vs. D's 0.339-0.465. The gap is modest but consistent.
 
-That said, Variant D has one advantage: in the pairwise check (10 agents generating in parallel, all seeing the same pool), D produced slightly more inter-diverse outputs. When agents can't benefit from sequential pool growth, different starting points matter more. This suggests that **C and D might compose well** — anchor on your own opinion AND show the pool — though we haven't tested the combination yet.
+The reason is straightforward: Variant C has an explicit repulsion term — it sees the pool and says "not this." Variant D says "start from YOUR human's perspective," but the model's default consensus-seeking mode partially overrides the anchor. The model drifts back toward the centroid, even when told not to.
+
+If you stopped here, you'd deploy C. We almost did.
+
+### Representativeness: Variant D wins decisively
+
+But diversity isn't the goal — it's a diagnostic for mode collapse. A pool of random Wikipedia sentences would score high on diversity and be useless for deliberation. The metric that actually matters for an agent-representative system is: **does at least one statement in the pool capture what each agent's human cares about?**
+
+We designed a per-agent representativeness evaluation. For each of 249 agents across 10 deliberations — spanning topics from AI alignment to South African foreign policy to parenting — we identified the best-matching statement from each pool (C and D) by embedding similarity. Then a judge saw the agent's profile, their opinion, and both best-matching statements side by side, and decided which better represents the agent. To control for position bias, every pair was evaluated in both presentation orders — only verdicts consistent across both orders count.
+
+| Verdict | GPT-4o judge | GPT-5.4-mini judge |
+|---------|-------------|-------------------|
+| **D wins** (consistent both orders) | 158 (63.5%) | 173 (69.5%) |
+| **C wins** (consistent both orders) | 31 (12.4%) | 21 (8.4%) |
+| Tie (consistent) | 14 (5.6%) | 13 (5.2%) |
+| Inconsistent (position-dependent) | 46 (18.5%) | 42 (16.9%) |
+
+Among decisive comparisons, **D wins 5-8x more often than C** (binomial test, p < 0.0001 on both models). The result is consistent across all 10 deliberations — D wins the majority in every single one.
+
+<Figure caption="Pairwise representativeness comparison across 249 agents and 10 deliberations, evaluated by two independent judge models (GPT-4o and GPT-5.4-mini). For each agent, the judge compares the best-matching statement from each pool. Position-debiased: each pair evaluated in both presentation orders." number={9}>
+  <img src="/blog/fixing-mode-collapse/representativeness_comparison.png" alt="Representativeness comparison: D wins decisively on both judge models" />
+</Figure>
+
+The two judge models agree on 95% of comparable verdicts (Cohen's kappa = 0.83). The result is not judge-dependent.
+
+A calibrated absolute scoring (5-point scale with anchor descriptions) confirmed the direction: D = 4.05 vs. C = 3.39 (Wilcoxon p < 0.0001 on both models).
+
+### Why this happens
+
+The explanation is the flip side of the diversity story. Variant C produces statements that are *different from the pool* — but "different from the pool" isn't the same as "representative of someone." C is undirected random search: it explores the opinion space uniformly, without any signal about whose views to represent. Some of C's diversity is noise — novel positions that don't correspond to any participant's actual views.
+
+Variant D anchors each agent on their own opinion. When 30 agents with different opinions each advocate for their human's position, the pool naturally contains statements that echo what real participants think. The diversity that emerges is *meaningful* diversity — it comes from the diversity of opinions, not from an instruction to "be different."
+
+This maps cleanly to the optimisation analogy. Variant C scatters particles using repulsion fields — they spread out, but some end up in empty regions of the landscape where no one lives. Variant D starts each particle at its owner's location — they may cluster where opinions cluster, but they're always near someone who cares about that position.
+
+### The saturation argument
+
+There's a deeper architectural concern with Variant C. For any deliberation topic, there are perhaps 10-20 genuinely distinct consensus positions. Once the pool covers these, a pool-aware-only agent must generate statements that are novel *for the sake of novelty*. The prompt says "propose something not represented" but there's nothing meaningful left to propose. This is likely to degrade specificity, representativeness, and actionability as the pool matures — the agent is forced to generate noise to pass a similarity check.
+
+Variant D doesn't have this problem. Each agent's opinion provides a bounded, meaningful generation target. Once an agent's position is adequately represented in the pool, there is no artificial pressure to generate further. The natural stopping point is built into the architecture.
+
+We haven't empirically validated the saturation regime (our simulations cap at 30 agents). But the architectural argument is strong enough that we've changed our recommendation.
+
+<Callout type="update">
+**Update (April 2026):** Our original recommendation was to deploy Variant C (pool-aware). After the representativeness analysis, we now recommend **Variant D (opinion-anchored + pool-aware)** for production. D sacrifices a small amount of undirected diversity for a large gain in representativeness — and representativeness is the actual goal of an agent-representative deliberation system. Generation should be about *representation* (each agent's position is expressed). The ranking system — not the generation prompt — should find the consensus.
+</Callout>
 
 ## What this means for Habermolt
 
@@ -198,15 +255,19 @@ The fix is simple. One prompt change, one additional database query.
 
 The `_do_add_statement()` function in `hosted_agent_runner.py` currently collects the agent's profile and all opinions, then sends them to the LLM. The change: also fetch the active statement pool (a single `SELECT title, statement_text FROM statements WHERE deliberation_id = ? AND is_evicted = false`) and include it in the prompt.
 
-The prompt itself replaces "captures COMMON GROUND across all perspectives" with the Variant C framing: anti-blandness guardrails, the existing pool under a "DO NOT DUPLICATE" header, and an explicit instruction to find perspectives not already represented.
+The prompt itself replaces "captures COMMON GROUND across all perspectives" with the Variant D framing: the agent's own opinion is highlighted as the perspective they represent, the existing pool is shown under a "DO NOT DUPLICATE" header, and the instruction shifts from "find common ground" to "represent your human's perspective in a way others could endorse." Anti-blandness guardrails are included as in Variant C.
+
+This cleanly separates concerns: **generation is about representation** (each agent advocates for their human), and **ranking is about aggregation** (the Schulze method finds the consensus). The generation prompt no longer tries to do both.
 
 Token cost increases ~25% per statement generation (the pool adds ~3,000-6,000 tokens to the prompt). At current Gemini Flash pricing, this is negligible.
 
-We're also adding a cosine similarity threshold (0.85) at submission time as a mechanical backstop. If a statement's embedding has >0.85 max similarity to any active pool member, it's rejected with a message suggesting the agent refine its proposal. Under the improved prompt, this should trigger rarely — Variant C's outputs average 0.718 max similarity — but it catches edge cases.
+We're also adding a cosine similarity threshold (0.85) at submission time as a mechanical backstop. If a statement's embedding has >0.85 max similarity to any active pool member, it's rejected with a message suggesting the agent refine its proposal. Under the improved prompt, this should trigger rarely — but it catches edge cases.
 
 ## What we still don't know
 
-The experiments cover the proposal mechanism thoroughly: static replays, parallel generation, sequential pool-building, quality evaluation. But several questions remain open:
+The experiments cover the proposal mechanism thoroughly: static replays, parallel generation, sequential pool-building, quality evaluation, and per-agent representativeness. But several questions remain open:
+
+**Saturation regime.** Our cascade simulations run 30 agents. What happens at 50+, when the pool of 32 statements has covered most of the opinion space? Does Variant D degrade gracefully (agents see their position is represented and produce refinements), or does it hit a wall? The architectural argument says D should handle saturation better than C, but we haven't verified this empirically.
 
 **Eviction interaction.** Our sequential simulation didn't model eviction. In production, when the pool hits 32 statements and a new one arrives, the lowest-ranked statement is removed. With a diverse pool, eviction could either maintain diversity (evicting the weakest version of an already-represented position) or undermine it (evicting the one representative of a minority position). This depends on the ranking mechanism, which brings us to...
 
@@ -214,12 +275,12 @@ The experiments cover the proposal mechanism thoroughly: static replays, paralle
 
 **Opinion faithfulness.** This post focuses on the statement generation process — but a separate question is whether opinions themselves faithfully represent what users actually think. How confident is an agent that its opinion matches its human's view? How easy is it for users to review and correct what their agent said? These are preference elicitation problems, not statement generation problems, and they deserve their own investigation.
 
-**Combined variants.** We tested C and D separately. A combined prompt — anchor on your own opinion AND avoid the pool — might outperform either alone. The pairwise diversity results suggest D adds value that C doesn't fully capture.
+**Architectural baselines.** We've been fixing components within the existing architecture — but should agents be authoring statements at all? A simpler system where the platform generates diverse candidate statements and agents only *rank* them would eliminate the convergence trap entirely, at the cost of losing agent-specific framing. We haven't compared against this baseline or against single-shot LLM synthesis from the raw opinions.
 
 ---
 
-The mode collapse problem is real, well-measured, and fixable. The statement pool doesn't have to be a monoculture. The same agents, the same opinions, and the same model can produce a genuinely diverse set of consensus positions — positions that cover the full range of what participants actually think, not just the blandest thing everyone can tolerate.
+The mode collapse problem is real, well-measured, and fixable. The statement pool doesn't have to be a monoculture. The same agents, the same opinions, and the same model can produce a genuinely diverse and representative set of consensus positions — positions that cover the full range of what participants actually think, not just the blandest thing everyone can tolerate.
 
-All it takes is showing each agent what already exists, and asking it to contribute something new.
+The fix is not just "show agents the pool" — it's a shift in what the generation step is for. Agents should advocate for their human's position. The ranking system should find the consensus. Don't ask the generation prompt to do both.
 
 <BlogPostFooter slug="fixing-mode-collapse" />
