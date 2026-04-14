@@ -97,7 +97,17 @@ Actionability scores are universally low across all methods: single-shot 1.9, Ha
 
 *Diverse human views → Homogeneous opinions (LLM topic prior) → Homogeneous statements (mode collapse) → Indistinguishable actions*
 
-We fixed the statement stage ([Part II](/blog/fixing-mode-collapse)). We improved the ranking stage ([Can Agents Rank?](/blog/can-agents-rank)). But the opinion stage remains the binding constraint.
+We fixed the statement stage ([Part II](/blog/fixing-mode-collapse)). We improved the ranking stage ([Can Agents Rank?](/blog/can-agents-rank)). But the opinion stage remains the binding constraint — and that's not an architecture problem. It's a **human grounding problem**.
+
+The opinion homogeneity we see is a symptom of agents not knowing their humans well enough. An agent with a rich, ongoing relationship with its human — deep interviews, frequent check-ins, corrective feedback — would produce genuinely distinctive opinions. The LLM topic prior dominates *because the human signal is too weak*, not because the architecture is wrong.
+
+This reframes the next challenge. It's not about better prompts or better ranking methods. It's about:
+
+- **Deeper human grounding** — agents need enough context to distinguish *this person's* position from the LLM's default. A one-time profile questionnaire isn't sufficient. Ongoing dialogue is.
+- **Lower friction review** — 89% of opinions are never revised. If the agent surfaced its opinion with a one-tap "yes / no / here's what I actually think" flow, more humans would correct misrepresentations before they propagate downstream.
+- **Higher bandwidth between human and agent** — the agent needs to learn not just *what* the human thinks but *why* and *how they'd frame it*. This is the [representation tracking problem](/blog/representation-is-a-tracking-problem): the drift between agent and human grows without correction, and the correction rate depends on how easy it is for humans to review.
+
+The architecture works. The components work. The remaining bottleneck is the human-agent interface — making it easy enough that the human's real views actually reach the system.
 
 ## What this means
 
@@ -129,16 +139,18 @@ Our initial D+BT Swiss tournament test tied with single-shot (92:100, p=0.61). W
 
 ## Next steps
 
-1. **Deploy the improved components to production.** Variant D generation, pairwise ranking with sufficient comparisons (~15-20 per agent), BT aggregation. This eliminates the ranking predictor and eviction-driven convergence.
+1. **Invest in human grounding.** The architecture and ranking work. The binding constraint is opinion quality. Deeper agent interviews, lower-friction review flows, and ongoing human-agent dialogue will do more for consensus quality than any further architecture changes.
 
-2. **Test incremental BT convergence.** How many pairwise comparisons does BT need before the winner stabilises? Plot winner stability vs number of comparisons to find the practical minimum for production.
+2. **Deploy the improved components to production.** Variant D generation, pairwise ranking with sufficient comparisons (~15-20 per agent), BT aggregation. This eliminates the ranking predictor and eviction-driven convergence.
 
-3. **Measure legitimacy, not just quality.** Develop metrics for whether agents feel they had meaningful participation — not just whether the output captures their position.
+3. **Test incremental BT convergence.** How many pairwise comparisons does BT need before the winner stabilises? Plot winner stability vs number of comparisons to find the practical minimum for production.
+
+4. **Measure actionability over time.** As human grounding improves and opinions become more distinctive, do the consensus actions become more specific and diverse? This closes the loop: better grounding → better opinions → better statements → different actions.
 
 ---
 
 The mode collapse story is complete: we know [what went wrong](/blog/bland-consensus), [how to fix generation](/blog/fixing-mode-collapse), [how to fix ranking](/blog/can-agents-rank), [where opinions fail](/blog/can-agents-represent-you), and now, how the architecture compares to the simplest alternative.
 
-The short version: **the deliberation loop adds value — both structurally and in measurable output quality.** The ranking process, given sufficient preference data, produces consensus that 75% of agents prefer over a single LLM's synthesis. BT can replace Schulze, enabling a truly continuous system — but agents need to make enough comparisons for the signal to emerge.
+The short version: **the deliberation loop adds value — agents prefer its output over single-shot synthesis, and the process gives humans a voice they wouldn't otherwise have.** But the output actions are similar across methods because the input opinions are homogeneous. The next frontier isn't architecture — it's the human-agent relationship. Make it easier for humans to ground their agents, and the architecture has the raw material to produce genuinely diverse, actionable consensus.
 
 <BlogPostFooter slug="alternative-architectures" />
