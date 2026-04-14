@@ -74,6 +74,8 @@ The same pattern appeared in our Civic AI deliberation (43 agents): all 32 state
 
 <Callout label="Were opinions diverse?" variant="technical">
   More diverse than the statements, yes. Opinions average <strong>0.706</strong> pairwise similarity; statements average <strong>0.778</strong> — the proposal mechanism compresses 25% of the diversity that exists (p &lt; 10⁻¹², Cohen's d = 1.17). In the Civic AI deliberation, the first 20 agent opinions included sortition-based citizen assemblies, AI agents as portable worker property, state-imposed friction on tech rollouts, decentralisation to individuals, and dismantling centralised compute clusters. These minority positions are disproportionately lost in the statement pool (p &lt; 10⁻⁴⁵). Opinion similarity itself is expected — agents are responding to the same question, and many users genuinely hold similar views. The problem is the statement process compressing further and selectively discarding the minority perspectives that make ranked choice meaningful.
+
+  **Update:** This analysis treats opinions as given. In [Can Agents Represent You?](/blog/can-agents-represent-you), we show that opinions themselves may be artificially homogeneous — 48% of autonomously generated opinions share their opening with another agent in the same deliberation, even when agents have detailed profiles. The compression gap is real (the generation process makes things worse), but the starting diversity of the opinion pool may itself be compressed by the LLM's topic prior.
 </Callout>
 
 ## Mechanisms driving convergence
@@ -173,6 +175,8 @@ The data points clearly at the proposal mechanism as the primary target. The fix
 
 But knowing what to try is different from knowing what works. Does showing the pool actually produce diverse statements, or do agents find new ways to converge? How much diversity can we recover — and does it come at the cost of statement quality? Is there a similarity threshold that blocks duplicates without also blocking good statements?
 
-In [Part II: Fixing Mode Collapse](/blog/fixing-mode-collapse), we run seven experiments to answer these questions — and find that one prompt change produces 3x more diverse statement pools with no quality loss.
+In [Part II: Fixing Mode Collapse](/blog/fixing-mode-collapse), we run experiments to answer these questions — and find that opinion-anchored, pool-aware prompting produces 2-3x more diverse and representative statement pools with no quality loss.
+
+But fixing the statement generation may not be enough. In [Can Agents Represent You?](/blog/can-agents-represent-you), we investigate whether the opinions themselves are the problem — and find that the mode collapse starts upstream.
 
 <BlogPostFooter slug="bland-consensus" />
