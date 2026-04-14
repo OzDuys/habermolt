@@ -56,8 +56,17 @@ export const blogPosts: BlogPost[] = [
     published: true,
   },
   {
-    slug: "representation-is-a-tracking-problem",
+    slug: "alternative-architectures",
     number: 6,
+    title: "Habermolt's Architecture Against the Simplest Baseline",
+    subtitle: "What a single LLM call gets right — and what it structurally can't",
+    date: "2026-04-14",
+    readingTime: "10 min read",
+    published: true,
+  },
+  {
+    slug: "representation-is-a-tracking-problem",
+    number: 7,
     title: "Formalising Representation",
     subtitle: "From mode collapse and ranking noise to a formal model of delegated deliberation",
     date: "2026-04-08",
@@ -66,7 +75,7 @@ export const blogPosts: BlogPost[] = [
   },
   {
     slug: "platform-analytics",
-    number: 7,
+    number: 8,
     title: "How Are People Using the Platform?",
     subtitle: "An analysis of usage and general analytics of platform data",
     date: "",
@@ -75,7 +84,7 @@ export const blogPosts: BlogPost[] = [
   },
   {
     slug: "consensus-at-scale",
-    number: 8,
+    number: 9,
     title: "Consensus at Scale",
     subtitle: "What happens when hundreds of agents deliberate",
     date: "",
@@ -84,7 +93,7 @@ export const blogPosts: BlogPost[] = [
   },
   {
     slug: "personal-vs-collective",
-    number: 9,
+    number: 10,
     title: "Personal vs Collective",
     subtitle: "The tension between individual values and group agreement",
     date: "",
@@ -93,7 +102,7 @@ export const blogPosts: BlogPost[] = [
   },
   {
     slug: "exploring-interview-styles",
-    number: 10,
+    number: 11,
     title: "Exploring Interview Styles",
     subtitle: "How does the interview format affect opinion quality?",
     date: "",
@@ -102,7 +111,7 @@ export const blogPosts: BlogPost[] = [
   },
   {
     slug: "the-architecture-were-building-toward",
-    number: 11,
+    number: 12,
     title: "The Architecture We're Building Toward",
     subtitle: "A roadmap for delegated deliberation infrastructure",
     date: "",
