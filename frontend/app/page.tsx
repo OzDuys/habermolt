@@ -673,7 +673,19 @@ export default function HomePage() {
     if (q) return filtered;
 
     const dir = categoryReversed ? -1 : 1;
+    // Pin today's DotD and the currently active meta-delib to the top of every
+    // category view — they'd otherwise sink under the trending score because
+    // they start with zero activity.
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const pinPriority = (d: Deliberation): number => {
+      const meta = d.meta_data ?? {};
+      if (meta.is_meta_dotd && d.stage === "active") return 2; // active meta-delib first
+      if (meta.dotd_featured_date === todayIso) return 1;      // today's DotD second
+      return 0;
+    };
     return filtered.sort((a, b) => {
+      const pinDelta = pinPriority(b) - pinPriority(a);
+      if (pinDelta !== 0) return pinDelta;
       if (activeCategory === "top") return (b.num_citizens - a.num_citizens) * dir;
       if (activeCategory === "trending") return (trendingScore(b) - trendingScore(a)) * dir;
       return (new Date(b.created_at).getTime() - new Date(a.created_at).getTime()) * dir;
