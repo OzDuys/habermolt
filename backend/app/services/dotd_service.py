@@ -54,6 +54,7 @@ class DotdService:
             DotdSelection.featured_date == today
         ).first()
         if existing:
+            self._freeze_meta_deliberation_for_date(today)
             self._ensure_meta_deliberation_exists(today + timedelta(days=1))
             return existing
 
@@ -65,11 +66,25 @@ class DotdService:
         if not selection:
             selection = self._create_llm_fallback_dotd(today)
 
-        # 4. Ensure tomorrow's meta-deliberation exists
+        # 4. Once today's DotD is secured, freeze today's meta-delib (it's done
+        # regardless of whether it produced the winner or we used fallback).
         if selection:
+            self._freeze_meta_deliberation_for_date(today)
             self._ensure_meta_deliberation_exists(today + timedelta(days=1))
 
         return selection
+
+    def _freeze_meta_deliberation_for_date(self, target_date: date) -> None:
+        """Freeze the meta-delib targeting this date if it's still ACTIVE."""
+        meta_delib = self.db.query(Deliberation).filter(
+            and_(
+                Deliberation.meta_data["is_meta_dotd"].as_boolean() == True,
+                Deliberation.meta_data["target_date"].as_string() == target_date.isoformat(),
+                Deliberation.stage == DeliberationStage.ACTIVE,
+            )
+        ).first()
+        if meta_delib:
+            self._freeze_meta_deliberation(meta_delib)
 
     def _try_resolve_meta_deliberation(self, target_date: date) -> Optional[DotdSelection]:
         """Check if there's a meta-deliberation targeting this date with enough participants."""
