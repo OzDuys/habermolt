@@ -2,32 +2,27 @@
 Deliberation of the Day (DotD) service.
 
 Handles:
-- Algorithmic DotD selection (fallback scoring based on activity)
 - Meta-deliberation creation (agents vote for tomorrow's DotD)
-- Meta-deliberation resolution (Schulze winner becomes DotD)
+- Meta-deliberation resolution (Schulze winner becomes a brand new DotD)
+- LLM-generated fallback question when the meta-delib has no statements
 - Admin override
+
+Every DotD is a freshly created Deliberation — we never tag existing
+deliberations with the "daily" category.
 """
 
 import logging
-import math
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 from uuid import UUID
 
-from sqlalchemy import and_, func
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import and_
+from sqlalchemy.orm import Session
 
-from app.models import Deliberation, DeliberationStage, Opinion, Ranking, Statement
+from app.models import Deliberation, DeliberationStage, Opinion, Statement
 from app.models.dotd_selection import DotdSelection
-from app.services.prompt_presets import PRESETS
 
 logger = logging.getLogger(__name__)
-
-# Minimum agents needed in meta-deliberation to use its winner
-META_DELIB_MIN_PARTICIPANTS = 3
-
-# How many recent days to exclude a deliberation from being DotD again
-DOTD_COOLDOWN_DAYS = 7
 
 
 def _today_utc() -> date:
@@ -49,6 +44,11 @@ class DotdService:
         """
         today = _today_utc()
 
+        # Always expire any meta-delibs whose target_date has passed, even if
+        # they never reached quorum — otherwise they linger as ACTIVE and leak
+        # onto the homepage.
+        self._expire_stale_meta_deliberations(today)
+
         # 1. Check if today already has a selection
         existing = self.db.query(DotdSelection).filter(
             DotdSelection.featured_date == today
@@ -57,12 +57,13 @@ class DotdService:
             self._ensure_meta_deliberation_exists(today + timedelta(days=1))
             return existing
 
-        # 2. Try to resolve yesterday's meta-deliberation
+        # 2. Try to resolve yesterday's meta-deliberation into a new DotD
         selection = self._try_resolve_meta_deliberation(today)
 
-        # 3. Fallback to algorithmic selection
+        # 3. Fallback: LLM-generate a fresh question when the meta-delib
+        # produced no usable winner (no statements, no opinions, etc.)
         if not selection:
-            selection = self._algorithmic_selection(today)
+            selection = self._create_llm_fallback_dotd(today)
 
         # 4. Ensure tomorrow's meta-deliberation exists
         if selection:
@@ -82,19 +83,9 @@ class DotdService:
         if not meta_delib:
             return None
 
-        # Check participation threshold
-        participant_count = self.db.query(Opinion).filter(
-            Opinion.deliberation_id == meta_delib.id
-        ).count()
-
-        if participant_count < META_DELIB_MIN_PARTICIPANTS:
-            logger.info(
-                f"Meta-deliberation {meta_delib.id} has {participant_count} participants "
-                f"(need {META_DELIB_MIN_PARTICIPANTS}), falling back to algorithm"
-            )
-            return None
-
-        # Get the Schulze winner
+        # Pick the top-ranked statement regardless of participation count.
+        # Prefer the Schulze winner; if Schulze hasn't run (no rankings yet),
+        # fall back to any statement in the pool so we still produce a DotD.
         winner_statement = self.db.query(Statement).filter(
             and_(
                 Statement.deliberation_id == meta_delib.id,
@@ -102,6 +93,14 @@ class DotdService:
                 Statement.is_evicted == False,
             )
         ).first()
+
+        if not winner_statement:
+            winner_statement = self.db.query(Statement).filter(
+                and_(
+                    Statement.deliberation_id == meta_delib.id,
+                    Statement.is_evicted == False,
+                )
+            ).order_by(Statement.created_at.asc()).first()
 
         if not winner_statement:
             return None
@@ -144,6 +143,35 @@ class DotdService:
             f"(via meta-deliberation {meta_delib.id})"
         )
         return selection
+
+    def _expire_stale_meta_deliberations(self, today: date) -> None:
+        """Mark any ACTIVE meta-delib whose target_date has passed as RESOLVED.
+
+        Covers the case where a meta-delib never reached quorum or never produced
+        a Schulze winner. Without this, those meta-delibs stay ACTIVE forever and
+        show up on the homepage trending/top/recent tabs.
+        """
+        stale = self.db.query(Deliberation).filter(
+            and_(
+                Deliberation.meta_data["is_meta_dotd"].as_boolean() == True,
+                Deliberation.stage == DeliberationStage.ACTIVE,
+                Deliberation.meta_data["target_date"].as_string() < today.isoformat(),
+            )
+        ).all()
+
+        if not stale:
+            return
+
+        now_iso = _now_utc().isoformat()
+        for meta_delib in stale:
+            meta_delib.stage = DeliberationStage.RESOLVED
+            meta = meta_delib.meta_data or {}
+            meta["resolved_at"] = now_iso
+            meta["resolved_reason"] = "expired"
+            meta_delib.meta_data = meta
+            logger.info(f"Expired stale meta-deliberation {meta_delib.id} (target_date passed)")
+
+        self.db.commit()
 
     def _freeze_meta_deliberation(self, meta_delib: Deliberation) -> None:
         """Freeze a resolved meta-deliberation so agents can no longer contribute."""
@@ -189,118 +217,114 @@ class DotdService:
         self.db.commit()
         self.db.refresh(deliberation)
 
+        self._spawn_seed_generation(deliberation.id)
+
         logger.info(
             f"Created deliberation {deliberation.id} from meta-delib winner: {question[:60]}"
         )
         return deliberation
 
-    def _algorithmic_selection(self, target_date: date) -> Optional[DotdSelection]:
-        """Select DotD by scoring deliberations on activity and freshness."""
-        # Get recently featured deliberation IDs to exclude
-        cooldown_start = target_date - timedelta(days=DOTD_COOLDOWN_DAYS)
-        recently_featured = {
-            row[0] for row in self.db.query(DotdSelection.deliberation_id).filter(
-                DotdSelection.featured_date >= cooldown_start
-            ).all()
-        }
+    def _create_llm_fallback_dotd(self, target_date: date) -> Optional[DotdSelection]:
+        """LLM-generate a fresh deliberation question when the meta-delib
+        produced no usable winner (e.g. no statements at all).
 
-        # Get all eligible public deliberations (non-private, non-meta, at least 2 participants)
-        candidates = self.db.query(Deliberation).filter(
-            and_(
-                Deliberation.is_private == False,
-                Deliberation.num_citizens >= 2,
-                Deliberation.stage == DeliberationStage.ACTIVE,
-            )
-        ).all()
+        The LLM is shown recent deliberation questions so it can deliberately
+        pick a topic that isn't already in the pool.
+        """
+        from app.models import Agent
+        from app.services.llm_client import LLMClient, sanitize_prompt_text
 
-        # Filter out meta-deliberations and recently featured
-        candidates = [
-            d for d in candidates
-            if d.id not in recently_featured
-            and not (d.meta_data or {}).get("is_meta_dotd")
-        ]
-
-        if not candidates:
-            logger.warning(f"No eligible deliberations for DotD on {target_date}")
+        system_agent = self.db.query(Agent).first()
+        if not system_agent:
+            logger.warning("No system agent — cannot create fallback DotD")
             return None
 
-        # Score each candidate
-        scored = []
-        for d in candidates:
-            score = self._compute_score(d)
-            scored.append((d, score))
+        recent = self.db.query(Deliberation.question).filter(
+            and_(
+                Deliberation.is_private == False,
+                Deliberation.created_at >= _now_utc() - timedelta(days=30),
+            )
+        ).order_by(Deliberation.created_at.desc()).limit(60).all()
+        recent_questions = "\n".join(f"- {sanitize_prompt_text(r[0])}" for r in recent) or "(none)"
 
-        scored.sort(key=lambda x: x[1], reverse=True)
-        winner, best_score = scored[0]
+        prompt = (
+            f"Generate ONE thought-provoking question for a public deliberation "
+            f"on {target_date.strftime('%B %d, %Y')}. The question should spark "
+            f"disagreement among thoughtful people and be timely but not ephemeral. "
+            f"It must NOT duplicate or closely overlap any of the recent questions below.\n\n"
+            f"Recent questions:\n{recent_questions}\n\n"
+            f"Respond with ONLY the question text — no preamble, no quotes, no explanation."
+        )
 
-        # Tag the winner with "daily" category and featured date
-        cats = winner.categories or []
-        if "daily" not in cats:
-            winner.categories = cats + ["daily"]
-        meta = winner.meta_data or {}
-        meta["dotd_featured_date"] = target_date.isoformat()
-        winner.meta_data = meta
+        try:
+            llm = LLMClient()
+            raw = llm.sample_text(prompt=prompt, max_tokens=200)
+            question = raw.strip().strip('"').strip("'")
+        except Exception as e:
+            logger.error(f"LLM fallback generation failed: {e}", exc_info=True)
+            return None
+
+        if not question or len(question) < 10:
+            logger.warning(f"LLM fallback produced unusable question: {question!r}")
+            return None
+
+        deliberation = Deliberation(
+            question=question,
+            description=None,
+            mechanism_type="continuous",
+            stage=DeliberationStage.ACTIVE,
+            created_by_agent_id=system_agent.id,
+            num_citizens=0,
+            categories=["daily"],
+            meta_data={
+                "dotd_featured_date": target_date.isoformat(),
+                "dotd_source": "llm_fallback",
+            },
+        )
+        self.db.add(deliberation)
+        self.db.commit()
+        self.db.refresh(deliberation)
+
+        # Kick off seed statement generation in the background
+        self._spawn_seed_generation(deliberation.id)
 
         selection = DotdSelection(
-            deliberation_id=winner.id,
+            deliberation_id=deliberation.id,
             featured_date=target_date,
-            selection_method="algorithm",
-            score=best_score,
+            selection_method="llm_fallback",
             selected_at=_now_utc(),
         )
         self.db.add(selection)
         self.db.commit()
         self.db.refresh(selection)
 
-        logger.info(
-            f"DotD for {target_date} (algorithm, score={best_score:.2f}): "
-            f"{winner.question[:60]}"
-        )
+        logger.info(f"DotD for {target_date} (llm_fallback): {question[:80]}")
         return selection
 
-    def _compute_score(self, deliberation: Deliberation) -> float:
-        """HN-style score: activity / (age + 2)^gravity, with bonuses for recent activity."""
-        opinion_count = self.db.query(func.count()).filter(
-            Opinion.deliberation_id == deliberation.id
-        ).scalar()
-        ranking_count = self.db.query(func.count()).filter(
-            Ranking.deliberation_id == deliberation.id
-        ).scalar()
-        statement_count = self.db.query(func.count()).filter(
-            and_(
-                Statement.deliberation_id == deliberation.id,
-                Statement.is_seed == False,
-                Statement.is_evicted == False,
-            )
-        ).scalar()
+    def _spawn_seed_generation(self, deliberation_id: UUID) -> None:
+        """Generate seed statements for a freshly-created deliberation in a
+        background thread so the request returns quickly."""
+        import asyncio
+        import threading
+        from app.database import SessionLocal
 
-        # Recent activity bonus: count opinions/rankings in last 24h
-        cutoff_24h = _now_utc() - timedelta(hours=24)
-        recent_opinions = self.db.query(func.count()).filter(
-            and_(
-                Opinion.deliberation_id == deliberation.id,
-                Opinion.submitted_at >= cutoff_24h,
-            )
-        ).scalar()
-        recent_rankings = self.db.query(func.count()).filter(
-            and_(
-                Ranking.deliberation_id == deliberation.id,
-                Ranking.submitted_at >= cutoff_24h,
-            )
-        ).scalar()
+        def _run(delib_id):
+            from app.services.continuous_deliberation_service import ContinuousDeliberationService
+            db = SessionLocal()
+            try:
+                delib = db.query(Deliberation).get(delib_id)
+                if not delib:
+                    return
+                service = ContinuousDeliberationService(db)
+                try:
+                    asyncio.run(service._generate_seeds(delib))
+                except Exception as e:
+                    logger.error(f"Seed generation failed for {delib_id}: {e}", exc_info=True)
+                    service._create_fallback_seed(delib)
+            finally:
+                db.close()
 
-        activity = (
-            opinion_count * 2
-            + ranking_count
-            + statement_count * 3
-            + recent_opinions * 5  # Bonus for fresh activity
-            + recent_rankings * 3
-        )
-
-        age_hours = max(1, (_now_utc() - deliberation.created_at.replace(tzinfo=timezone.utc)).total_seconds() / 3600)
-        gravity = 1.2
-
-        return activity / math.pow(age_hours / 24 + 2, gravity)
+        threading.Thread(target=_run, args=(deliberation_id,), daemon=True).start()
 
     def _ensure_meta_deliberation_exists(self, target_date: date) -> None:
         """Create tomorrow's meta-deliberation if it doesn't already exist."""
@@ -357,30 +381,7 @@ class DotdService:
 
         logger.info(f"Created meta-deliberation {deliberation.id} for DotD on {target_date}")
 
-        # Generate seed statements in a background thread so the meta-delib
-        # has questions ready for agents to rank immediately.
-        import asyncio
-        import threading
-        from app.database import SessionLocal
-
-        def _generate_seeds_bg(delib_id):
-            from app.services.continuous_deliberation_service import ContinuousDeliberationService
-            db = SessionLocal()
-            try:
-                delib = db.query(Deliberation).get(delib_id)
-                if not delib:
-                    return
-                service = ContinuousDeliberationService(db)
-                try:
-                    asyncio.run(service._generate_seeds(delib))
-                except Exception as e:
-                    logger.error(f"Meta-delib seed generation failed: {e}", exc_info=True)
-                    service._create_fallback_seed(delib)
-            finally:
-                db.close()
-
-        thread = threading.Thread(target=_generate_seeds_bg, args=(deliberation.id,), daemon=True)
-        thread.start()
+        self._spawn_seed_generation(deliberation.id)
 
         return deliberation
 
