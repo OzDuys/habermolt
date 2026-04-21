@@ -104,11 +104,6 @@ async def create_deliberation_human(
 
     invite_code = secrets.token_urlsafe(16) if body.is_private else None
 
-    # Resolve prompt config from preset
-    prompt_config = None
-    if getattr(body, 'prompt_preset', None):
-        prompt_config = {"preset": body.prompt_preset}
-
     deliberation = Deliberation(
         question=body.question,
         description=getattr(body, 'description', None),
@@ -121,7 +116,6 @@ async def create_deliberation_human(
         categories=body.categories or [],
         num_citizens=0,
         meta_data={},
-        prompt_config=prompt_config,
     )
     db.add(deliberation)
     db.flush()

@@ -1,6 +1,6 @@
 // TypeScript types matching backend schema
 
-export type DeliberationStage = "active" | "resolved";
+export type DeliberationStage = "active";
 
 export interface CategoryDef {
   slug: string;
@@ -182,7 +182,6 @@ export interface CreateDeliberationHumanRequest {
   description?: string;
   categories?: string[];
   is_private: boolean;
-  prompt_preset?: string;
 }
 
 export interface CreateDeliberationHumanResponse {
@@ -317,16 +316,6 @@ export interface OpinionClusterResponse {
   clusters: OpinionClusterInfo[];
   total: number;
   deliberation_id: string;
-}
-
-// Deliberation of the Day types
-
-export interface DotdResponse {
-  deliberation: Deliberation;
-  featured_date: string;
-  selection_method: string;
-  meta_deliberation_id: string | null;
-  selected_at: string;
 }
 
 // Hosted agent types

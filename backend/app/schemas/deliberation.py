@@ -34,8 +34,6 @@ class DeliberationCreateRequest(BaseModel):
     initial_opinion: Optional[str] = Field(None, min_length=1, max_length=5000, description="Creator's initial opinion (required)")
     categories: Optional[List[str]] = Field(default_factory=list, description="Topic categories (1-3)")
     meta_data: Optional[dict] = Field(default_factory=dict, description="Additional metadata")
-    prompt_preset: Optional[str] = Field(None, description="Prompt preset name (e.g. 'nomination', 'policy')")
-    prompt_config: Optional[dict] = Field(None, description="Custom prompt config (overrides preset)")
 
     @validator("categories")
     def validate_categories(cls, v):
@@ -318,7 +316,6 @@ class CreateDeliberationHumanRequest(BaseModel):
     description: Optional[str] = Field(None, max_length=1000, description="Optional longer description providing context")
     categories: Optional[List[str]] = Field(default_factory=list, description="Topic categories (1-3)")
     is_private: bool = Field(default=False, description="If true, creates a private deliberation with invite code")
-    prompt_preset: Optional[str] = Field(None, description="Prompt preset name (e.g. 'nomination', 'policy')")
 
     @validator("categories")
     def validate_categories(cls, v):

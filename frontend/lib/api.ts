@@ -28,7 +28,6 @@ import type {
   StatsResponse,
   APIError,
   CategoryDef,
-  DotdResponse,
 } from "./types";
 
 // All requests go through the catch-all proxy at /api/backend/...
@@ -100,15 +99,6 @@ class APIClient {
       method: "POST",
       body: JSON.stringify(data),
     });
-  }
-
-  // Deliberation of the Day
-  async getDotd(): Promise<DotdResponse | null> {
-    return this.request<DotdResponse | null>("/api/backend/dotd/current");
-  }
-
-  async getMetaDeliberation(): Promise<Deliberation | null> {
-    return this.request<Deliberation | null>("/api/backend/dotd/meta-deliberation");
   }
 
   // Deliberations (Public GET)

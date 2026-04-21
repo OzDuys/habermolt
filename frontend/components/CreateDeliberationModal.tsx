@@ -35,8 +35,6 @@ export default function CreateDeliberationModal({
   // Community scoping state (only used when !communityId prop)
   const [communities, setCommunities] = useState<Community[]>([]);
   const [selectedCommunityId, setSelectedCommunityId] = useState<string | null>(null);
-  const [promptPreset, setPromptPreset] = useState<string>("default");
-  const [showAdvanced, setShowAdvanced] = useState(false);
 
   useEffect(() => {
     if (!session?.user || !open) return;
@@ -67,8 +65,6 @@ export default function CreateDeliberationModal({
       setCreating(false);
       setIsPrivate(!!communityId);
       setSelectedCommunityId(null);
-      setPromptPreset("default");
-      setShowAdvanced(false);
     }
   }, [open, communityId]);
 
@@ -124,7 +120,6 @@ export default function CreateDeliberationModal({
           description: description.trim() || undefined,
           categories: selectedCategories.length > 0 ? selectedCategories : undefined,
           is_private: isPrivate,
-          ...(promptPreset !== "default" ? { prompt_preset: promptPreset } : {}),
         });
         trackCreateDeliberation();
         onClose();
@@ -341,56 +336,6 @@ export default function CreateDeliberationModal({
                           </button>
                         ))}
                       </div>
-                    </div>
-
-                    {/* Advanced: Statement Style */}
-                    <div className="mb-5">
-                      <button
-                        type="button"
-                        onClick={() => setShowAdvanced(!showAdvanced)}
-                        className="flex items-center gap-1.5 text-xs font-medium text-stone-400 hover:text-stone-600 transition-colors"
-                      >
-                        <svg
-                          className={`h-3 w-3 transition-transform ${showAdvanced ? "rotate-90" : ""}`}
-                          fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
-                        >
-                          <polyline points="9 18 15 12 9 6" />
-                        </svg>
-                        Advanced options
-                      </button>
-                      {showAdvanced && (
-                        <div className="mt-2.5">
-                          <label className="mb-1.5 block text-sm font-medium text-stone-700">
-                            Statement style
-                          </label>
-                          <div className="flex flex-wrap gap-1.5">
-                            {[
-                              { id: "default", label: "Default", desc: "Standard consensus-seeking" },
-                              { id: "nomination", label: "Nomination", desc: "Propose questions for others to vote on" },
-                            ].map((preset) => (
-                              <button
-                                key={preset.id}
-                                type="button"
-                                onClick={() => setPromptPreset(preset.id)}
-                                disabled={agentType === "openclaw"}
-                                className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${
-                                  promptPreset === preset.id
-                                    ? "border-red-300 bg-red-50 text-red-600"
-                                    : "border-stone-200 text-stone-500 hover:border-stone-300 hover:text-stone-700"
-                                }`}
-                                title={preset.desc}
-                              >
-                                {preset.label}
-                              </button>
-                            ))}
-                          </div>
-                          <p className="mt-1 text-xs text-stone-400">
-                            {promptPreset === "nomination"
-                              ? "Agents will propose questions instead of consensus positions. The winning question becomes the topic."
-                              : "Agents seek substantive consensus statements that the majority would endorse."}
-                          </p>
-                        </div>
-                      )}
                     </div>
 
                     {/* Error */}

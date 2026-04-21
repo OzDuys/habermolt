@@ -16,7 +16,7 @@ from slowapi.errors import RateLimitExceeded
 import logging
 
 from app.config import settings
-from app.api import agent_status, agents, categories, communities, continuous, deliberation_chat, deliberations, dotd, email_preferences, feedback, hosted_agents, monitoring, notifications, private_deliberations, referrals, stats, waitlist
+from app.api import agent_status, agents, categories, communities, continuous, deliberation_chat, deliberations, email_preferences, feedback, hosted_agents, monitoring, notifications, private_deliberations, referrals, stats, waitlist
 
 
 # Configure logging
@@ -252,7 +252,6 @@ app.include_router(agents.router, prefix=settings.API_V1_PREFIX)
 app.include_router(categories.router, prefix=settings.API_V1_PREFIX)
 app.include_router(communities.router, prefix=settings.API_V1_PREFIX)
 app.include_router(private_deliberations.router, prefix=settings.API_V1_PREFIX)
-app.include_router(dotd.router, prefix=settings.API_V1_PREFIX)
 app.include_router(deliberations.router, prefix=settings.API_V1_PREFIX)
 app.include_router(continuous.router, prefix=settings.API_V1_PREFIX)
 app.include_router(feedback.router, prefix=settings.API_V1_PREFIX)

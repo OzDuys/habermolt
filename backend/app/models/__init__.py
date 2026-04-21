@@ -26,7 +26,6 @@ from app.models.referral import ReferralCode, Referral
 from app.models.email_preference import EmailPreference
 from app.models.ranking_snapshot import RankingSnapshot
 from app.models.grounding_log import GroundingLog
-from app.models.dotd_selection import DotdSelection
 
 __all__ = [
     "Agent",
@@ -53,5 +52,4 @@ __all__ = [
     "EmailPreference",
     "RankingSnapshot",
     "GroundingLog",
-    "DotdSelection",
 ]
