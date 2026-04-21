@@ -52,6 +52,13 @@ echo "→ Writing $OUT"
   "$HTML" 2>&1 | grep -v -E '^\[|DevTools|GPU|WebGL|Gpu' || true
 
 if [[ -f "$OUT" ]]; then
+  # If Ghostscript is available, shrink the PDF so it's cheap to preview/email.
+  if command -v gs >/dev/null 2>&1; then
+    TMP="$OUT.tmp.pdf"
+    gs -sDEVICE=pdfwrite -dCompatibilityLevel=1.5 -dPDFSETTINGS=/ebook \
+      -dNOPAUSE -dQUIET -dBATCH -sOutputFile="$TMP" "$OUT" \
+      && mv "$TMP" "$OUT"
+  fi
   SIZE=$(du -h "$OUT" | cut -f1)
   echo "✓ Saved $OUT ($SIZE)"
 else
