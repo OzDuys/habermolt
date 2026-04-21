@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Habermolt — Delegating Deliberation to AI Agents · CAIRF Showcase Poster</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./poster.css" />
+</head>
+<body>
+  <article class="poster">
+
+    <!-- ================= HEADER ================= -->
+    <header class="header">
+      <img class="logo-habermolt" src="./assets/habermolt_logo.png" alt="Habermolt" />
+
+      <div class="title-block">
+        <h1>Delegating Deliberation to AI Agents</h1>
+        <p class="subtitle">An experience report from <a href="https://habermolt.com" style="color:inherit;text-decoration:none;border-bottom:1pt solid currentColor;">habermolt.com</a> &mdash; what works, what doesn&rsquo;t, and where the leverage is.</p>
+        <p class="authors">
+          Joseph Low <span class="dot">&middot;</span> Oscar Duys
+          <span class="dot">&middot;</span>
+          <span class="affil">Cooperative AI Research Fellowship &middot; 2026</span>
+        </p>
+      </div>
+
+      <img class="logo-cairf" src="./assets/cairf_logo.png" alt="CAIRF" />
+    </header>
+
+    <!-- ================= COLUMNS ================= -->
+    <section class="columns">
+
+      <!-- ======= COL 1 · THE PLATFORM ======= -->
+      <div class="col">
+        <div>
+          <p class="eyebrow">The question</p>
+          <h2 class="heading">Can AI agents represent humans well enough to deliberate on their behalf?</h2>
+        </div>
+
+        <p class="body-text">
+          Democratic deliberation doesn&rsquo;t scale &mdash; classical methods cost hundreds of paid participant-hours and leave the people who show up not matching the people who have something to say. <strong>Habermolt</strong> is our deployed answer: humans teach AI agents their values through profiles and chat interviews, then deploy them into live, continuous deliberations that run 24/7. We analysed <strong>71 production deliberations</strong> with 1,000+ consensus statements to ask, candidly, what works.
+        </p>
+
+        <div class="screenshot">
+          <img src="./assets/site_hero.png" alt="habermolt.com landing page" />
+          <p class="ss-caption"><strong>habermolt.com</strong> &mdash; sign in, create an agent (hosted or via the open-source OpenClaw platform), deploy it into a deliberation. The Schulze winner updates live as new rankings arrive.</p>
+        </div>
+
+        <div>
+          <p class="eyebrow accent">The architecture</p>
+          <svg class="arch-diagram" viewBox="0 0 520 540" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0,0 L10,5 L0,10 z" fill="#1c1917" />
+              </marker>
+              <marker id="arrMuted" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0,0 L10,5 L0,10 z" fill="#78716c" />
+              </marker>
+              <marker id="arrBrand" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0,0 L10,5 L0,10 z" fill="#c84a20" />
+              </marker>
+            </defs>
+
+            <text x="130" y="20" text-anchor="middle" font-size="11" font-weight="700" fill="#78716c" letter-spacing="1">PER AGENT &middot; ONE HEARTBEAT</text>
+            <text x="410" y="20" text-anchor="middle" font-size="11" font-weight="700" fill="#78716c" letter-spacing="1">SHARED WORKSPACE</text>
+
+            <text x="12" y="210" font-size="10" font-style="italic" fill="#78716c">
+              <tspan x="12" dy="0">&times;&nbsp;N agents</tspan>
+              <tspan x="12" dy="13">arriving &amp;</tspan>
+              <tspan x="12" dy="13">heart&shy;beating</tspan>
+              <tspan x="12" dy="13">async&shy;hronously</tspan>
+            </text>
+            <path d="M62,50 Q55,50 55,60 L55,395 Q55,405 62,405" fill="none" stroke="#78716c" stroke-width="1" />
+
+            <rect x="72" y="36" width="250" height="46" rx="5" fill="#e5edf7" stroke="#2a6fb0" stroke-width="1.3" />
+            <text x="197" y="58" text-anchor="middle" font-size="12" font-weight="700" fill="#1c1917">Human + Profile (200+ words)</text>
+            <text x="197" y="74" text-anchor="middle" font-size="10" fill="#1c1917">+ optional chat interview</text>
+            <line x1="197" y1="82" x2="197" y2="100" stroke="#1c1917" stroke-width="1.3" marker-end="url(#arr)" />
+
+            <rect x="72" y="102" width="250" height="38" rx="5" fill="#fff4ea" stroke="#c84a20" stroke-width="1.3" />
+            <text x="197" y="126" text-anchor="middle" font-size="13" font-weight="700" fill="#1c1917">Grounded agent</text>
+            <line x1="197" y1="140" x2="197" y2="158" stroke="#1c1917" stroke-width="1.3" marker-end="url(#arr)" />
+
+            <rect x="72" y="160" width="250" height="58" rx="5" fill="#e3f1e8" stroke="#1a8a50" stroke-width="1.3" />
+            <text x="197" y="180" text-anchor="middle" font-size="12" font-weight="700" fill="#1c1917">1. Form opinion</text>
+            <text x="197" y="197" text-anchor="middle" font-size="9.5" fill="#1c1917" font-style="italic">information boundary: others&rsquo; opinions</text>
+            <text x="197" y="210" text-anchor="middle" font-size="9.5" fill="#1c1917" font-style="italic">hidden until submitted</text>
+            <line x1="197" y1="218" x2="197" y2="236" stroke="#1c1917" stroke-width="1.3" marker-end="url(#arr)" />
+
+            <rect x="72" y="238" width="250" height="58" rx="5" fill="#e3f1e8" stroke="#1a8a50" stroke-width="1.3" />
+            <text x="197" y="258" text-anchor="middle" font-size="12" font-weight="700" fill="#1c1917">2. Propose up to 3 statements</text>
+            <text x="197" y="275" text-anchor="middle" font-size="9.5" fill="#1c1917" font-style="italic">existing pool visible &mdash; statements</text>
+            <text x="197" y="288" text-anchor="middle" font-size="9.5" fill="#1c1917" font-style="italic">compete for 32 active slots</text>
+            <line x1="197" y1="296" x2="197" y2="314" stroke="#1c1917" stroke-width="1.3" marker-end="url(#arr)" />
+
+            <rect x="72" y="316" width="250" height="58" rx="5" fill="#e3f1e8" stroke="#1a8a50" stroke-width="1.3" />
+            <text x="197" y="336" text-anchor="middle" font-size="12" font-weight="700" fill="#1c1917">3. Rank the full statement pool</text>
+            <text x="197" y="353" text-anchor="middle" font-size="9.5" fill="#1c1917" font-style="italic">pairwise or full-list ordering</text>
+            <text x="197" y="366" text-anchor="middle" font-size="9.5" fill="#1c1917" font-style="italic">&mdash; each agent submits once</text>
+
+            <rect x="345" y="238" width="165" height="58" rx="5" fill="#f5f5f4" stroke="#1c1917" stroke-width="1.3" />
+            <text x="427" y="258" text-anchor="middle" font-size="12" font-weight="700" fill="#1c1917">Active statement pool</text>
+            <text x="427" y="275" text-anchor="middle" font-size="9.5" fill="#1c1917" font-style="italic">cap 32 &middot; lowest-</text>
+            <text x="427" y="288" text-anchor="middle" font-size="9.5" fill="#1c1917" font-style="italic">ranked evicted</text>
+
+            <rect x="345" y="316" width="165" height="58" rx="5" fill="#ede6fa" stroke="#6b4ac8" stroke-width="1.3" />
+            <text x="427" y="336" text-anchor="middle" font-size="12" font-weight="700" fill="#1c1917">Schulze &middot; Bradley&ndash;Terry</text>
+            <text x="427" y="353" text-anchor="middle" font-size="9.5" fill="#1c1917" font-style="italic">continuous re-aggregation</text>
+            <text x="427" y="366" text-anchor="middle" font-size="9.5" fill="#1c1917" font-style="italic">on every new ranking</text>
+
+            <rect x="345" y="400" width="165" height="54" rx="5" fill="#fde6a4" stroke="#c84a20" stroke-width="1.8" />
+            <text x="427" y="422" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1c1917">Textual consensus</text>
+            <text x="427" y="438" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1c1917">winner</text>
+
+            <line x1="322" y1="267" x2="345" y2="267" stroke="#78716c" stroke-width="1.3" marker-end="url(#arrMuted)" />
+            <text x="333" y="261" text-anchor="middle" font-size="8.5" font-style="italic" fill="#78716c">stmts</text>
+            <line x1="322" y1="345" x2="345" y2="345" stroke="#78716c" stroke-width="1.3" marker-end="url(#arrMuted)" />
+            <text x="333" y="339" text-anchor="middle" font-size="8.5" font-style="italic" fill="#78716c">rankings</text>
+
+            <line x1="427" y1="296" x2="427" y2="314" stroke="#1c1917" stroke-width="1.3" marker-end="url(#arr)" />
+            <line x1="427" y1="374" x2="427" y2="396" stroke="#1c1917" stroke-width="1.3" marker-end="url(#arr)" />
+
+            <path d="M345,445 Q220,520 72,440" fill="none" stroke="#c84a20" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#arrBrand)" />
+            <text x="220" y="510" text-anchor="middle" font-size="10" fill="#c84a20" font-style="italic">human correction &rarr; new ranking (rare in practice)</text>
+          </svg>
+        </div>
+
+        <div class="qr-block">
+          <img src="./assets/qr_habermolt.png" alt="QR code to habermolt.com" />
+          <div class="qr-text">
+            <div class="qr-title">Try it yourself</div>
+            <div class="qr-sub">Scan to visit the live platform &mdash; deploy an agent, join a deliberation, watch the Schulze winner update in real time.</div>
+            <div class="qr-url">habermolt.com</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ======= COL 2 · THE BAD NEWS ======= -->
+      <div class="col">
+        <div>
+          <p class="eyebrow hero">The bad news</p>
+          <h2 class="heading">Diversity compresses at every stage of the pipeline.</h2>
+        </div>
+
+        <p class="body-text">
+          We probed three stages and found the same story at each. <strong>Opinions</strong> compress the profiles they are generated from. <strong>Statements</strong> compress the opinions they are supposed to summarise. <strong>Rankings</strong> carry enough noise to swamp small differences between near-identical candidates. Diversity is lost at every hand-off &mdash; and it does not come back downstream.
+        </p>
+
+        <div class="pullquote">
+          Diverse human views <span class="arrow">&rarr;</span> homogeneous opinions <span class="arrow">&rarr;</span> near-identical statements <span class="arrow">&rarr;</span> indistinguishable actions.
+        </div>
+
+        <div class="pipeline">
+          <div class="stage">
+            <div class="label">Profiles</div>
+            <div class="value">diverse</div>
+          </div>
+          <div class="arrow">&rarr;</div>
+          <div class="stage hot">
+            <div class="label">Opinions</div>
+            <div class="value">0.745 sim.</div>
+          </div>
+          <div class="arrow">&rarr;</div>
+          <div class="stage hot">
+            <div class="label">Statements</div>
+            <div class="value">0.778 sim.<br/><span style="font-size:11pt; color:#78716c;">2.17&times; baseline</span></div>
+          </div>
+        </div>
+
+        <figure class="cap-sm">
+          <img src="./figures/opinion_homogeneity_by_source.png" alt="Opinion homogeneity by source" />
+          <figcaption>
+            <strong>Opinions compress profiles.</strong> Autonomous opinions (profile only) are significantly more homogeneous than interview-sourced opinions (p &lt; 10&#8315;&#8309;). 36 of 54 agents in the AI-alignment deliberation begin with <em>&ldquo;Technical safety governance is insufficient because&hellip;&rdquo;</em> &mdash; 35 have detailed profiles with materially different content.
+          </figcaption>
+        </figure>
+
+        <figure class="cap-xs">
+          <img src="./figures/profile_content_experiment.png" alt="Profile content experiment" />
+          <figcaption>
+            <strong>Specificity, not length, is the lever.</strong> A long abstract values-document produces opinions <em>closer</em> to the centroid than the real profile &mdash; even though it is shorter (paired Wilcoxon p = 0.027). The model needs novel content, not more content.
+          </figcaption>
+        </figure>
+
+        <div class="card accent">
+          <div class="card-title">The root cause: topic prior dominates</div>
+          <p class="body-text sm">
+            On &ldquo;Should AI alignment use fixed values or democratic processes?&rdquo; the LLM has a strong default position (democratic accountability, iterative governance) &mdash; and long, abstract <em>values-speak</em> gives that prior room to operate. A controlled experiment shows that stripping concrete anchors while keeping a profile long makes opinions <em>closer</em> to the centroid (paired Wilcoxon p = 0.027). <strong>Specificity, not length, is the lever.</strong>
+          </p>
+          <div class="chip-row">
+            <span class="chip red">&rho; = +0.15 length &uarr; &rarr; distinctiveness &darr;</span>
+            <span class="chip red">96% of homogeneity is proposal-time</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ======= COL 3 · THE GOOD NEWS ======= -->
+      <div class="col">
+        <div>
+          <p class="eyebrow">The good news</p>
+          <h2 class="heading">Prompt shifts representativeness. Architecture shifts actionability.</h2>
+        </div>
+
+        <p class="body-text">
+          Each architecture is two choices: a <strong>prompt</strong> (what objective does the LLM optimise?) and a <strong>structure</strong> (who generates, who ranks, how is the winner chosen?). They move <em>different</em> dimensions of the output &mdash; prompt shifts representativeness, architecture shifts actionability. Neither alone dominates; the best systems combine them.
+        </p>
+
+        <figure class="cap-md">
+          <img src="./figures/pareto_frontier.png" alt="Specificity–representativeness frontier across 9 architectures" />
+          <figcaption>
+            <strong>9 architectures on the specificity&ndash;representativeness frontier.</strong> <em>System-generated candidates + Bradley&ndash;Terry</em> (green cross) is the first architecture we found that significantly improves actionability over a well-tuned single-shot baseline (2.0 &rarr; 3.0, p = 0.008) while keeping agents in the selection loop. The &ldquo;strongest-position candidates&rdquo; variant sits on the Pareto frontier on both axes.
+          </figcaption>
+        </figure>
+
+        <figure class="cap-xs">
+          <img src="./figures/representativeness_vs_singleshot.png" alt="Representativeness vs single-shot synthesis" />
+          <figcaption>
+            <strong>The full loop beats a well-tuned single-shot call.</strong> Schulze and Bradley&ndash;Terry (dense data) decisively beat single-shot on representativeness &mdash; <em>~75% win rate, p &lt; 0.0001</em>. Sparse pairwise data ties baseline.
+          </figcaption>
+        </figure>
+
+        <div>
+          <p class="eyebrow">What works</p>
+          <ul class="checklist">
+            <li><strong>Separate generation from selection.</strong> The LLM writes diverse candidates; agents rank them. Writing quality equalises at 7.6&ndash;8.1; what differs is <em>which</em> candidate wins.</li>
+            <li><strong>Opinion-anchored, pool-aware prompts</strong> produce <em>2&ndash;3&times;</em> more diverse statement pools and more representative output (p &lt; 0.0001).</li>
+            <li><strong>Pairwise ranking</strong> is significantly more consistent than full-list &mdash; and the advantage grows on weaker, cheaper models.</li>
+            <li><strong>The full loop beats a well-tuned single-shot call</strong> on representativeness: <em>~75%</em> win rate, p &lt; 0.0001.</li>
+          </ul>
+        </div>
+
+        <div class="card accent">
+          <div class="card-title">The binding constraint is upstream</div>
+          <p class="body-text sm">
+            Every architectural improvement eventually bottoms out against the same problem: the LLM&rsquo;s topic prior dominates the profile. The next win for AI-delegated deliberation isn&rsquo;t a cleverer aggregation rule &mdash; it&rsquo;s a richer, lower-friction <strong>human&ndash;agent interface</strong>. Invest there first; everything downstream composes better.
+          </p>
+          <div class="chip-row">
+            <span class="chip ok">Interview-sourced opinions: 96% unique</span>
+            <span class="chip ok">Grounding prompt: +39% diversity</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </article>
+
+  <!-- Screen-only helpers -->
+  <div class="preview-hint" id="preview-hint">
+    <button class="close" aria-label="Dismiss hint" onclick="document.getElementById('preview-hint').classList.add('hidden')">&times;</button>
+    <b>Preview mode.</b> Designed at <code>1189&times;841&nbsp;mm</code> (A0 landscape).<br/>
+    Run <code>./export-pdf.sh</code> to regenerate <code>poster.pdf</code>, or click <b>Print &amp; Save PDF</b> (paper A0 landscape, margins None, background graphics ON).
+  </div>
+  <button class="print-btn" onclick="window.print()">Print &amp; Save PDF &rarr;</button>
+
+</body>
+</html>
