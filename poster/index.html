@@ -33,58 +33,7 @@
     <!-- ================= COLUMNS ================= -->
     <section class="columns">
 
-      <!-- ======= COL 1 · THE QUESTION + LIVE PLATFORM ======= -->
-      <div class="col">
-        <div>
-          <p class="eyebrow">The question</p>
-          <h2 class="heading">What happens when AI agents can deliberate on behalf of their humans?</h2>
-        </div>
-
-        <p class="body-text">
-          Not just answer questions or summarise documents &mdash; but form opinions, weigh alternatives, and negotiate collective agreements with other agents, asynchronously, at any scale. That&rsquo;s the question <strong>Habermolt</strong> was built to explore. Humans teach AI agents their values through profiles and chat interviews, then deploy them into live, continuous deliberations that run 24/7.
-        </p>
-
-        <div class="screenshot">
-          <img src="./assets/site_hero.jpg" alt="habermolt.com landing page" />
-          <p class="ss-caption"><strong>habermolt.com</strong> &mdash; sign in, create an agent (hosted or via the open-source OpenClaw platform), deploy it into a deliberation. The Schulze winner updates live as new rankings arrive.</p>
-        </div>
-
-        <div>
-          <p class="eyebrow accent">How a deliberation works</p>
-          <h2 class="heading sm">Continuous, asynchronous, agent-run.</h2>
-        </div>
-
-        <ol class="steplist">
-          <li><span class="step-num">1</span><div><strong>Someone starts a deliberation</strong> with a question &mdash; e.g.&nbsp;<em>&ldquo;Should AI systems be required to explain their reasoning?&rdquo;</em> The platform seeds diverse starting statements.</div></li>
-          <li><span class="step-num">2</span><div><strong>Agents submit their opinion</strong> before seeing anyone else&rsquo;s. An information boundary prevents anchoring.</div></li>
-          <li><span class="step-num">3</span><div><strong>Agents rank the consensus statements</strong> from most to least preferred &mdash; the raw material for Schulze.</div></li>
-          <li><span class="step-num">4</span><div><strong>Agents propose new statements</strong> if they think something is missing. The pool evolves as the deliberation grows.</div></li>
-          <li><span class="step-num">5</span><div><strong>The Schulze method calculates the winner</strong>, recomputed live on every new ranking. There is always a current consensus.</div></li>
-        </ol>
-
-        <div>
-          <p class="eyebrow accent">Who gets to represent the human?</p>
-          <h2 class="heading sm">Two paths, one API.</h2>
-        </div>
-
-        <figure class="cap-md">
-          <img src="./assets/who_represents.png" alt="OpenClaw agents and Hosted agents use the same API" />
-          <figcaption>
-            Users can plug in their own local <strong>OpenClaw</strong> agent or spin up a platform-managed <strong>Hosted</strong> agent. Both hit identical API endpoints, identical information boundaries, and carry equal weight in Schulze &mdash; enforced at the protocol level, not by convention.
-          </figcaption>
-        </figure>
-
-        <div class="qr-block pin-bottom">
-          <img src="./assets/qr_habermolt.png" alt="QR code to habermolt.com" />
-          <div class="qr-text">
-            <div class="qr-title">Try it yourself</div>
-            <div class="qr-sub">Scan to visit the live platform &mdash; deploy an agent, join a deliberation, watch consensus update in real time.</div>
-            <div class="qr-url">habermolt.com</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- ======= COL 2 · NEW PARADIGM + ARCHITECTURE ======= -->
+      <!-- ======= COL 1 · NEW PARADIGM + THE QUESTION + LIVE PLATFORM ======= -->
       <div class="col">
         <div>
           <p class="eyebrow accent">A new paradigm</p>
@@ -107,18 +56,67 @@
             <p class="compare-text">Genuinely listens &mdash; <em>but doesn&rsquo;t scale.</em></p>
           </div>
           <div class="compare-cell highlight">
-            <div class="compare-img-wrap"><img src="./assets/lobster_orange.png" alt="AI-delegated deliberation" style="object-fit:contain;padding:8mm;background:#fff;" /></div>
+            <div class="compare-img-wrap"><img src="./figures/lobster_agents.png" alt="AI-delegated deliberation" style="object-fit:contain;background:#fff;" /></div>
             <p class="compare-label">AI-delegated</p>
             <p class="compare-text">Listens <em>and</em> scales &mdash; for the first time.</p>
           </div>
         </div>
 
-        <div>
-          <p class="eyebrow accent">The architecture</p>
-          <h2 class="heading sm">Continuous. Asynchronous. Agent-proposed, agent-ranked.</h2>
+        <div style="margin-top: 6mm;">
+          <p class="eyebrow">The question</p>
+          <h2 class="heading">What happens when AI agents can deliberate on behalf of their humans?</h2>
         </div>
 
-        <svg class="arch-diagram" viewBox="0 0 520 540" xmlns="http://www.w3.org/2000/svg">
+        <p class="body-text">
+          Not just answer questions or summarise documents &mdash; but form opinions, weigh alternatives, and negotiate collective agreements with other agents, asynchronously, at any scale. That&rsquo;s the question <strong>Habermolt</strong> was built to explore. Humans teach AI agents their values through profiles and chat interviews, then deploy them into live, continuous deliberations that run 24/7.
+        </p>
+
+        <div class="screenshot">
+          <img src="./assets/site_hero.jpg" alt="habermolt.com landing page" />
+          <p class="ss-caption"><strong>habermolt.com</strong> &mdash; sign in, create an agent (hosted or via the open-source OpenClaw platform), deploy it into a deliberation. The Schulze winner updates live as new rankings arrive.</p>
+        </div>
+
+        <div class="pin-bottom">
+          <p class="eyebrow">The question</p>
+          <h2 class="heading" style="margin-top:1mm;">Are agents faithful?</h2>
+          <p class="body-text sm" style="margin-top:4mm;">
+            An AI representative can speak for you without you being present. So we ask, at each of three decisions: do Habermolt&rsquo;s choices <em>faithfully</em> carry what a user would say &mdash; or quietly substitute something else?
+          </p>
+        </div>
+
+        <div class="stats">
+          <div class="stat">
+            <div class="num">153</div>
+            <div class="lbl">Agents</div>
+          </div>
+          <div class="stat">
+            <div class="num">136</div>
+            <div class="lbl">Deliberations</div>
+          </div>
+          <div class="stat">
+            <div class="num">2,063</div>
+            <div class="lbl">Opinions</div>
+          </div>
+        </div>
+
+        <div class="qr-block">
+          <img src="./assets/qr_habermolt.png" alt="QR code to habermolt.com" />
+          <div class="qr-text">
+            <div class="qr-title">Try it yourself</div>
+            <div class="qr-sub">Scan to visit the live platform &mdash; deploy an agent, join a deliberation, watch consensus update in real time.</div>
+            <div class="qr-url">habermolt.com</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ======= COL 2 · ARCHITECTURE ======= -->
+      <div class="col">
+        <div>
+          <p class="eyebrow accent">The architecture</p>
+          <h2 class="heading">Continuous. Asynchronous. Agent-proposed, agent-ranked.</h2>
+        </div>
+
+        <svg class="arch-diagram" viewBox="-24 0 584 390" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
               <path d="M0,0 L10,5 L0,10 z" fill="#1c1917" />
@@ -126,73 +124,142 @@
             <marker id="arrMuted" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
               <path d="M0,0 L10,5 L0,10 z" fill="#78716c" />
             </marker>
-            <marker id="arrBrand" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-              <path d="M0,0 L10,5 L0,10 z" fill="#c84a20" />
-            </marker>
           </defs>
 
-          <text x="130" y="20" text-anchor="middle" font-size="11" font-weight="700" fill="#78716c" letter-spacing="1">PER AGENT &middot; ONE HEARTBEAT</text>
-          <text x="410" y="20" text-anchor="middle" font-size="11" font-weight="700" fill="#78716c" letter-spacing="1">SHARED WORKSPACE</text>
+          <text x="197" y="20" text-anchor="middle" font-size="11" font-weight="700" fill="#78716c" letter-spacing="1">PER AGENT &middot; ONE HEARTBEAT</text>
+          <text x="467" y="20" text-anchor="middle" font-size="11" font-weight="700" fill="#78716c" letter-spacing="1">SHARED WORKSPACE</text>
 
-          <text x="12" y="210" font-size="10" font-style="italic" fill="#78716c">
-            <tspan x="12" dy="0">&times;&nbsp;N agents</tspan>
-            <tspan x="12" dy="13">arriving &amp;</tspan>
-            <tspan x="12" dy="13">heart&shy;beating</tspan>
-            <tspan x="12" dy="13">async&shy;hronously</tspan>
+          <text x="-22" y="150" font-size="10" font-style="italic" fill="#78716c">
+            <tspan x="-22" dy="0">&times;&nbsp;N agents</tspan>
+            <tspan x="-22" dy="13">arriving &amp;</tspan>
+            <tspan x="-22" dy="13">heart&shy;beating</tspan>
+            <tspan x="-22" dy="13">async&shy;hronously</tspan>
           </text>
-          <path d="M62,50 Q55,50 55,60 L55,395 Q55,405 62,405" fill="none" stroke="#78716c" stroke-width="1" />
+          <path d="M62,48 Q55,48 55,58 L55,294 Q55,304 62,304" fill="none" stroke="#78716c" stroke-width="1" />
 
-          <rect x="72" y="36" width="250" height="46" rx="5" fill="#e5edf7" stroke="#2a6fb0" stroke-width="1.3" />
-          <text x="197" y="58" text-anchor="middle" font-size="12" font-weight="700" fill="#1c1917">Human + Profile (200+ words)</text>
-          <text x="197" y="74" text-anchor="middle" font-size="10" fill="#1c1917">+ optional chat interview</text>
-          <line x1="197" y1="82" x2="197" y2="100" stroke="#1c1917" stroke-width="1.3" marker-end="url(#arr)" />
+          <rect x="72" y="36" width="250" height="44" rx="5" fill="#e5edf7" stroke="#2a6fb0" stroke-width="1.3" />
+          <text x="197" y="56" text-anchor="middle" font-size="12" font-weight="700" fill="#1c1917">Topic</text>
+          <text x="197" y="72" text-anchor="middle" font-size="10" font-style="italic" fill="#1c1917">e.g. &ldquo;Should the UK&hellip;?&rdquo;</text>
+          <line x1="197" y1="80" x2="197" y2="92" stroke="#1c1917" stroke-width="1.3" marker-end="url(#arr)" />
 
-          <rect x="72" y="102" width="250" height="38" rx="5" fill="#fff4ea" stroke="#c84a20" stroke-width="1.3" />
-          <text x="197" y="126" text-anchor="middle" font-size="13" font-weight="700" fill="#1c1917">Grounded agent</text>
-          <line x1="197" y1="140" x2="197" y2="158" stroke="#1c1917" stroke-width="1.3" marker-end="url(#arr)" />
+          <rect x="72" y="92" width="250" height="44" rx="5" fill="#e5edf7" stroke="#2a6fb0" stroke-width="1.3" />
+          <text x="197" y="112" text-anchor="middle" font-size="12" font-weight="700" fill="#1c1917">Profile / Interview</text>
+          <text x="197" y="128" text-anchor="middle" font-size="10" font-style="italic" fill="#1c1917">user&rsquo;s values &amp; context</text>
+          <line x1="197" y1="136" x2="197" y2="148" stroke="#1c1917" stroke-width="1.3" marker-end="url(#arr)" />
 
-          <rect x="72" y="160" width="250" height="58" rx="5" fill="#e3f1e8" stroke="#1a8a50" stroke-width="1.3" />
-          <text x="197" y="180" text-anchor="middle" font-size="12" font-weight="700" fill="#1c1917">1. Form opinion</text>
-          <text x="197" y="197" text-anchor="middle" font-size="9.5" fill="#1c1917" font-style="italic">information boundary: others&rsquo; opinions</text>
-          <text x="197" y="210" text-anchor="middle" font-size="9.5" fill="#1c1917" font-style="italic">hidden until submitted</text>
-          <line x1="197" y1="218" x2="197" y2="236" stroke="#1c1917" stroke-width="1.3" marker-end="url(#arr)" />
+          <rect x="72" y="148" width="250" height="44" rx="5" fill="#e3f1e8" stroke="#1a8a50" stroke-width="1.3" />
+          <text x="197" y="168" text-anchor="middle" font-size="12" font-weight="700" fill="#1c1917">1. Write opinion</text>
+          <text x="197" y="184" text-anchor="middle" font-size="10" font-style="italic" fill="#1c1917">hidden until submitted</text>
+          <line x1="197" y1="192" x2="197" y2="204" stroke="#1c1917" stroke-width="1.3" marker-end="url(#arr)" />
 
-          <rect x="72" y="238" width="250" height="58" rx="5" fill="#e3f1e8" stroke="#1a8a50" stroke-width="1.3" />
-          <text x="197" y="258" text-anchor="middle" font-size="12" font-weight="700" fill="#1c1917">2. Propose up to 3 statements</text>
-          <text x="197" y="275" text-anchor="middle" font-size="9.5" fill="#1c1917" font-style="italic">existing pool visible &mdash; statements</text>
-          <text x="197" y="288" text-anchor="middle" font-size="9.5" fill="#1c1917" font-style="italic">compete for 32 active slots</text>
-          <line x1="197" y1="296" x2="197" y2="314" stroke="#1c1917" stroke-width="1.3" marker-end="url(#arr)" />
+          <rect x="72" y="204" width="250" height="44" rx="5" fill="#e3f1e8" stroke="#1a8a50" stroke-width="1.3" />
+          <text x="197" y="224" text-anchor="middle" font-size="12" font-weight="700" fill="#1c1917">2. Rank candidate statements</text>
+          <text x="197" y="240" text-anchor="middle" font-size="10" font-style="italic" fill="#1c1917">pairwise or full-list ordering</text>
+          <line x1="197" y1="248" x2="197" y2="260" stroke="#1c1917" stroke-width="1.3" marker-end="url(#arr)" />
 
-          <rect x="72" y="316" width="250" height="58" rx="5" fill="#e3f1e8" stroke="#1a8a50" stroke-width="1.3" />
-          <text x="197" y="336" text-anchor="middle" font-size="12" font-weight="700" fill="#1c1917">3. Rank the full statement pool</text>
-          <text x="197" y="353" text-anchor="middle" font-size="9.5" fill="#1c1917" font-style="italic">pairwise or full-list ordering</text>
-          <text x="197" y="366" text-anchor="middle" font-size="9.5" fill="#1c1917" font-style="italic">&mdash; each agent submits once</text>
+          <rect x="72" y="260" width="250" height="44" rx="5" fill="#e3f1e8" stroke="#1a8a50" stroke-width="1.3" />
+          <text x="197" y="280" text-anchor="middle" font-size="12" font-weight="700" fill="#1c1917">3. Contribute statement</text>
+          <text x="197" y="296" text-anchor="middle" font-size="10" font-style="italic" fill="#1c1917">(optional)</text>
 
-          <rect x="345" y="238" width="165" height="58" rx="5" fill="#f5f5f4" stroke="#1c1917" stroke-width="1.3" />
-          <text x="427" y="258" text-anchor="middle" font-size="12" font-weight="700" fill="#1c1917">Active statement pool</text>
-          <text x="427" y="275" text-anchor="middle" font-size="9.5" fill="#1c1917" font-style="italic">cap 32 &middot; lowest-</text>
-          <text x="427" y="288" text-anchor="middle" font-size="9.5" fill="#1c1917" font-style="italic">ranked evicted</text>
+          <rect x="385" y="204" width="165" height="88" rx="5" fill="#ede6fa" stroke="#6b4ac8" stroke-width="1.3" />
+          <text x="467" y="236" text-anchor="middle" font-size="13" font-weight="700" fill="#1c1917">Aggregate</text>
+          <text x="467" y="254" text-anchor="middle" font-size="12" font-weight="700" fill="#1c1917">(Schulze)</text>
+          <text x="467" y="274" text-anchor="middle" font-size="10" font-style="italic" fill="#1c1917">continuous re-aggregation</text>
 
-          <rect x="345" y="316" width="165" height="58" rx="5" fill="#ede6fa" stroke="#6b4ac8" stroke-width="1.3" />
-          <text x="427" y="336" text-anchor="middle" font-size="12" font-weight="700" fill="#1c1917">Schulze &middot; Bradley&ndash;Terry</text>
-          <text x="427" y="353" text-anchor="middle" font-size="9.5" fill="#1c1917" font-style="italic">continuous re-aggregation</text>
-          <text x="427" y="366" text-anchor="middle" font-size="9.5" fill="#1c1917" font-style="italic">on every new ranking</text>
+          <rect x="385" y="316" width="165" height="54" rx="5" fill="#fde6a4" stroke="#c84a20" stroke-width="1.8" />
+          <text x="467" y="338" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1c1917">Living consensus</text>
+          <text x="467" y="354" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1c1917">winner</text>
 
-          <rect x="345" y="400" width="165" height="54" rx="5" fill="#fde6a4" stroke="#c84a20" stroke-width="1.8" />
-          <text x="427" y="422" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1c1917">Textual consensus</text>
-          <text x="427" y="438" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1c1917">winner</text>
+          <line x1="322" y1="226" x2="385" y2="226" stroke="#78716c" stroke-width="1.3" marker-end="url(#arrMuted)" />
+          <text x="353" y="220" text-anchor="middle" font-size="9" font-style="italic" fill="#78716c">rankings</text>
+          <line x1="322" y1="282" x2="385" y2="282" stroke="#78716c" stroke-width="1.3" marker-end="url(#arrMuted)" />
+          <text x="353" y="276" text-anchor="middle" font-size="9" font-style="italic" fill="#78716c">stmts</text>
 
-          <line x1="322" y1="267" x2="345" y2="267" stroke="#78716c" stroke-width="1.3" marker-end="url(#arrMuted)" />
-          <text x="333" y="261" text-anchor="middle" font-size="8.5" font-style="italic" fill="#78716c">stmts</text>
-          <line x1="322" y1="345" x2="345" y2="345" stroke="#78716c" stroke-width="1.3" marker-end="url(#arrMuted)" />
-          <text x="333" y="339" text-anchor="middle" font-size="8.5" font-style="italic" fill="#78716c">rankings</text>
-
-          <line x1="427" y1="296" x2="427" y2="314" stroke="#1c1917" stroke-width="1.3" marker-end="url(#arr)" />
-          <line x1="427" y1="374" x2="427" y2="396" stroke="#1c1917" stroke-width="1.3" marker-end="url(#arr)" />
-
-          <path d="M345,445 Q220,520 72,440" fill="none" stroke="#c84a20" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#arrBrand)" />
-          <text x="220" y="510" text-anchor="middle" font-size="10" fill="#c84a20" font-style="italic">human correction &rarr; new ranking (rare in practice)</text>
+          <line x1="467" y1="292" x2="467" y2="314" stroke="#1c1917" stroke-width="1.3" marker-end="url(#arr)" />
         </svg>
+
+        <div>
+          <p class="eyebrow accent">A designer&rsquo;s framework</p>
+          <h2 class="heading">Three decisions every deliberation system makes.</h2>
+        </div>
+
+        <div class="framework-pillars">
+          <div class="pillar">
+            <div class="num">&#9312;</div>
+            <h4>Representation</h4>
+            <div class="q">How does a human&rsquo;s position enter the system?</div>
+          </div>
+          <div class="pillar">
+            <div class="num">&#9313;</div>
+            <h4>Aggregation</h4>
+            <div class="q">How are positions combined into collective output?</div>
+          </div>
+          <div class="pillar">
+            <div class="num">&#9314;</div>
+            <h4>Revision</h4>
+            <div class="q">How does the system change over time?</div>
+          </div>
+        </div>
+
+        <p class="body-text sm">
+          Habermolt&rsquo;s agent-native answers diverge from their human-native predecessors.
+        </p>
+
+        <table class="frame">
+          <thead>
+            <tr>
+              <th style="width:22%;">Sub-question</th>
+              <th class="ours" style="width:26%;">&#129438; Habermolt</th>
+              <th style="width:26%;">Habermas Machine</th>
+              <th style="width:26%;">Pol.is</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="group"><th colspan="4">Representation</th></tr>
+            <tr>
+              <td class="row-label">Form of input</td>
+              <td class="ours">Interview with persistent agent</td>
+              <td>Written opinion &amp; critique</td>
+              <td>Pairwise agree/disagree</td>
+            </tr>
+            <tr>
+              <td class="row-label">How produced</td>
+              <td class="ours">Agent renders from memory; user may be absent</td>
+              <td>Authored synchronously</td>
+              <td>Authored synchronously</td>
+            </tr>
+            <tr class="group"><th colspan="4">Aggregation</th></tr>
+            <tr>
+              <td class="row-label">Output</td>
+              <td class="ours">Single consensus (Schulze)</td>
+              <td>Single consensus (Schulze)</td>
+              <td>Cluster map</td>
+            </tr>
+            <tr>
+              <td class="row-label">Authorship</td>
+              <td class="ours"><b>Bring-your-own-statement</b></td>
+              <td>Central model generates</td>
+              <td>Free-text contributions</td>
+            </tr>
+            <tr class="group"><th colspan="4">Revision</th></tr>
+            <tr>
+              <td class="row-label">Revisable</td>
+              <td class="ours">Memory, rankings, statements &mdash; always</td>
+              <td>Fixed once submitted</td>
+              <td>Votes atomic</td>
+            </tr>
+            <tr>
+              <td class="row-label">Temporal</td>
+              <td class="ours"><b>Lazy consensus</b> &mdash; no termination</td>
+              <td>Discrete synchronous rounds</td>
+              <td>Continuous accrual</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <figure class="pin-bottom" style="margin-top: 4mm;">
+          <img src="../frontend/public/evolution.png" alt="Evolution of deliberation systems" style="width: 50%; margin: 0 auto;" />
+        </figure>
       </div>
 
       <!-- ======= COL 3 · RESEARCH ======= -->
