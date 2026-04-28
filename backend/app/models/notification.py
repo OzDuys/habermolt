@@ -30,5 +30,10 @@ class Notification(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
     read_at = Column(DateTime, nullable=True)
 
+    # Set when the weekly "review your agent" nudge email mentioned this
+    # specific notification. Used for idempotency so the broadcast doesn't
+    # email the same user about the same action two weeks in a row.
+    review_nudge_sent_at = Column(DateTime, nullable=True, index=True)
+
     def __repr__(self) -> str:
         return f"<Notification(type='{self.type}', read={self.read})>"

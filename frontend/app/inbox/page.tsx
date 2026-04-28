@@ -1,7 +1,7 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useSession } from "@/lib/auth-client";
 import { api } from "@/lib/api";
@@ -57,12 +57,15 @@ function InboxSkeleton() {
 function InboxContent() {
   const { data: session, isPending } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const focusedId = searchParams.get("notification_id");
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [hasAgent, setHasAgent] = useState<boolean | null>(null);
   const [isHosted, setIsHosted] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [tab, setTab] = useState<Tab>("review");
+  const [highlightedId, setHighlightedId] = useState<string | null>(null);
 
   // Notification state updater (cards manage their own interaction state)
 
@@ -88,10 +91,18 @@ function InboxContent() {
         setIsHosted(agentType.type === "hosted");
         const items = notifData.notifications || [];
         setNotifications(items);
-        // Default to tab with most unread, preferring review
-        const hasReview = items.some((n: Notification) => n.metadata?.reviewable && n.approval_status === null && n.metadata?.action_type);
-        if (hasReview) setTab("review");
-        else setTab("activity");
+        // If deep-linked to a specific notification, switch to its tab
+        const focused = focusedId ? items.find((n: Notification) => n.id === focusedId) : null;
+        if (focused) {
+          const isRecommendation = focused.type === "agent_action" && !focused.metadata?.action_type;
+          const needsReview = focused.metadata?.reviewable && focused.approval_status === null && !isRecommendation;
+          setTab(isRecommendation ? "recommended" : needsReview ? "review" : "activity");
+        } else {
+          // Default to tab with most unread, preferring review
+          const hasReview = items.some((n: Notification) => n.metadata?.reviewable && n.approval_status === null && n.metadata?.action_type);
+          if (hasReview) setTab("review");
+          else setTab("activity");
+        }
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -195,6 +206,7 @@ function InboxContent() {
       </div>
 
       {/* Content */}
+      <FocusScroller targetId={focusedId} items={sorted} onHighlight={setHighlightedId} />
       {sorted.length === 0 ? (
         <div
           className="rounded-xl border p-8 text-center"
@@ -226,6 +238,7 @@ function InboxContent() {
               notification={n}
               onUpdate={handleUpdate}
               subdued={tab === "activity"}
+              highlight={highlightedId === n.id}
             />
           ))}
         </div>
@@ -238,6 +251,37 @@ function InboxContent() {
 }
 
 // ---------------------------------------------------------------------------
+// Focus scroller — scrolls a deep-linked notification into view, then fades out
+// ---------------------------------------------------------------------------
+
+function FocusScroller({
+  targetId,
+  items,
+  onHighlight,
+}: {
+  targetId: string | null;
+  items: Notification[];
+  onHighlight: (id: string | null) => void;
+}) {
+  const scrolledFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!targetId) return;
+    if (scrolledFor.current === targetId) return;
+    if (!items.some((n) => n.id === targetId)) return;
+    scrolledFor.current = targetId;
+    // Wait a tick for the cards to render, then scroll + highlight
+    const t = setTimeout(() => {
+      const el = document.getElementById(`notif-${targetId}`);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+      onHighlight(targetId);
+      setTimeout(() => onHighlight(null), 2400);
+    }, 50);
+    return () => clearTimeout(t);
+  }, [targetId, items, onHighlight]);
+  return null;
+}
+
+// ---------------------------------------------------------------------------
 // Action Card — the core inbox item (self-contained state for correction loop)
 // ---------------------------------------------------------------------------
 
@@ -245,10 +289,12 @@ function ActionCard({
   notification: n,
   onUpdate,
   subdued = false,
+  highlight = false,
 }: {
   notification: Notification;
   onUpdate: (id: string, updates: Partial<Notification>) => void;
   subdued?: boolean;
+  highlight?: boolean;
 }) {
   const meta = n.metadata || {};
   const actionType = meta.action_type;
@@ -352,15 +398,18 @@ function ActionCard({
 
   return (
     <div
+      id={`notif-${n.id}`}
       className="rounded-xl border transition-all duration-500 hover:shadow-sm"
       style={{
         borderColor: animatingOut === "approved"
           ? "#22c55e"
           : animatingOut === "withdrawn"
             ? "#ef4444"
-            : isReviewable
+            : highlight
               ? "var(--accent)"
-              : "var(--border)",
+              : isReviewable
+                ? "var(--accent)"
+                : "var(--border)",
         background: animatingOut === "approved"
           ? "#f0fdf4"
           : animatingOut === "withdrawn"
@@ -372,7 +421,8 @@ function ActionCard({
         overflow: animatingOut ? "hidden" : "visible",
         marginBottom: animatingOut ? "0px" : undefined,
         padding: animatingOut ? "0px" : undefined,
-        borderWidth: animatingOut ? "0px" : isReviewable ? "1.5px" : "1px",
+        borderWidth: animatingOut ? "0px" : highlight ? "2px" : isReviewable ? "1.5px" : "1px",
+        boxShadow: highlight ? "0 0 0 4px rgba(200, 74, 32, 0.18)" : undefined,
       }}
     >
       {/* Card header */}

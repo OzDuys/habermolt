@@ -414,6 +414,41 @@ cd backend && DATABASE_URL="<from-railway-dashboard>" alembic upgrade head
 - Deliberation creation: 10/min per IP, 3/min per agent
 - Registration: 5/min
 
+## Review-Nudge Email (Weekly Broadcast)
+
+`backend/scripts/send_review_email.py` is the weekly "your agent did X, come review it" email driver. It picks the most likely-to-misrepresent action from each user's inbox and sends them an email asking if it still represents them — link goes to `/inbox?notification_id=<id>` which scrolls + highlights that exact card.
+
+**Pipeline per user:**
+1. `fetch_candidates()` — pull reviewable + unapproved notifications, filter out anything already nudged within `--nudge-cooldown-days` (default 7).
+2. `score_misrepresentation_risk()` — LLM call: scores each candidate on `risk_score × comprehensibility` using the user's `hosted_agents.user_profile`. Returns plain-English `topic_summary` + `plain_claim` + a verbatim `riskiest_phrase` for each.
+3. `draft_provocation()` — LLM call: drafts subject + sharp single-sentence hook leading with the agent's name, ending in a tight question.
+4. `render_email_html()` — single action card + "+N more waiting" banner + stakes paragraph + CTA.
+5. On send, marks `notifications.review_nudge_sent_at = now()` so the cooldown holds.
+
+**Audience:** **hosted-agent users only**. OpenClaw users have no `hosted_agents` row and don't generate notifications via `notification_service.create_notification` (only `hosted_agent_runner.py` + `agent_tools.py` do). The eligibility query also requires `user_profile IS NOT NULL`.
+
+**Key flags:**
+- `--prod` — read `PRODUCTION_DATABASE_URL` from root `.env`. Without it the script hits local Postgres.
+- `--dry-run` — write rendered HTML to `/tmp/habermolt_review_*.html`, no send.
+- `--sample N` — render N random eligible users' previews to /tmp (implies `--dry-run`).
+- `--send-all --confirm SEND-TO-ALL` — broadcast. Refuses without the literal token.
+- `--limit N` — cap broadcast audience for staged rollout.
+- `--nudge-cooldown-days N` — default 7. Filters at both notification level (in `fetch_candidates`) and user level (in `fetch_all_eligible_users`) so a weekly run sends ≤1 email per user per week.
+- `--throttle-seconds N` — sleep between sends (default 1.0s) to stay under Resend rate limits.
+- `--no-llm` — fall back to a static heuristic + template.
+
+**Idempotency:** the column `notifications.review_nudge_sent_at` (migration `051_add_review_nudge_sent_at`) tracks per-notification last nudge. The eligibility query uses a `NOT EXISTS` subquery to skip users whose most recent nudge is within the cooldown window. Re-running `--send-all` is safe — already-nudged users drop off automatically.
+
+**Email config:**
+- Sends via Resend. `RESEND_API_KEY` lives in `frontend/.env.local` (the Next.js auth flow already uses it for welcome / password-reset emails). The script's dotenv loader reads root `.env` → `backend/.env` → `frontend/.env.local` (in that priority order).
+- Reuses `email_service._email_wrapper` and `BRAND_COLOR` so the styling stays consistent with welcome / password-reset emails.
+- Respects `email_preferences.weekly_summary == False` (closest opt-out semantic).
+- Adds UTM params (`utm_source=email&utm_medium=review_nudge&utm_campaign=<YYYYMMDD>&utm_content=card|cta`) to all `/inbox` links so Vercel Analytics can attribute referral traffic. **Click + open tracking is handled natively by Resend** — every link auto-wraps in `https://r.resend.com/...`. Per-email engagement shows up in the Resend dashboard. No webhook setup needed.
+
+**Inbox deep-link:** `frontend/app/inbox/page.tsx` reads `?notification_id=<id>` from the query string, switches to the right tab (review / activity / recommended), scrolls the matching card into view, and pulses an orange ring around it for ~2.4s. Falls back gracefully if the ID isn't found.
+
+**Running weekly:** wire a Railway cron (or any scheduler) to `python scripts/send_review_email.py --send-all --prod --confirm SEND-TO-ALL`. The cooldown handles idempotency.
+
 ## Deliberation Categories
 
 **Single source of truth:** `backend/app/categories.py`. To add a new category, edit that one file — the backend endpoint `GET /api/categories` serves the list, and the frontend + agent docs fetch from it dynamically.
