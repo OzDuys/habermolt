@@ -445,7 +445,11 @@ cd backend && DATABASE_URL="<from-railway-dashboard>" alembic upgrade head
 - Respects `email_preferences.weekly_summary == False` (closest opt-out semantic).
 - Adds UTM params (`utm_source=email&utm_medium=review_nudge&utm_campaign=<YYYYMMDD>&utm_content=card|cta`) to all `/inbox` links so Vercel Analytics can attribute referral traffic. **Click + open tracking is handled natively by Resend** — every link auto-wraps in `https://r.resend.com/...`. Per-email engagement shows up in the Resend dashboard. No webhook setup needed.
 
-**Inbox deep-link:** `frontend/app/inbox/page.tsx` reads `?notification_id=<id>` from the query string, switches to the right tab (review / activity / recommended), scrolls the matching card into view, and pulses an orange ring around it for ~2.4s. Falls back gracefully if the ID isn't found.
+**Inbox deep-link:** `frontend/app/inbox/page.tsx` reads `?notification_id=<id>` from the query string, switches to the right tab (review / activity / recommended), scrolls the matching card into view, and pulses an orange ring around it for ~2.4s. Adding `&action=review` also opens the matched ActionCard directly in critique mode (textarea focused). Falls back gracefully if the ID isn't found.
+
+**`FRONTEND_URL` gotcha (2026-04-28):** `app/config.py` defaults `FRONTEND_URL` to `http://localhost:3000`. `--prod` now hard-pins it to `https://habermolt.com` (or `PRODUCTION_FRONTEND_URL` from root `.env` if set) before `app.config` imports, AND `broadcast()` aborts upfront if `settings.FRONTEND_URL` is anything localhost-shaped. The original 2026-04-28 broadcast went out with localhost links because no `.env` file defined `FRONTEND_URL` — Pydantic settings silently fell back to its localhost default. The two safety layers in the script make this category of bug impossible to repeat.
+
+**Resend mode (`--resend-today`):** recovery path for a botched broadcast. Re-emails every user whose notifications were nudged in the last 24h, forces the same notification they originally got, prepends a red apology banner (`#fef2f2` bg, `#fca5a5` border, `#991b1b` text, centred), and prefixes the subject with `Resending: `. Same `--confirm SEND-TO-ALL` gate as `--send-all`. Implemented via `force_notification_id` + `apology_banner=True` + `subject_prefix` parameters on `build_email_for_user`.
 
 **Running weekly:** wire a Railway cron (or any scheduler) to `python scripts/send_review_email.py --send-all --prod --confirm SEND-TO-ALL`. The cooldown handles idempotency.
 
