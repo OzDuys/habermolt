@@ -635,12 +635,12 @@ def _render_action_card(agent_name: str, action: dict) -> str:
 
 
 _APOLOGY_BANNER_HTML = (
-    f'<div style="background: #fef3c7; border: 1px solid #fde68a; '
-    f'border-radius: 6px; padding: 12px 16px; margin: 0 0 18px;">'
-    f'<span style="color: #92400e; font-size: 13px; line-height: 1.55;">'
-    f"We sent you this email earlier today, but the button linked to a "
-    f"broken page. Sorry about that. Here it is again with a working "
-    f"button. No need to read it twice if you already did."
+    f'<div style="background: #fef2f2; border: 1px solid #fca5a5; '
+    f'border-radius: 6px; padding: 10px 14px; margin: 0 0 16px; '
+    f'text-align: center;">'
+    f'<span style="color: #991b1b; font-size: 13px; line-height: 1.55;">'
+    f"Sorry, our last email's link was broken. Here's the working one "
+    f"to review your agent."
     f"</span></div>"
 )
 
