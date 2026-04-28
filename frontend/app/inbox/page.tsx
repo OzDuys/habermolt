@@ -745,6 +745,7 @@ function ActionCard({
               setCritique("");
               setEditText(currentOpinion);
               setError(null);
+              setConfirmWithdraw(false);
             }}
             disabled={mode === "revising"}
             className="rounded-lg border px-3 py-2 text-xs font-medium transition-colors hover:bg-black/5 disabled:opacity-40"
