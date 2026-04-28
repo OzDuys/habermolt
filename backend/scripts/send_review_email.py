@@ -49,8 +49,14 @@ load_dotenv()  # backend/.env — fills in anything root didn't define
 # backend script doesn't need a duplicate copy.
 load_dotenv(os.path.join(_REPO_ROOT, "frontend", ".env.local"))
 
-# If --prod is on the command line, swap DATABASE_URL to PRODUCTION_DATABASE_URL
-# before app.database is imported. (Argparse runs later in main().)
+# If --prod is on the command line, swap DATABASE_URL + FRONTEND_URL to
+# their production values before app.config / app.database are imported.
+# (Argparse runs later in main().)
+#
+# CRITICAL: FRONTEND_URL defaults to http://localhost:3000 in app/config.py.
+# If we forget to set it, the email links go to localhost — which is what
+# happened on 2026-04-28's broadcast and required a correction email. Always
+# pin the production frontend URL here when --prod is used.
 if "--prod" in sys.argv:
     prod_url = os.environ.get("PRODUCTION_DATABASE_URL")
     if not prod_url:
@@ -58,6 +64,10 @@ if "--prod" in sys.argv:
               "in the root .env file.", file=sys.stderr)
         sys.exit(1)
     os.environ["DATABASE_URL"] = prod_url
+    # Hard-pin so any bug in env loading can't silently emit localhost links.
+    os.environ["FRONTEND_URL"] = os.environ.get(
+        "PRODUCTION_FRONTEND_URL", "https://habermolt.com"
+    )
 
 import resend
 from sqlalchemy import text
@@ -903,6 +913,17 @@ def render_preview_for_user(*, db: Session, user: dict, args) -> Optional[str]:
     return path
 
 
+def _assert_no_localhost_links(html: str) -> None:
+    """Refuse to send anything pointing at localhost. Last-line defence
+    against env-loading bugs that would otherwise silently ship dev URLs
+    to real users (see broken broadcast 2026-04-28)."""
+    if "localhost" in html or "127.0.0.1" in html:
+        raise RuntimeError(
+            "Refusing to send: rendered HTML contains a localhost URL. "
+            "Check FRONTEND_URL and re-run with --prod."
+        )
+
+
 def broadcast(*, db: Session, args) -> None:
     """Send the review email to every eligible hosted-agent user.
 
@@ -912,6 +933,8 @@ def broadcast(*, db: Session, args) -> None:
       - Throttles between sends (--throttle-seconds, default 1.0).
       - --limit caps the audience for staged rollout.
       - Writes a CSV log to /tmp listing every attempt.
+      - Aborts the whole broadcast if any rendered email contains a
+        localhost URL — protects against env-loading regressions.
     """
     if args.confirm != "SEND-TO-ALL":
         logger.error(
@@ -921,6 +944,13 @@ def broadcast(*, db: Session, args) -> None:
         sys.exit(2)
     if not settings.RESEND_API_KEY:
         logger.error("RESEND_API_KEY is not set; cannot send.")
+        sys.exit(1)
+    if "localhost" in settings.FRONTEND_URL or "127.0.0.1" in settings.FRONTEND_URL:
+        logger.error(
+            "settings.FRONTEND_URL = %s — refusing to broadcast localhost URLs. "
+            "Pass --prod or export FRONTEND_URL=https://habermolt.com.",
+            settings.FRONTEND_URL,
+        )
         sys.exit(1)
 
     # Initialise Resend once.
