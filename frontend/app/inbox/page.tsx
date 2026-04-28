@@ -481,7 +481,8 @@ function ActionCard({
           </div>
         )}
 
-        {/* Opinion-based actions — REVIEWING: editable textarea is primary */}
+        {/* Opinion-based actions — REVIEWING: opinion box (read-only OR
+            inline-editable via the "edit text" link), then critique box. */}
         {hasOpinion && (mode === "critiquing" || mode === "revising" || mode === "editing") && (
           <div className="space-y-2">
             {/* Old opinion (for updates) — read-only context */}
@@ -496,38 +497,64 @@ function ActionCard({
                 {meta.old_opinion_text}
               </div>
             )}
-            <div>
-              <div className="mb-1 flex items-center gap-2">
+
+            {/* Opinion box: read-only by default, becomes a textarea when the
+                user clicks "edit text". Same size + border in both states so
+                the layout doesn't shift. */}
+            <div
+              className="relative rounded-lg border-l-4 px-3 py-2.5 text-sm leading-relaxed"
+              style={{
+                borderLeftColor: "var(--accent)",
+                background: mode === "editing" ? "var(--background)" : "var(--surface-dim)",
+                color: "var(--foreground)",
+              }}
+            >
+              <div className="mb-1 flex items-center justify-between gap-2">
                 <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--muted)" }}>
-                  Edit opinion
+                  {currentOpinion !== meta.opinion_text
+                    ? "Revised opinion"
+                    : actionType === "update_opinion" && meta.old_opinion_text
+                      ? "New opinion"
+                      : "Opinion submitted on your behalf"}
                 </span>
-                <span className="text-[10px]" style={{ color: "var(--muted)" }}>
-                  Type directly to rewrite. Use the box below if you&rsquo;d rather describe the change.
-                </span>
+                {mode !== "editing" && (
+                  <button
+                    onClick={() => { setMode("editing"); setEditText(currentOpinion); }}
+                    className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider transition-opacity hover:opacity-70"
+                    style={{ color: "var(--accent)" }}
+                  >
+                    <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                    Edit text
+                  </button>
+                )}
               </div>
-              <textarea
-                ref={(el) => {
-                  if (el) { el.style.height = "auto"; el.style.height = el.scrollHeight + "px"; }
-                }}
-                value={editText}
-                onChange={(e) => {
-                  setEditText(e.target.value);
-                  e.target.style.height = "auto";
-                  e.target.style.height = e.target.scrollHeight + "px";
-                }}
-                className="w-full rounded-lg border-l-4 border px-3 py-2.5 text-sm leading-relaxed outline-none focus:ring-1"
-                style={{
-                  borderLeftColor: "var(--accent)",
-                  borderColor: "var(--border)",
-                  background: "var(--background)",
-                  color: "var(--foreground)",
-                  resize: "none",
-                  overflow: "hidden",
-                  minHeight: "4rem",
-                }}
-                autoFocus
-                disabled={mode === "revising"}
-              />
+              {mode === "editing" ? (
+                <textarea
+                  ref={(el) => {
+                    if (el) { el.style.height = "auto"; el.style.height = el.scrollHeight + "px"; }
+                  }}
+                  value={editText}
+                  onChange={(e) => {
+                    setEditText(e.target.value);
+                    e.target.style.height = "auto";
+                    e.target.style.height = e.target.scrollHeight + "px";
+                  }}
+                  className="w-full bg-transparent text-sm leading-relaxed outline-none"
+                  style={{
+                    color: "var(--foreground)",
+                    resize: "none",
+                    overflow: "hidden",
+                    minHeight: "3rem",
+                    border: "none",
+                    padding: 0,
+                  }}
+                  autoFocus
+                />
+              ) : (
+                <div>{displayOpinion}</div>
+              )}
             </div>
           </div>
         )}
@@ -591,34 +618,38 @@ function ActionCard({
         )}
       </div>
 
-      {/* Critique input (inline correction loop) — secondary path */}
+      {/* Critique input — primary path: tell the agent what to change */}
       {(mode === "critiquing" || mode === "revising" || mode === "editing") && (
-        <div className="border-t px-4 py-3" style={{ borderColor: "var(--border)" }}>
-          <p className="mb-1.5 text-xs" style={{ color: "var(--muted)" }}>
-            Or, describe what you want to change and your agent will rewrite it.
-          </p>
-          <textarea
-            value={critique}
-            onChange={(e) => setCritique(e.target.value)}
-            placeholder="What should be different about this opinion?"
-            className="w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-1"
-            style={{ borderColor: "var(--border)", background: "var(--background)", color: "var(--foreground)" }}
-            rows={2}
-            disabled={mode === "revising"}
-          />
+        <div className="px-4 pb-3">
+          <div
+            className="rounded-lg border focus-within:ring-1"
+            style={{ borderColor: "var(--border)", background: "var(--background)" }}
+          >
+            <textarea
+              value={critique}
+              onChange={(e) => setCritique(e.target.value)}
+              placeholder="Tell your agent what to change…"
+              className="w-full rounded-t-lg bg-transparent px-3 py-2.5 text-sm outline-none"
+              style={{ color: "var(--foreground)", border: "none", resize: "none" }}
+              rows={2}
+              autoFocus={mode === "critiquing"}
+              disabled={mode === "revising"}
+            />
+            <div className="flex items-center justify-end border-t px-2 py-1.5"
+                 style={{ borderColor: "var(--border)" }}>
+              <button
+                onClick={handleRevise}
+                disabled={!critique.trim() || mode === "revising"}
+                className="rounded-md px-3 py-1 text-xs font-medium text-white transition-opacity disabled:opacity-40"
+                style={{ background: "var(--accent)" }}
+              >
+                {mode === "revising" ? "Revising…" : "Revise with agent"}
+              </button>
+            </div>
+          </div>
           {error && (
             <p className="mt-1.5 text-xs" style={{ color: "#ef4444" }}>{error}</p>
           )}
-          <div className="mt-2 flex items-center gap-2">
-            <button
-              onClick={handleRevise}
-              disabled={!critique.trim() || mode === "revising"}
-              className="rounded-lg px-3 py-1.5 text-xs font-medium text-white transition-opacity disabled:opacity-40"
-              style={{ background: "var(--accent)" }}
-            >
-              {mode === "revising" ? "Revising..." : "Revise with agent"}
-            </button>
-          </div>
         </div>
       )}
 
@@ -724,8 +755,8 @@ function ActionCard({
           {meta.deliberation_id && !confirmWithdraw && (
             <button
               onClick={() => setConfirmWithdraw(true)}
-              className="ml-auto rounded-lg border px-3 py-2 text-xs font-medium transition-colors hover:bg-red-50"
-              style={{ borderColor: "#fca5a5", color: "#dc2626", background: "#fff" }}
+              className="ml-auto rounded-lg px-3 py-2 text-xs font-medium text-white transition-opacity hover:opacity-90"
+              style={{ background: "#ef4444" }}
               title="Withdraw from this deliberation"
             >
               Withdraw
