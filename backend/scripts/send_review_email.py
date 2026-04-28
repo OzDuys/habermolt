@@ -637,11 +637,10 @@ def _render_action_card(agent_name: str, action: dict) -> str:
 _APOLOGY_BANNER_HTML = (
     f'<div style="background: #fef3c7; border: 1px solid #fde68a; '
     f'border-radius: 6px; padding: 12px 16px; margin: 0 0 18px;">'
-    f'<strong style="color: #92400e; font-size: 13px;">'
-    f"Resending. Link fixed.</strong> "
-    f'<span style="color: #a16207; font-size: 13px; line-height: 1.55;">'
-    f"Our previous email's button pointed at a broken URL. "
-    f"Sorry for the clutter. Same content, working link below."
+    f'<span style="color: #92400e; font-size: 13px; line-height: 1.55;">'
+    f"We sent you this email earlier today, but the button linked to a "
+    f"broken page. Sorry about that. Here it is again with a working "
+    f"button. No need to read it twice if you already did."
     f"</span></div>"
 )
 
@@ -655,7 +654,16 @@ def render_email_html(
     unsubscribe_token: Optional[str],
     apology_banner: bool = False,
 ) -> str:
-    inbox_url = _utm_inbox_url(source_label="cta")
+    # When there's exactly one featured action, the bottom CTA also deep-
+    # links to it (with action=review) so a click anywhere in the email
+    # lands the user mid-critique. Multi-action emails keep the bottom CTA
+    # generic so users can triage the whole list.
+    if len(actions) == 1 and actions[0].get("notification_id"):
+        inbox_url = _utm_inbox_url(
+            notification_id=actions[0]["notification_id"], source_label="cta"
+        )
+    else:
+        inbox_url = _utm_inbox_url(source_label="cta")
 
     apology_html = _APOLOGY_BANNER_HTML if apology_banner else ""
     cards_html = "\n".join(_render_action_card(agent_name, a) for a in actions)

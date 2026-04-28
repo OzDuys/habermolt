@@ -498,63 +498,47 @@ function ActionCard({
               </div>
             )}
 
-            {/* Opinion box: read-only by default, becomes a textarea when the
-                user clicks "edit text". Same size + border in both states so
-                the layout doesn't shift. */}
+            {/* Opinion is editable by default in review mode — the agent's
+                text appears as a textarea so the user can rewrite it directly
+                or use the critique box below. */}
             <div
-              className="relative rounded-lg border-l-4 px-3 py-2.5 text-sm leading-relaxed"
+              className="relative rounded-lg border-l-4 px-3 py-2.5"
               style={{
                 borderLeftColor: "var(--accent)",
-                background: mode === "editing" ? "var(--background)" : "var(--surface-dim)",
+                background: "var(--background)",
                 color: "var(--foreground)",
+                border: "1px solid var(--border)",
+                borderLeft: "3px solid var(--accent)",
               }}
             >
-              <div className="mb-1 flex items-center justify-between gap-2">
-                <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--muted)" }}>
-                  {currentOpinion !== meta.opinion_text
-                    ? "Revised opinion"
-                    : actionType === "update_opinion" && meta.old_opinion_text
-                      ? "New opinion"
-                      : "Opinion submitted on your behalf"}
-                </span>
-                {mode !== "editing" && (
-                  <button
-                    onClick={() => { setMode("editing"); setEditText(currentOpinion); }}
-                    className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider transition-opacity hover:opacity-70"
-                    style={{ color: "var(--accent)" }}
-                  >
-                    <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                    </svg>
-                    Edit text
-                  </button>
-                )}
+              <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--muted)" }}>
+                {currentOpinion !== meta.opinion_text
+                  ? "Revised opinion (edit directly)"
+                  : actionType === "update_opinion" && meta.old_opinion_text
+                    ? "New opinion (edit directly)"
+                    : "Opinion submitted on your behalf (edit directly)"}
               </div>
-              {mode === "editing" ? (
-                <textarea
-                  ref={(el) => {
-                    if (el) { el.style.height = "auto"; el.style.height = el.scrollHeight + "px"; }
-                  }}
-                  value={editText}
-                  onChange={(e) => {
-                    setEditText(e.target.value);
-                    e.target.style.height = "auto";
-                    e.target.style.height = e.target.scrollHeight + "px";
-                  }}
-                  className="w-full bg-transparent text-sm leading-relaxed outline-none"
-                  style={{
-                    color: "var(--foreground)",
-                    resize: "none",
-                    overflow: "hidden",
-                    minHeight: "3rem",
-                    border: "none",
-                    padding: 0,
-                  }}
-                  autoFocus
-                />
-              ) : (
-                <div>{displayOpinion}</div>
-              )}
+              <textarea
+                ref={(el) => {
+                  if (el) { el.style.height = "auto"; el.style.height = el.scrollHeight + "px"; }
+                }}
+                value={editText}
+                onChange={(e) => {
+                  setEditText(e.target.value);
+                  e.target.style.height = "auto";
+                  e.target.style.height = e.target.scrollHeight + "px";
+                }}
+                className="w-full bg-transparent text-sm leading-relaxed outline-none"
+                style={{
+                  color: "var(--foreground)",
+                  resize: "none",
+                  overflow: "hidden",
+                  minHeight: "3rem",
+                  border: "none",
+                  padding: 0,
+                }}
+                disabled={mode === "revising"}
+              />
             </div>
           </div>
         )}
