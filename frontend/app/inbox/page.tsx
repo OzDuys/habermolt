@@ -59,6 +59,7 @@ function InboxContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const focusedId = searchParams.get("notification_id");
+  const focusedAction = searchParams.get("action");
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [hasAgent, setHasAgent] = useState<boolean | null>(null);
@@ -239,6 +240,7 @@ function InboxContent() {
               onUpdate={handleUpdate}
               subdued={tab === "activity"}
               highlight={highlightedId === n.id}
+              autoCritique={focusedId === n.id && focusedAction === "review"}
             />
           ))}
         </div>
@@ -290,19 +292,25 @@ function ActionCard({
   onUpdate,
   subdued = false,
   highlight = false,
+  autoCritique = false,
 }: {
   notification: Notification;
   onUpdate: (id: string, updates: Partial<Notification>) => void;
   subdued?: boolean;
   highlight?: boolean;
+  autoCritique?: boolean;
 }) {
   const meta = n.metadata || {};
   const actionType = meta.action_type;
   const isReviewable = n.metadata?.reviewable && n.approval_status === null;
   const hasOpinion = actionType === "join_deliberation" || actionType === "update_opinion";
 
-  // Card-local state for the inline correction loop
-  const [mode, setMode] = useState<"idle" | "critiquing" | "revising" | "editing">("idle");
+  // Card-local state for the inline correction loop. If we're deep-linked
+  // from an email with `action=review`, start in critique mode so the
+  // textarea is already open.
+  const [mode, setMode] = useState<"idle" | "critiquing" | "revising" | "editing">(
+    autoCritique && isReviewable ? "critiquing" : "idle"
+  );
   const [critique, setCritique] = useState("");
   const [critiqueHistory, setCritiqueHistory] = useState<string[]>([]);
   const [currentOpinion, setCurrentOpinion] = useState(meta.opinion_text || "");

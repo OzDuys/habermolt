@@ -525,7 +525,11 @@ def _fallback_batch_draft(
 
 def _utm_inbox_url(notification_id: Optional[str] = None, source_label: str = "card") -> str:
     """Build an /inbox URL with UTM params so Vercel Analytics + Resend
-    click tracking can attribute traffic to the review email."""
+    click tracking can attribute traffic to the review email.
+
+    When notification_id is set, also add `action=review` so the inbox page
+    auto-opens the critique flow on the matching card.
+    """
     base = f"{settings.FRONTEND_URL}/inbox"
     params = [
         "utm_source=email",
@@ -535,6 +539,7 @@ def _utm_inbox_url(notification_id: Optional[str] = None, source_label: str = "c
     ]
     if notification_id:
         params.insert(0, f"notification_id={notification_id}")
+        params.insert(1, "action=review")
     return base + "?" + "&".join(params)
 
 
@@ -629,6 +634,18 @@ def _render_action_card(agent_name: str, action: dict) -> str:
     </div>"""
 
 
+_APOLOGY_BANNER_HTML = (
+    f'<div style="background: #fef3c7; border: 1px solid #fde68a; '
+    f'border-radius: 6px; padding: 12px 16px; margin: 0 0 18px;">'
+    f'<strong style="color: #92400e; font-size: 13px;">'
+    f"Resending. Link fixed.</strong> "
+    f'<span style="color: #a16207; font-size: 13px; line-height: 1.55;">'
+    f"Our previous email's button pointed at a broken URL. "
+    f"Sorry for the clutter. Same content, working link below."
+    f"</span></div>"
+)
+
+
 def render_email_html(
     *,
     agent_name: str,
@@ -636,9 +653,11 @@ def render_email_html(
     actions: list[dict],
     remaining: int,
     unsubscribe_token: Optional[str],
+    apology_banner: bool = False,
 ) -> str:
     inbox_url = _utm_inbox_url(source_label="cta")
 
+    apology_html = _APOLOGY_BANNER_HTML if apology_banner else ""
     cards_html = "\n".join(_render_action_card(agent_name, a) for a in actions)
 
     remaining_html = ""
@@ -659,6 +678,7 @@ def render_email_html(
     body = f"""
     <tr>
       <td style="padding: 24px 32px;">
+        {apology_html}
         <p style="color: #1a1a1a; line-height: 1.45; font-size: 19px; font-weight: 500;
                   margin: 0 0 22px; letter-spacing: -0.01em; text-align: center;">
           {_emphasise_hook(hook, agent_name)}
@@ -813,21 +833,47 @@ def sample_eligible_users(db: Session, n: int, exclude_user_id: Optional[str]) -
     return [{"id": r[0], "email": r[1], "name": r[2] or "there"} for r in rows]
 
 
-def build_email_for_user(*, db: Session, user: dict, args) -> Optional[dict]:
+def build_email_for_user(
+    *,
+    db: Session,
+    user: dict,
+    args,
+    force_notification_id: Optional[str] = None,
+    apology_banner: bool = False,
+    subject_prefix: str = "",
+) -> Optional[dict]:
     """Run the picker → scorer → drafter → renderer pipeline for one user.
 
     Returns a dict with keys: subject, html, top_notification_id, num_actions,
     remaining, agent_name, unsubscribe_token, featured_notification_ids.
     Returns None if the user has no eligible candidates.
+
+    force_notification_id: skip the heuristic / scorer and feature this exact
+    notification (used by --resend-today to re-send the same content).
+    apology_banner: render the "Resending — link fixed" callout at the top.
+    subject_prefix: prepend to the LLM-drafted subject (e.g. "Resending: ").
     """
     agent_name = get_agent_name(db, user["id"])
     first_name = (user["name"] or "there").split()[0]
     user_profile = get_user_profile(db, user["id"])
 
-    cooldown = getattr(args, "nudge_cooldown_days", 0) or 0
-    all_candidates = fetch_candidates(
-        db, user["id"], nudge_cooldown_days=cooldown
-    )
+    if force_notification_id:
+        forced = (
+            db.query(Notification)
+            .filter(
+                Notification.id == force_notification_id,
+                Notification.user_id == user["id"],
+            )
+            .first()
+        )
+        if not forced:
+            return None
+        all_candidates = [forced]
+    else:
+        cooldown = getattr(args, "nudge_cooldown_days", 0) or 0
+        all_candidates = fetch_candidates(
+            db, user["id"], nudge_cooldown_days=cooldown
+        )
     if not all_candidates:
         return None
 
@@ -842,10 +888,20 @@ def build_email_for_user(*, db: Session, user: dict, args) -> Optional[dict]:
 
     if scored:
         actions = scored[: args.max_actions]
-        remaining = max(0, len(all_candidates) - len(actions))
+        # In resend mode the candidate pool is the single forced notification,
+        # so "remaining" should reflect the user's *real* outstanding inbox
+        # count, not the trivially-zero leftover from a 1-item pool.
+        if force_notification_id:
+            remaining_q = fetch_candidates(db, user["id"], nudge_cooldown_days=0)
+            remaining = max(0, len(remaining_q) - len(actions))
+        else:
+            remaining = max(0, len(all_candidates) - len(actions))
     else:
         featured_notifs, remaining = heuristic_pick(all_candidates, args.max_actions)
         actions = [_notification_to_action(n_, db) for n_ in featured_notifs]
+        if force_notification_id:
+            remaining_q = fetch_candidates(db, user["id"], nudge_cooldown_days=0)
+            remaining = max(0, len(remaining_q) - len(actions))
 
     risk_signals = None
     if actions:
@@ -879,10 +935,13 @@ def build_email_for_user(*, db: Session, user: dict, args) -> Optional[dict]:
         actions=actions,
         remaining=remaining,
         unsubscribe_token=pref.unsubscribe_token,
+        apology_banner=apology_banner,
     )
 
+    final_subject = (subject_prefix + draft["subject"]) if subject_prefix else draft["subject"]
+
     return {
-        "subject": draft["subject"],
+        "subject": final_subject,
         "html": html,
         "top_notification_id": actions[0]["notification_id"] if actions else None,
         "featured_notification_ids": [a["notification_id"] for a in actions],
@@ -911,6 +970,170 @@ def render_preview_for_user(*, db: Session, user: dict, args) -> Optional[str]:
         built["remaining"], built["subject"][:80],
     )
     return path
+
+
+def fetch_users_nudged_today(db: Session) -> list[dict]:
+    """Find every user whose notifications were nudged in the last 24 hours,
+    paired with the most recently nudged notification (which is the one their
+    broken email referred to). Returns dicts with id, email, name, top_nid."""
+    rows = db.execute(
+        text(
+            """
+            WITH ranked AS (
+                SELECT
+                    nf.user_id,
+                    nf.id AS notif_id,
+                    nf.review_nudge_sent_at,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY nf.user_id
+                        ORDER BY nf.review_nudge_sent_at DESC
+                    ) AS rn
+                FROM notifications nf
+                WHERE nf.review_nudge_sent_at IS NOT NULL
+                  AND nf.review_nudge_sent_at >
+                      (NOW() AT TIME ZONE 'UTC') - INTERVAL '24 hours'
+            )
+            SELECT u.id, u.email, u.name, r.notif_id::text
+            FROM ranked r
+            JOIN "user" u ON u.id = r.user_id
+            WHERE r.rn = 1
+            ORDER BY u.id
+            """
+        )
+    ).fetchall()
+    return [
+        {"id": r[0], "email": r[1], "name": r[2] or "there", "top_nid": r[3]}
+        for r in rows
+    ]
+
+
+def resend_today(*, db: Session, args) -> None:
+    """Resend the same review email (with apology banner + 'Resending: '
+    subject prefix) to every user nudged in the last 24 hours.
+
+    Same safety rails as broadcast(): requires --confirm SEND-TO-ALL, skips
+    weekly_summary opt-outs, throttles, aborts on localhost links, writes a
+    CSV log. Pass --dry-run to render previews to /tmp without sending.
+    """
+    if not args.dry_run and args.confirm != "SEND-TO-ALL":
+        logger.error(
+            "--resend-today requires '--confirm SEND-TO-ALL' (or --dry-run)."
+        )
+        sys.exit(2)
+    if "localhost" in settings.FRONTEND_URL or "127.0.0.1" in settings.FRONTEND_URL:
+        logger.error(
+            "settings.FRONTEND_URL = %s — refusing to resend localhost URLs.",
+            settings.FRONTEND_URL,
+        )
+        sys.exit(1)
+    if not args.dry_run and not settings.RESEND_API_KEY:
+        logger.error("RESEND_API_KEY is not set; cannot send.")
+        sys.exit(1)
+    if not args.dry_run:
+        resend.api_key = settings.RESEND_API_KEY
+
+    targets = fetch_users_nudged_today(db)
+    total = len(targets)
+    if args.limit and args.limit > 0:
+        targets = targets[: args.limit]
+    logger.info(
+        "Resend-today: %d target(s) (out of %d nudged in last 24h). dry_run=%s.",
+        len(targets), total, args.dry_run,
+    )
+
+    log_path = os.path.join(
+        tempfile.gettempdir(),
+        f"habermolt_resend_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+    )
+    sent = 0
+    skipped_optout = 0
+    skipped_no_actions = 0
+    failed = 0
+    preview_paths: list[str] = []
+
+    with open(log_path, "w", newline="") as logf:
+        writer = csv.writer(logf)
+        writer.writerow([
+            "timestamp", "user_id", "email", "agent_name",
+            "top_notification_id", "subject", "status", "error",
+        ])
+
+        for i, u in enumerate(targets, start=1):
+            ts = datetime.utcnow().isoformat()
+            try:
+                built = build_email_for_user(
+                    db=db, user=u, args=args,
+                    force_notification_id=u["top_nid"],
+                    apology_banner=True,
+                    subject_prefix="Resending: ",
+                )
+                if not built:
+                    skipped_no_actions += 1
+                    writer.writerow([ts, u["id"], u["email"], "", "", "",
+                                     "skipped_no_actions", ""])
+                    logger.info("[%d/%d] SKIP no-actions %s", i, len(targets), u["email"])
+                    continue
+                if not built.get("weekly_summary_opt_in", True):
+                    skipped_optout += 1
+                    writer.writerow([ts, u["id"], u["email"], built["agent_name"],
+                                     built["top_notification_id"] or "",
+                                     built["subject"], "skipped_optout", ""])
+                    logger.info("[%d/%d] SKIP opt-out %s", i, len(targets), u["email"])
+                    continue
+                _assert_no_localhost_links(built["html"])
+
+                if args.dry_run:
+                    p_ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+                    p_path = os.path.join(
+                        tempfile.gettempdir(),
+                        f"habermolt_resend_{u['id'][:8]}_{p_ts}.html",
+                    )
+                    with open(p_path, "w") as pf:
+                        pf.write(built["html"])
+                    preview_paths.append(p_path)
+                    logger.info("[%d/%d] PREVIEW %s -> %s | %r",
+                                i, len(targets), u["email"], p_path, built["subject"][:80])
+                else:
+                    resend.Emails.send({
+                        "from": FROM_ADDRESS,
+                        "to": u["email"],
+                        "subject": built["subject"],
+                        "html": built["html"],
+                        "headers": {
+                            "List-Unsubscribe": f"<{settings.FRONTEND_URL}/unsubscribe?token={built['unsubscribe_token']}>",
+                            "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+                        },
+                    })
+                    sent += 1
+                    writer.writerow([ts, u["id"], u["email"], built["agent_name"],
+                                     built["top_notification_id"] or "",
+                                     built["subject"], "sent", ""])
+                    logger.info("[%d/%d] SENT %s | %r",
+                                i, len(targets), u["email"], built["subject"][:80])
+
+            except Exception as e:
+                failed += 1
+                err = str(e)[:300]
+                writer.writerow([ts, u["id"], u["email"], "", "", "", "failed", err])
+                logger.error("[%d/%d] FAIL %s: %s", i, len(targets), u["email"], err)
+
+            if args.throttle_seconds and i < len(targets):
+                time.sleep(args.throttle_seconds)
+
+    if args.dry_run:
+        logger.info("Resend-today DRY RUN complete. previews=%d", len(preview_paths))
+        print()
+        print("Preview paths:")
+        for p in preview_paths[:5]:
+            print(f"  {p}")
+        if len(preview_paths) > 5:
+            print(f"  ... and {len(preview_paths) - 5} more in {tempfile.gettempdir()}")
+    else:
+        logger.info(
+            "Resend-today complete. sent=%d skipped_optout=%d skipped_no_actions=%d failed=%d",
+            sent, skipped_optout, skipped_no_actions, failed,
+        )
+        logger.info("Log: %s", log_path)
 
 
 def _assert_no_localhost_links(html: str) -> None:
@@ -1079,14 +1302,23 @@ def main():
     parser.add_argument("--nudge-cooldown-days", type=int, default=7,
                         help="Skip notifications already nudged within the last N days "
                              "(default 7). Set 0 to disable cooldown.")
+    parser.add_argument("--resend-today", action="store_true",
+                        help="Resend the same review email to every user nudged in the "
+                             "last 24h, with a 'Resending — link fixed' banner and "
+                             "'Resending: ' subject prefix. For recovering from a botched "
+                             "broadcast. Combine with --dry-run to render previews first.")
     args = parser.parse_args()
 
     if args.sample > 0:
         args.dry_run = True  # safety: never actually send when sampling
     elif args.send_all:
         pass  # broadcast handled in main(); --email not required
+    elif args.resend_today:
+        pass  # resend handled in main(); --email not required
     elif not args.email:
-        parser.error("--email is required unless --sample N or --send-all is set")
+        parser.error(
+            "--email is required unless --sample N, --send-all, or --resend-today is set"
+        )
 
     # Log which DB we're hitting (host only — never the password).
     db_url = os.environ.get("DATABASE_URL", "")
@@ -1095,6 +1327,10 @@ def main():
 
     db = SessionLocal()
     try:
+        if args.resend_today:
+            resend_today(db=db, args=args)
+            return
+
         if args.send_all:
             broadcast(db=db, args=args)
             return
