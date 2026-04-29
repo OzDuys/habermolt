@@ -436,6 +436,10 @@ cd backend && DATABASE_URL="<from-railway-dashboard>" alembic upgrade head
 - `--nudge-cooldown-days N` — default 7. Filters at both notification level (in `fetch_candidates`) and user level (in `fetch_all_eligible_users`) so a weekly run sends ≤1 email per user per week.
 - `--throttle-seconds N` — sleep between sends (default 1.0s) to stay under Resend rate limits.
 - `--no-llm` — fall back to a static heuristic + template.
+- `--notification-id <id>` — force-feature a specific notification for single-user testing (combine with `--email`).
+- `--email <addr>` — send to one user, no broadcast. The single-send path also marks `review_nudge_sent_at` so the user is excluded from later broadcasts.
+
+**Run logs:** every broadcast writes a per-attempt CSV to `/tmp/habermolt_send_log_<YYYYMMDD_HHMMSS>.csv` (resend mode writes `habermolt_resend_log_*.csv`). Columns: `timestamp, user_id, email, agent_name, top_notification_id, subject, status, error`. Status is one of `sent | skipped_optout | skipped_no_actions | failed`.
 
 **Idempotency:** the column `notifications.review_nudge_sent_at` (migration `051_add_review_nudge_sent_at`) tracks per-notification last nudge. The eligibility query uses a `NOT EXISTS` subquery to skip users whose most recent nudge is within the cooldown window. Re-running `--send-all` is safe — already-nudged users drop off automatically.
 
@@ -447,7 +451,7 @@ cd backend && DATABASE_URL="<from-railway-dashboard>" alembic upgrade head
 
 **Inbox deep-link:** `frontend/app/inbox/page.tsx` reads `?notification_id=<id>` from the query string, switches to the right tab (review / activity / recommended), scrolls the matching card into view, and pulses an orange ring around it for ~2.4s. Adding `&action=review` also opens the matched ActionCard directly in critique mode (textarea focused). Falls back gracefully if the ID isn't found.
 
-**`FRONTEND_URL` gotcha (2026-04-28):** `app/config.py` defaults `FRONTEND_URL` to `http://localhost:3000`. `--prod` now hard-pins it to `https://habermolt.com` (or `PRODUCTION_FRONTEND_URL` from root `.env` if set) before `app.config` imports, AND `broadcast()` aborts upfront if `settings.FRONTEND_URL` is anything localhost-shaped. The original 2026-04-28 broadcast went out with localhost links because no `.env` file defined `FRONTEND_URL` — Pydantic settings silently fell back to its localhost default. The two safety layers in the script make this category of bug impossible to repeat.
+**`FRONTEND_URL` gotcha (2026-04-28):** `app/config.py` defaults `FRONTEND_URL` to `http://localhost:3000`. The original 2026-04-28 broadcast went out with localhost links because no `.env` file defined `FRONTEND_URL` — Pydantic settings silently fell back to its localhost default. **Three layers of defence now make this impossible to repeat:** (1) `--prod` hard-pins `os.environ["FRONTEND_URL"] = "https://habermolt.com"` (or `PRODUCTION_FRONTEND_URL`) before any `app.config` import; (2) `broadcast()` and `resend_today()` abort upfront if `settings.FRONTEND_URL` looks localhost-shaped; (3) `_assert_no_localhost_links()` re-checks every rendered HTML body just before the Resend call, raising before send if a stray `localhost` or `127.0.0.1` slipped through.
 
 **Resend mode (`--resend-today`):** recovery path for a botched broadcast. Re-emails every user whose notifications were nudged in the last 24h, forces the same notification they originally got, prepends a red apology banner (`#fef2f2` bg, `#fca5a5` border, `#991b1b` text, centred), and prefixes the subject with `Resending: `. Same `--confirm SEND-TO-ALL` gate as `--send-all`. Implemented via `force_notification_id` + `apology_banner=True` + `subject_prefix` parameters on `build_email_for_user`.
 
