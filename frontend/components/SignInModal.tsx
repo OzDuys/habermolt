@@ -19,6 +19,17 @@ export function consumeSignInIntent(): string | null {
   return intent;
 }
 
+/**
+ * Path + query string for the callbackURL passed to better-auth. Using just
+ * pathname strips deep-link params (e.g. /inbox?notification_id=...&action=review),
+ * which means a logged-out user clicking an email deep-link loses their
+ * destination after sign-in.
+ */
+function currentReturnPath(): string {
+  if (typeof window === "undefined") return "/";
+  return window.location.pathname + window.location.search;
+}
+
 type Mode = "signin" | "signup" | "forgot" | "check-email" | "verify-email";
 
 export default function SignInModal({
@@ -83,7 +94,7 @@ export default function SignInModal({
     setLoading(true);
     try {
       // Re-attempting sign-in triggers automatic resend (sendOnSignIn: true)
-      await signIn.email({ email, password, callbackURL: window.location.pathname });
+      await signIn.email({ email, password, callbackURL: currentReturnPath() });
     } catch {
       // ignore - expected to fail since email isn't verified yet
     } finally {
@@ -97,7 +108,7 @@ export default function SignInModal({
     trackSignIn();
     await signIn.social({
       provider: "google",
-      callbackURL: window.location.pathname,
+      callbackURL: currentReturnPath(),
     });
   };
 
@@ -111,7 +122,7 @@ export default function SignInModal({
       const { error } = await signIn.email({
         email,
         password,
-        callbackURL: window.location.pathname,
+        callbackURL: currentReturnPath(),
       });
       if (error) {
         if (error.message?.toLowerCase().includes("email not verified")) {
@@ -141,7 +152,7 @@ export default function SignInModal({
         name,
         email,
         password,
-        callbackURL: window.location.pathname,
+        callbackURL: currentReturnPath(),
       });
       if (error) {
         setError(error.message || "Could not create account");
