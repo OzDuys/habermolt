@@ -88,6 +88,78 @@ Rules:
     }
 
 
+def _update_profile_from_withdrawal(
+    db: Session, hosted_agent, question: str, rejected_opinion_text: str,
+) -> dict | None:
+    """Integrate a withdrawal into the profile as a *negative* example.
+
+    The human looked at what their agent said in their name and pulled
+    their participation entirely. That is a strong rejection signal, but
+    it is also ambiguous: we don't know whether they disagreed with the
+    opinion, the framing, the topic itself, or just lost interest. So
+    record the *fact* of the rejection without inferring intent.
+    """
+    from app.services.hosted_agent_service import get_llm_client
+
+    client = get_llm_client(hosted_agent)
+    client.set_trace_context(
+        trace_type="profile_update_from_withdrawal",
+        hosted_agent_id=hosted_agent.id,
+        agent_id=hosted_agent.agent_id,
+    )
+
+    current_profile = hosted_agent.user_profile or ""
+
+    new_info = (
+        f"Topic: {question}\n"
+        f"Position the human REJECTED strongly enough to withdraw "
+        f"their participation entirely:\n"
+        f"\"{rejected_opinion_text}\"\n\n"
+        f"The human did NOT want their agent associated with this "
+        f"position. They could have edited or revised it; instead they "
+        f"pulled out. Record this as a position to avoid arguing in "
+        f"future. Do NOT infer the underlying reason — multiple "
+        f"interpretations are possible (disagreement with stance, with "
+        f"framing, with the topic itself, or with proxy participation "
+        f"on this topic at all)."
+    )
+
+    prompt = f"""You are updating a user profile for an AI agent that represents this human in deliberations.
+
+## Current Profile
+{current_profile}
+
+## New Information to Integrate
+{new_info}
+
+## Instructions
+Rewrite the COMPLETE profile, integrating the new information in the appropriate place.
+
+Rules:
+1. NEVER remove existing information unless it DIRECTLY contradicts the new human-confirmed signal.
+2. The new information is a NEGATIVE example: a position the human does NOT want their agent to argue. Phrase it as an avoidance note (e.g. "Has signalled they don't want their agent arguing X on Y", or under an "Avoid" section). Do NOT phrase it as a positive belief.
+3. Do NOT speculate on why the human withdrew. Record the rejection as fact only.
+4. If a related topic exists in the profile, add the avoidance note alongside the relevant section.
+5. Keep the profile well-organized with clear markdown headers.
+6. Output ONLY the complete rewritten profile — no preamble, no explanation.
+7. Preserve the overall structure and voice of the existing profile."""
+
+    rewritten = client.sample_text(prompt=prompt, temperature=0.2, max_tokens=2000)
+    if not rewritten or not rewritten.strip():
+        return None
+
+    version_before = hosted_agent.profile_version
+    hosted_agent.user_profile = rewritten.strip()
+    hosted_agent.profile_version += 1
+    db.commit()
+
+    return {
+        "value_statement": rewritten.strip(),
+        "profile_version_before": version_before,
+        "profile_version_after": hosted_agent.profile_version,
+    }
+
+
 class MarkReadRequest(BaseModel):
     notification_ids: list[str]
 
@@ -470,6 +542,32 @@ async def withdraw_from_deliberation(
             "deliberation_question": delib.question,
         },
     )
+
+    # Learn from the withdrawal: the user looked at the agent's stated
+    # opinion and pulled their participation entirely. Record this as a
+    # negative example in the profile (only for hosted-agent users since
+    # OpenClaw users have no profile to update).
+    if hosted_agent:
+        rejected_opinion_text = (notification.metadata_ or {}).get("opinion_text") or ""
+        if rejected_opinion_text:
+            try:
+                profile_result = _update_profile_from_withdrawal(
+                    db, hosted_agent, delib.question, rejected_opinion_text,
+                )
+                if profile_result:
+                    grounding_log_service.log_event(
+                        db, user_id, "profile_updated",
+                        agent_id=agent.id,
+                        hosted_agent_id=hosted_agent.id,
+                        notification_id=notification.id,
+                        deliberation_id=delib.id,
+                        output_text=profile_result["value_statement"],
+                        profile_version_before=profile_result["profile_version_before"],
+                        profile_version_after=profile_result["profile_version_after"],
+                        metadata={"trigger": "withdrawal"},
+                    )
+            except Exception as e:
+                logger.error(f"Profile update from withdrawal failed: {e}", exc_info=True)
 
     db.commit()
 
