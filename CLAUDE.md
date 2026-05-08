@@ -455,7 +455,36 @@ cd backend && DATABASE_URL="<from-railway-dashboard>" alembic upgrade head
 
 **Resend mode (`--resend-today`):** recovery path for a botched broadcast. Re-emails every user whose notifications were nudged in the last 24h, forces the same notification they originally got, prepends a red apology banner (`#fef2f2` bg, `#fca5a5` border, `#991b1b` text, centred), and prefixes the subject with `Resending: `. Same `--confirm SEND-TO-ALL` gate as `--send-all`. Implemented via `force_notification_id` + `apology_banner=True` + `subject_prefix` parameters on `build_email_for_user`.
 
-**Running weekly:** wire a Railway cron (or any scheduler) to `python scripts/send_review_email.py --send-all --prod --confirm SEND-TO-ALL`. The cooldown handles idempotency.
+**Weekly cron on Railway (live since 2026-05-08):** the `review-email-cron` service in project `charismatic-beauty` runs the script every **Tuesday at 14:00 UTC** (`0 14 * * 2`). First fire was 2026-05-12. The 7-day `review_nudge_sent_at` cooldown handles idempotency, so re-runs are safe.
+
+Time choice: 14:00 UTC = 10:00 ET (US ~48% of users) + 16:00 SAST (SA ~33%, the next-largest segment). Audience split inferred from per-user peak notification hour-of-day on prod (one-shot ad-hoc SQL — re-run if you suspect the distribution has shifted). Re-evaluate the time slot if open/click rates flag.
+
+| Setting | Value |
+|---|---|
+| Project ID | `8459b50e-77c8-4f1f-a433-8093711aaf20` (charismatic-beauty) |
+| Service ID | `25b660bf-97d7-4de8-8b0e-75ce145f1ad0` (review-email-cron) |
+| Environment ID | `eb8a9999-5fea-4d3e-8a19-4d049f66f890` (production) |
+| Start command | `python scripts/send_review_email.py --send-all --prod --confirm SEND-TO-ALL` |
+| Builder | DOCKERFILE (inherited from project-root `railway.toml`) |
+| Root directory | **empty** (must not be `/` or `backend` — see gotcha below) |
+| Env vars | All wired as `${{habermolt.X}}` references (PRODUCTION_DATABASE_URL, DATABASE_URL, PRODUCTION_FRONTEND_URL, RESEND_API_KEY, LLM_API_KEY, LLM_BASE_URL, API_KEY_SALT, INTERNAL_API_SECRET, HOSTED_AGENT_ENCRYPTION_KEY, CORS_ORIGINS) — updating habermolt's vars auto-propagates |
+
+**Where to look after each Tuesday run:**
+- **Railway dashboard** → review-email-cron → Deployments → latest run shows stdout + the per-attempt CSV path (`/tmp/habermolt_send_log_*.csv`).
+- **Resend dashboard** for per-email opens/clicks (auto-tracked via Resend's link wrapper).
+- **Vercel Analytics** for `/inbox?utm_source=email&utm_medium=review_nudge` referral traffic.
+
+**Pause / change schedule / cancel:** Railway dashboard → review-email-cron → Settings → Deploy → Cron Schedule. Clear it to disable, or change the cron expression. The service can also be deleted; secrets stay safe because they're references back to habermolt.
+
+**Recovery path if a run goes wrong:** trigger `--resend-today --send-all --prod --confirm SEND-TO-ALL` manually (locally with `RAILWAY_API_TOKEN` from `.env.deployment` linked to the project, or via a one-off Railway shell). Sends an apology banner + `Resending: ` subject prefix to anyone nudged in the last 24h.
+
+**Railway ops gotchas (from 2026-05-08 setup session — keep these or you'll burn an hour rediscovering them):**
+- The API auth env var is `RAILWAY_API_TOKEN`, NOT `RAILWAY_TOKEN`. The token value lives in the repo-root `.env.deployment` as `RAILWAY_API_KEY`. Both the `railway` CLI and direct GraphQL calls (`https://backboard.railway.com/graphql/v2`) accept it.
+- To list projects via API, query `me { workspaces { id } }` first, then `projects(workspaceId: ...)`. The naive `me { projects }` returns empty.
+- The repo-root `railway.toml` is **project-wide** — every service inherits its `[build] builder = "DOCKERFILE"` setting. The Dockerfile copies `backend/` into `/app`, which means the build context must be the repo root. Setting a service's `rootDirectory` to anything other than empty breaks the build.
+- `rootDirectory` quirk: empty string and `"/"` are NOT equivalent. The deploy patch resolves `"/"` to `"backend"` somehow. Leave the field genuinely empty (null in API, blank placeholder in dashboard).
+- `serviceInstanceRedeploy` reuses the last build's patch. If all builds failed, redeploy fails too. To force a fresh patch use `serviceInstanceDeployV2` with an explicit `commitSha`, or click "Deploy" in the dashboard which creates a new patch from current config.
+- Local script runs require **Python 3.11–3.13**. Python 3.14 cannot build pinned `psycopg2-binary==2.9.9` or `pydantic-core` (via `pydantic==2.5.3`) from source — no wheels published yet. The repo `.venv` is on 3.12.
 
 ## Deliberation Categories
 
