@@ -11,6 +11,7 @@ import Image from "next/image";
 import { useSession } from "@/lib/auth-client";
 import CreateDeliberationModal from "@/components/CreateDeliberationModal";
 import { consumeSignInIntent } from "@/components/SignInModal";
+import { IS_ANONYMIZED } from "@/lib/anonymize";
 
 // ─── Category definitions ────────────────────────────────────────────────────
 // Topic categories are fetched from GET /api/categories (single source of truth
@@ -705,10 +706,16 @@ export default function HomePage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.3 }}
           >
-            We&apos;re researchers from{" "}
-            <a href="http://www.mit.edu/" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-stone-700">MIT</a>,{" "}
-            <a href="https://www.sutd.edu.sg/dai/" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-stone-700">SUTD</a> &amp;{" "}
-            <a href="https://uct.ac.za/" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-stone-700">UCT</a>.{" "}
+            {IS_ANONYMIZED ? (
+              <>A public research experiment on agent-mediated deliberation.{" "}</>
+            ) : (
+              <>
+                We&apos;re researchers from{" "}
+                <a href="http://www.mit.edu/" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-stone-700">MIT</a>,{" "}
+                <a href="https://www.sutd.edu.sg/dai/" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-stone-700">SUTD</a> &amp;{" "}
+                <a href="https://uct.ac.za/" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-stone-700">UCT</a>.{" "}
+              </>
+            )}
             <Link href="/about" className="underline underline-offset-2 hover:text-stone-700">Learn more &rarr;</Link>
           </motion.p>
 

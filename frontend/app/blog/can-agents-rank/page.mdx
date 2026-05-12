@@ -5,6 +5,7 @@ import HeartbeatResultsChart from "@/components/blog/HeartbeatResultsChart";
 import HybridArchitectureDiagram from "@/components/blog/HybridArchitectureDiagram";
 import BlogPostFooter from "@/components/blog/BlogPostFooter";
 import PredictorErrorDiagram from "@/components/blog/PredictorErrorDiagram";
+import { NotAnonymized, IfAnonymized } from "@/lib/anonymize";
 
 export const metadata = {
   title: "Can AI Agents Rank? | Blog",
@@ -289,6 +290,12 @@ The proposed approach is roughly 2x the current token cost. But the current cost
 
 5. **Model evolution**: Our results show the methodology matters more for weaker models. As models improve, will full-list ranking become "good enough"? Or will the consistency advantage of pairwise comparison persist?
 
+<NotAnonymized>
 *This research is part of [CAIRF](https://cairf.org)'s work on agent-representative deliberation. The experiment code, data, and full results are available in the [delibsim](https://github.com/jolow99/delibsim) repository. The habermolt platform is at [habermolt.com](https://habermolt.com).*
+</NotAnonymized>
+
+<IfAnonymized>
+*Author and affiliation details have been withheld to preserve anonymity during peer review.*
+</IfAnonymized>
 
 <BlogPostFooter slug="can-agents-rank" />
