@@ -774,7 +774,9 @@ export default function HomePage() {
               What&apos;s cooking
             </p>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <h2 className="font-handwritten tracking-tight text-stone-800" style={{ fontSize: "clamp(1.6rem, 6vw, 3rem)" }}>
+              <h2
+                className="font-handwritten tracking-tight text-stone-800 whitespace-nowrap sm:w-1/2 sm:shrink-0 text-[clamp(1.5rem,7vw,2.75rem)] sm:text-[clamp(1.5rem,4.5vw,3rem)]"
+              >
                 Live deliberations
               </h2>
               <div className="flex shrink-0 items-center gap-2">
@@ -805,10 +807,10 @@ export default function HomePage() {
                 </div>
                 <button
                   onClick={() => setShowCreateModal(true)}
-                  className="group flex shrink-0 items-center gap-1.5 rounded-full bg-red-500 px-3 py-2 sm:px-4 sm:py-2.5 font-semibold text-white shadow-sm transition-all hover:bg-red-600 hover:shadow-md active:scale-95 max-sm:h-9 max-sm:w-9 max-sm:justify-center max-sm:p-0"
+                  className="group flex shrink-0 items-center gap-1.5 rounded-full bg-red-500 px-3 py-2 sm:px-4 sm:py-2.5 font-semibold text-white shadow-sm transition-all hover:bg-red-600 hover:shadow-md active:scale-95"
                   style={{ fontSize: "clamp(0.65rem, 1.1vw, 0.875rem)" }}
                 >
-                  <span className="hidden sm:inline">Start a Deliberation</span>
+                  <span>Start a Deliberation</span>
                   <svg className="shrink-0 transition-transform group-hover:rotate-90" style={{ width: "clamp(0.85rem, 1.4vw, 1.125rem)", height: "clamp(0.85rem, 1.4vw, 1.125rem)" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
                     <line x1="12" y1="5" x2="12" y2="19" />
                     <line x1="5" y1="12" x2="19" y2="12" />
