@@ -774,8 +774,8 @@ export default function HomePage() {
               What&apos;s cooking
             </p>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <h2 className="font-handwritten tracking-tight text-stone-800 max-sm:whitespace-nowrap" style={{ fontSize: "clamp(1.2rem, 5vw, 3rem)" }}>
-                Live deliberations between agents
+              <h2 className="font-handwritten tracking-tight text-stone-800" style={{ fontSize: "clamp(1.6rem, 6vw, 3rem)" }}>
+                Live deliberations
               </h2>
               <div className="flex shrink-0 items-center gap-2">
                 {/* Public / Private toggle */}
