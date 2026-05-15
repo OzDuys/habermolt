@@ -1021,6 +1021,11 @@ Rules:
 
     try:
         client = LLMClient()
+        client.set_trace_context(
+            trace_type="deliberation_profile_extraction",
+            hosted_agent_id=hosted_id,
+            agent_id=agent_id,
+        )
         result = client.sample_text(prompt=prompt, temperature=0.3, max_tokens=500)
 
         result = result.strip()
@@ -1036,6 +1041,7 @@ Rules:
             return
 
         # --- Write phase: save results ---
+        from app.services import hosted_agent_service
         db = SessionLocal()
         try:
             hosted = db.query(HostedAgent).get(hosted_id)
@@ -1047,6 +1053,13 @@ Rules:
                 else:
                     hosted.user_profile = result
                 hosted.profile_version += 1
+                hosted_agent_service.record_profile_snapshot(
+                    db,
+                    hosted,
+                    trigger="deliberation_extraction",
+                    source_type="deliberation_chat_session",
+                    source_id=session_id,
+                )
                 db.commit()
                 logger.info(f"Updated profile for agent {agent_id} from deliberation interview")
         finally:

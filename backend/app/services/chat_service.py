@@ -231,7 +231,7 @@ def add_user_message(
         llm_messages.append(assistant_msg)
 
         for tc in result.tool_calls:
-            tool_result = execute_tool(db, hosted_agent, tc["name"], tc["arguments"])
+            tool_result = execute_tool(db, hosted_agent, tc["name"], tc["arguments"], session_id=session.id)
             llm_messages.append({
                 "role": "tool",
                 "tool_call_id": tc["id"],
@@ -344,7 +344,7 @@ def stream_user_message(
                     "reasoning": text_this_turn,
                 })
 
-                result = execute_tool(db, hosted_agent, tc["name"], tc["arguments"])
+                result = execute_tool(db, hosted_agent, tc["name"], tc["arguments"], session_id=session.id)
 
                 yield ("action_done", {
                     "action": tc["name"],

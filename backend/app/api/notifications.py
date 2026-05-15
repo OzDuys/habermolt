@@ -19,6 +19,7 @@ router = APIRouter(prefix="/notifications", tags=["notifications"])
 
 def _update_profile_from_approval(
     db: Session, hosted_agent, question: str, opinion_text: str, critiques: list[str] = None,
+    notification_id=None,
 ) -> dict | None:
     """Integrate a confirmed position into the profile by rewriting the entire profile.
 
@@ -70,9 +71,18 @@ Rules:
     if not rewritten or not rewritten.strip():
         return None
 
+    from app.services import hosted_agent_service
+
     version_before = hosted_agent.profile_version
     hosted_agent.user_profile = rewritten.strip()
     hosted_agent.profile_version += 1
+    hosted_agent_service.record_profile_snapshot(
+        db,
+        hosted_agent,
+        trigger="approval_rewrite",
+        source_type="notification" if notification_id else None,
+        source_id=notification_id,
+    )
     db.commit()
 
     return {
@@ -81,15 +91,10 @@ Rules:
         "profile_version_after": hosted_agent.profile_version,
     }
 
-    return {
-        "value_statement": value_statement.strip(),
-        "profile_version_before": version_before,
-        "profile_version_after": hosted_agent.profile_version,
-    }
-
 
 def _update_profile_from_withdrawal(
     db: Session, hosted_agent, question: str, rejected_opinion_text: str,
+    notification_id=None,
 ) -> dict | None:
     """Integrate a withdrawal into the profile as a *negative* example.
 
@@ -148,9 +153,18 @@ Rules:
     if not rewritten or not rewritten.strip():
         return None
 
+    from app.services import hosted_agent_service
+
     version_before = hosted_agent.profile_version
     hosted_agent.user_profile = rewritten.strip()
     hosted_agent.profile_version += 1
+    hosted_agent_service.record_profile_snapshot(
+        db,
+        hosted_agent,
+        trigger="withdrawal_rewrite",
+        source_type="notification" if notification_id else None,
+        source_id=notification_id,
+    )
     db.commit()
 
     return {
@@ -291,7 +305,9 @@ async def approve_notification(notification_id: str, req: Request, db: Session =
             from app.models.hosted_agent import HostedAgent
             hosted_agent = db.query(HostedAgent).filter(HostedAgent.user_id == user_id).first()
             if hosted_agent:
-                profile_result = _update_profile_from_approval(db, hosted_agent, question, opinion_text)
+                profile_result = _update_profile_from_approval(
+                    db, hosted_agent, question, opinion_text, notification_id=notification.id,
+                )
                 if profile_result:
                     grounding_log_service.log_event(
                         db, user_id, "profile_updated",
@@ -553,6 +569,7 @@ async def withdraw_from_deliberation(
             try:
                 profile_result = _update_profile_from_withdrawal(
                     db, hosted_agent, delib.question, rejected_opinion_text,
+                    notification_id=notification.id,
                 )
                 if profile_result:
                     grounding_log_service.log_event(
@@ -656,6 +673,7 @@ async def save_revised_opinion(
             profile_result = _update_profile_from_approval(
                 db, hosted_agent, notification.title, body.opinion_text,
                 critiques=body.critiques if body.critiques else None,
+                notification_id=notification.id,
             )
             if profile_result:
                 grounding_log_service.log_event(

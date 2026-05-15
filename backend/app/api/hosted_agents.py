@@ -96,6 +96,16 @@ class DownloadSessionsRequest(BaseModel):
     session_ids: list[str]
 
 
+class ProfileSnapshotResponse(BaseModel):
+    id: str
+    profile_version: int
+    trigger: str
+    source_type: Optional[str]
+    source_id: Optional[str]
+    profile_markdown: str
+    created_at: str
+
+
 
 
 def _require_cron_secret(req: Request) -> None:
@@ -534,6 +544,11 @@ async def update_profile(body: ProfileUpdateRequest, req: Request, background_ta
     ha.user_profile = body.profile_markdown
     ha.profile_version += 1
     ha.onboarded = True
+    hosted_agent_service.record_profile_snapshot(
+        db,
+        ha,
+        trigger="agent_creation" if not was_onboarded else "manual_edit",
+    )
     db.commit()
 
     # Send agent-ready email when onboarding completes (first time only)
@@ -544,6 +559,36 @@ async def update_profile(body: ProfileUpdateRequest, req: Request, background_ta
         "profile_markdown": ha.user_profile,
         "profile_version": ha.profile_version,
     }
+
+
+@router.get("/me/profile/history")
+async def get_profile_history(req: Request, db: Session = Depends(get_db)):
+    user_id = require_user_id(req)
+    ha = hosted_agent_service.get_hosted_agent_by_user(db, user_id)
+    if not ha:
+        raise HTTPException(status_code=404, detail="No hosted agent found")
+
+    from app.models.profile_snapshot import ProfileSnapshot
+
+    snapshots = (
+        db.query(ProfileSnapshot)
+        .filter(ProfileSnapshot.hosted_agent_id == ha.id)
+        .order_by(ProfileSnapshot.created_at.desc())
+        .limit(100)
+        .all()
+    )
+    return [
+        ProfileSnapshotResponse(
+            id=str(s.id),
+            profile_version=s.profile_version,
+            trigger=s.trigger,
+            source_type=s.source_type,
+            source_id=str(s.source_id) if s.source_id else None,
+            profile_markdown=s.profile_markdown,
+            created_at=s.created_at.isoformat(),
+        )
+        for s in snapshots
+    ]
 
 
 # --- Chat history ---

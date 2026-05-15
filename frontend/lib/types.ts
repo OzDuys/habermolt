@@ -338,6 +338,30 @@ export interface HostedAgent {
   created_at: string;
 }
 
+export interface ProfileSnapshot {
+  id: string;
+  profile_version: number;
+  trigger:
+    | "manual_edit"
+    | "agent_creation"
+    | "chat_extraction"
+    | "deliberation_extraction"
+    | "approval_rewrite"
+    | "withdrawal_rewrite"
+    | "profile_rebuild"
+    | "profile_import";
+  source_type:
+    | "chat_session"
+    | "deliberation_chat_session"
+    | "notification"
+    | "llm_trace"
+    | "backfill_unrecovered"
+    | null;
+  source_id: string | null;
+  profile_markdown: string;
+  created_at: string;
+}
+
 export interface SessionSummary {
   id: string;
   topic: string | null;

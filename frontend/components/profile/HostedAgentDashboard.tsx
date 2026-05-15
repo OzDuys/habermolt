@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import TokenUsageBar from "@/components/TokenUsageBar";
 import type { HostedAgent, SessionSummary } from "@/lib/types";
 import { timeAgo } from "@/lib/utils";
+import ProfileHistoryModal from "@/components/profile/ProfileHistoryModal";
 
 const CONFIG_MODELS = [
   "google/gemini-3-flash-preview",
@@ -54,6 +55,7 @@ export default function HostedAgentDashboard({ onDeleted }: { onDeleted?: () => 
 
   // Modal state
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [showDangerZone, setShowDangerZone] = useState(false);
 
@@ -571,7 +573,15 @@ export default function HostedAgentDashboard({ onDeleted }: { onDeleted?: () => 
         onAcceptProposed={handleAcceptProposed}
         onDiscardProposed={handleDiscardProposed}
         setProposedProfile={setProposedProfile}
+        onViewHistory={() => setShowHistoryModal(true)}
         onClose={() => { setShowProfileModal(false); setEditingProfile(false); }}
+      />
+
+      {/* Profile History Modal */}
+      <ProfileHistoryModal
+        open={showHistoryModal}
+        onClose={() => setShowHistoryModal(false)}
+        currentProfile={profileMarkdown}
       />
 
       {/* Export Data Modal */}
@@ -687,6 +697,7 @@ function ProfileViewModal({
   onAcceptProposed,
   onDiscardProposed,
   setProposedProfile,
+  onViewHistory,
   onClose,
 }: {
   open: boolean;
@@ -704,6 +715,7 @@ function ProfileViewModal({
   onAcceptProposed: () => void;
   onDiscardProposed: () => void;
   setProposedProfile: (p: string) => void;
+  onViewHistory: () => void;
   onClose: () => void;
 }) {
   useEffect(() => {
@@ -836,12 +848,20 @@ function ProfileViewModal({
                   </button>
                 </>
               ) : (
-                <button
-                  onClick={onStartEdit}
-                  className="rounded-lg border border-stone-200 px-4 py-2 text-sm font-medium text-stone-600 transition-colors hover:bg-stone-50"
-                >
-                  Edit
-                </button>
+                <>
+                  <button
+                    onClick={onViewHistory}
+                    className="rounded-lg border border-stone-200 px-4 py-2 text-sm font-medium text-stone-600 transition-colors hover:bg-stone-50"
+                  >
+                    View history
+                  </button>
+                  <button
+                    onClick={onStartEdit}
+                    className="rounded-lg border border-stone-200 px-4 py-2 text-sm font-medium text-stone-600 transition-colors hover:bg-stone-50"
+                  >
+                    Edit
+                  </button>
+                </>
               )}
             </div>
           </motion.div>

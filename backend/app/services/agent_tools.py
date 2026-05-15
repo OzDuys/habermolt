@@ -249,8 +249,13 @@ def execute_tool(
     hosted_agent: HostedAgent,
     tool_name: str,
     arguments: dict,
+    session_id=None,
 ) -> dict:
-    """Execute a tool and return structured result."""
+    """Execute a tool and return structured result.
+
+    session_id: optional chat session ID used as source_id for profile snapshots
+    so we can link snapshots back to the conversation that produced them.
+    """
     try:
         if tool_name == "get_agent_status":
             return _exec_get_agent_status(db, hosted_agent)
@@ -261,7 +266,7 @@ def execute_tool(
         elif tool_name == "propose_statement":
             return _exec_propose_statement(db, hosted_agent, arguments["deliberation_id"])
         elif tool_name == "update_profile":
-            return _exec_update_profile(db, hosted_agent, arguments["profile_text"])
+            return _exec_update_profile(db, hosted_agent, arguments["profile_text"], session_id=session_id)
         elif tool_name == "create_deliberation":
             return _exec_create_deliberation(
                 db, hosted_agent, arguments["question"],
@@ -360,8 +365,9 @@ def _exec_propose_statement(db: Session, hosted_agent: HostedAgent, deliberation
     return {"error": "Failed to propose statement (may have hit limit)."}
 
 
-def _exec_update_profile(db: Session, hosted_agent: HostedAgent, profile_text: str) -> dict:
+def _exec_update_profile(db: Session, hosted_agent: HostedAgent, profile_text: str, session_id=None) -> dict:
     from datetime import datetime
+    from app.services import hosted_agent_service
 
     if hosted_agent.user_profile:
         hosted_agent.user_profile = hosted_agent.user_profile.rstrip() + "\n\n" + profile_text
@@ -369,6 +375,13 @@ def _exec_update_profile(db: Session, hosted_agent: HostedAgent, profile_text: s
         hosted_agent.user_profile = profile_text
     hosted_agent.profile_version += 1
     hosted_agent.last_chatted_at = datetime.utcnow()
+    hosted_agent_service.record_profile_snapshot(
+        db,
+        hosted_agent,
+        trigger="chat_extraction",
+        source_type="chat_session" if session_id else None,
+        source_id=session_id,
+    )
     db.commit()
 
     return {

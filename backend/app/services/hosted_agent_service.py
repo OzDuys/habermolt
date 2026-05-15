@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.models import Agent
 from app.models.hosted_agent import HostedAgent
+from app.models.profile_snapshot import ProfileSnapshot
 from app.services.auth_service import generate_api_key, hash_api_key
 from app.services.llm_client import LLMClient
 
@@ -246,3 +247,27 @@ def _maybe_reset_billing_period(hosted_agent: HostedAgent) -> None:
         if hosted_agent.paused_reason == "token_limit":
             hosted_agent.is_active = True
             hosted_agent.paused_reason = None
+
+
+def record_profile_snapshot(
+    db: Session,
+    hosted_agent: HostedAgent,
+    trigger: str,
+    source_type: Optional[str] = None,
+    source_id=None,
+) -> ProfileSnapshot:
+    """Record a snapshot of the current profile state.
+
+    Call AFTER setting hosted_agent.user_profile and bumping profile_version,
+    and BEFORE db.commit() so the snapshot lands in the same transaction.
+    """
+    snapshot = ProfileSnapshot(
+        hosted_agent_id=hosted_agent.id,
+        profile_markdown=hosted_agent.user_profile or "",
+        profile_version=hosted_agent.profile_version,
+        trigger=trigger,
+        source_type=source_type,
+        source_id=source_id,
+    )
+    db.add(snapshot)
+    return snapshot
