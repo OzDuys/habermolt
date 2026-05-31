@@ -357,6 +357,19 @@ Three settings in `backend/app/config.py` control which LLM is used for what:
 
 **Cost note:** `HABERMAS_LLM_MODEL` is the biggest cost lever. Ranking predictions run for every existing agent every time a new statement is added — high volume, low complexity. A cheap model (gemini-flash, gpt-5-mini, deepseek) is appropriate here. `HOSTED_AGENT_DEFAULT_MODEL` is user-facing and worth spending slightly more on.
 
+**Prod uses the `config.py` defaults for `HABERMAS_LLM_MODEL` / `HABERMAS_LLM_MODELS`** — neither is set as a Railway env var (verified May 2026). So editing the defaults in `config.py` + deploying is the way to change prod models. (Local `backend/.env` *does* override `HABERMAS_LLM_MODELS` — ignore that when reasoning about prod.)
+
+### LLM failure modes — debugging checklist (learned the hard way, May 2026)
+
+When a feature that depends on an LLM call misbehaves, **always check `llm_traces` for the real error** — downstream tables can mask it. The `moderation_logs` "Empty moderation response" reason hid a `403 — Key limit exceeded` from the OpenRouter key; the true cause was only in `llm_traces.error_message`. Query: `SELECT trace_type, status, error_message FROM llm_traces WHERE status='error' ORDER BY created_at DESC`.
+
+Three distinct failure modes, all of which surfaced together:
+1. **OpenRouter key monthly limit exceeded → 403 on every call.** Platform-wide outage (heartbeats, embeddings, moderation all 403). Fix is ops-only: raise the key's monthly limit / top up at openrouter.ai. No code change helps until then.
+2. **Deprecated model → 404.** `x-ai/grok-4.1-fast` was deprecated (→ `grok-4.3`). A 404 model in the `HABERMAS_LLM_MODELS` rotation silently drops statement-generation candidates. When OpenRouter returns "X is deprecated, switch to Y", update both `config.py` (`HABERMAS_LLM_MODELS`) and `MODEL_PRICING_FALLBACK` in `llm_client.py`.
+3. **Reasoning tokens starve a small `max_tokens` → empty completion.** On reasoning-capable models (e.g. `gemini-3-flash-preview`) the hidden reasoning tokens count against `max_tokens`. A tiny budget sized for the visible answer (PASS/FAIL, a category slug, one digit) can be fully consumed by reasoning, yielding `""`. **Fix:** pass `disable_reasoning=True` to `LLMClient.sample_text()` (sends `extra_body={"reasoning":{"enabled":False}}`, OpenRouter-unified, ignored by non-reasoning models) for short deterministic classification/extraction calls, AND keep a sane floor (≥256, not 8/32/64). Bumping `max_tokens` alone is only a probabilistic band-aid.
+
+**Moderation fails OPEN** (`content_moderation_service.py`, since May 2026): on LLM error / empty / unexpected response it now *allows* the question through and logs a `BYPASS (...)` row, rather than rejecting. An infra failure must never become a user-facing "doesn't meet community guidelines" wall. Real `FAIL: <reason>` verdicts still reject. Matches the platform's documented light-touch stance.
+
 ## Developer Patterns
 
 ### Adding a New Endpoint
