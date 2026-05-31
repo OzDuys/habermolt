@@ -53,7 +53,7 @@ class Settings(BaseSettings):
     # Habermas Machine Configuration
     HABERMAS_NUM_CANDIDATES: int = 2
     HABERMAS_LLM_MODEL: str = "google/gemini-3-flash-preview" # This is the default used if no model name is provided. Sonnet 4.6 was getting to expensive for this. Its actually quite an easy task.
-    HABERMAS_LLM_MODELS: str = "x-ai/grok-4.1-fast, google/gemini-3-flash-preview, openai/gpt-5-mini, minimax/minimax-m2.5, deepseek/deepseek-v3.2"  # Comma-separated list of models; cycles if fewer than NUM_CANDIDATES; z-ai/glm-5 was a bit too slow
+    HABERMAS_LLM_MODELS: str = "x-ai/grok-4.3, google/gemini-3-flash-preview, openai/gpt-5-mini, minimax/minimax-m2.5, deepseek/deepseek-v3.2"  # Comma-separated list of models; cycles if fewer than NUM_CANDIDATES; z-ai/glm-5 was a bit too slow; grok-4.1-fast deprecated → 4.3 (May 2026)
     HABERMAS_LLM_TEMPERATURE: float = 0.8
     RANKING_PREDICTION_MODEL: str = "google/gemini-3.1-flash-lite-preview"  # Cheapest model — output is a single integer
     RANKING_PREDICTION_BATCH_SIZE: int = 10  # Max agents per batched prediction call

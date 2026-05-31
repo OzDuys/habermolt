@@ -105,17 +105,21 @@ def check_community_guidelines(
             prompt=_USER_TEMPLATE.format(question=question),
             system_prompt=_SYSTEM_PROMPT,
             temperature=0.0,
-            max_tokens=64,
+            max_tokens=256,
+            disable_reasoning=True,
         ).strip()
     except Exception as exc:
-        logger.warning(f"[moderation] LLM call failed, failing closed: {exc}")
-        _log_moderation(db, question, False, "Moderation unavailable", source)
-        return False, "Content moderation is temporarily unavailable. Please try again."
+        # Fail OPEN: an infrastructure failure (provider outage, key limit, rate
+        # limit) must not block legitimate users from creating deliberations. We
+        # allow the question through and log it so it can be reviewed retroactively.
+        logger.warning(f"[moderation] LLM call failed, failing open (allowing): {exc}")
+        _log_moderation(db, question, True, f"BYPASS (moderation unavailable): {exc}", source)
+        return True, ""
 
     if not raw:
-        logger.warning("[moderation] Empty response from LLM, failing closed")
-        _log_moderation(db, question, False, "Empty moderation response", source)
-        return False, "Content moderation is temporarily unavailable. Please try again."
+        logger.warning("[moderation] Empty response from LLM, failing open (allowing)")
+        _log_moderation(db, question, True, "BYPASS (empty moderation response)", source)
+        return True, ""
 
     upper = raw.upper()
     if upper.startswith("PASS"):
@@ -130,7 +134,8 @@ def check_community_guidelines(
         _log_moderation(db, question, False, reason, source)
         return False, reason
 
-    # Unexpected response format — fail closed
-    logger.warning(f"[moderation] Unexpected LLM response: {raw!r}, failing closed")
-    _log_moderation(db, question, False, "Unexpected moderation response", source)
-    return False, "Content moderation is temporarily unavailable. Please try again."
+    # Unexpected response format — fail OPEN (treat as an infra/model glitch, not a
+    # real violation) and log for review.
+    logger.warning(f"[moderation] Unexpected LLM response: {raw!r}, failing open (allowing)")
+    _log_moderation(db, question, True, f"BYPASS (unexpected response: {raw[:60]!r})", source)
+    return True, ""

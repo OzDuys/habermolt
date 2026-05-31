@@ -1306,7 +1306,8 @@ def _assess_confidence(hosted_agent: HostedAgent, question: str) -> dict:
         prompt=f"The deliberation topic is: \"{question}\"",
         system_prompt=CONFIDENCE_SYSTEM_PROMPT.format(profile=profile),
         temperature=0.1,
-        max_tokens=8,
+        max_tokens=32,
+        disable_reasoning=True,
     )
     try:
         result["confidence"] = max(1, min(5, int(confidence_response.strip()[0])))
@@ -1355,7 +1356,8 @@ def _do_create_deliberation(db: Session, hosted_agent: HostedAgent) -> Optional[
     categories_response = client.sample_text(
         prompt=CREATE_DELIBERATION_CATEGORIES_PROMPT.format(question=question),
         temperature=0.1,
-        max_tokens=50,
+        max_tokens=256,
+        disable_reasoning=True,
     )
     categories = [c.strip().lower() for c in (categories_response or "").split(",") if c.strip()]
     from app.categories import VALID_CATEGORIES as valid_cats

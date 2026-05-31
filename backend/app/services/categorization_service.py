@@ -46,7 +46,8 @@ def classify_question(question: str) -> List[str]:
         prompt=_USER_TEMPLATE.format(question=question),
         system_prompt=_SYSTEM_PROMPT,
         temperature=0.0,
-        max_tokens=32,
+        max_tokens=256,
+        disable_reasoning=True,
     ).strip().lower()
 
     # Parse comma-separated tokens, strip punctuation, filter to valid slugs

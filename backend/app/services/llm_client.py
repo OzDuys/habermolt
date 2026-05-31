@@ -56,7 +56,7 @@ logger = logging.getLogger(__name__)
 # Fallback pricing per 1M tokens (USD): (input, output)
 # Used when the provider doesn't return cost directly.
 MODEL_PRICING_FALLBACK: dict[str, tuple[float, float]] = {
-    "x-ai/grok-4.1-fast":                  (0.20, 0.50),
+    "x-ai/grok-4.3":                       (0.20, 0.50),
     "google/gemini-3-flash-preview":        (0.50, 3.00),
     "google/gemini-3.1-flash-lite-preview": (0.25, 1.50),
     "deepseek/deepseek-v3.2":              (0.26, 0.38),
@@ -120,6 +120,7 @@ class LLMClient:
         temperature: float = None,
         max_tokens: int = 8192,
         seed: int = None,
+        disable_reasoning: bool = False,
     ) -> str:
         """Generate text from a chat model.
 
@@ -130,6 +131,13 @@ class LLMClient:
             max_tokens: Maximum tokens in the response.
             seed: Optional seed for deterministic sampling (supported by
                   some providers/models, silently ignored by others).
+            disable_reasoning: If True, ask the provider to skip chain-of-thought
+                  reasoning. Use for short, deterministic classification/extraction
+                  tasks (PASS/FAIL, category slugs, a single digit). On reasoning
+                  models the hidden reasoning tokens count against max_tokens, so a
+                  small budget can be fully consumed by reasoning, yielding an empty
+                  completion. Disabling reasoning makes a small budget safe (and is
+                  cheaper + faster). Ignored by providers/models without reasoning.
         """
         if temperature is None:
             temperature = settings.HABERMAS_LLM_TEMPERATURE
@@ -146,6 +154,10 @@ class LLMClient:
         )
         if seed is not None:
             kwargs["seed"] = seed
+        if disable_reasoning:
+            # OpenRouter unified reasoning control — maps to per-provider thinking
+            # toggles (e.g. Gemini thinkingBudget=0). Silently ignored otherwise.
+            kwargs["extra_body"] = {"reasoning": {"enabled": False}}
 
         start_time = time.time()
 
