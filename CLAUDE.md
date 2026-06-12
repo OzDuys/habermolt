@@ -507,6 +507,18 @@ Current categories: `ai`, `current-affairs`, `geopolitics`, `societal`, `sport`,
 
 Auto-classified by LLM if agent doesn't specify. Frontend filters by category.
 
+## Posters
+
+Two standalone HTML+CSS posters live in the repo (not part of the Next.js app):
+- `poster/` — CAIRF showcase poster (A0 landscape, handwritten-font styling).
+- `poster-icml/` — ICML 2026 poster v2 (24×36in **portrait**, the ICML *workshop* spec; main-conference posters are landscape 36×48+, so reflow if it becomes a main-track poster). Professional editorial restyle: DM Sans headings, gradual-disempowerment hook band in brand orange, content structured along the paper's representation/aggregation/revision dimensions.
+
+Gotchas (June 2026 session):
+- **Figures must come from the final paper PDF**, not `delibsim/Paper/` — the delibsim copies predate the last experiment round (paper was finished in Overleaf). Extract with `pdfimages -png -p <pdf>`; all paper figures are embedded rasters.
+- Export via `./poster-icml/export-pdf.sh` (Chrome headless honours the CSS `@page` size). Preview/iterate by rasterising: `pdftoppm -png -r 50 poster.pdf out`.
+- The poster is a fixed-height CSS grid with `overflow: hidden` — **`grid-template-rows` must have exactly one track per child section**, or the `1fr` stretch row lands on the wrong section and content silently overlaps/clips. Count tracks when adding/removing sections.
+- Paper stats used on the poster: 140 deliberations / 159 agents / 2,404 opinions; Table 1 sims 0.745/0.747/0.649; >90% of users (83 of 91) never revised.
+
 ## Resources
 - [Habermas Machine paper](https://www.science.org/doi/10.1126/science.adq2852) (Science, 2024)
 - [OpenClaw docs](https://docs.openclaw.ai/start/getting-started)
