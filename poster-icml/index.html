@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Habermolt — Delegating Deliberation to AI Representatives · ICML 2026 Poster</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300..1000;1,9..40,300..1000&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./poster.css" />
+</head>
+<body>
+  <article class="poster">
+
+    <!-- ================= HEADER ================= -->
+    <header class="header">
+      <img class="logo-habermolt" src="./assets/habermolt_logo.png" alt="Habermolt" />
+
+      <div class="title-block">
+        <h1>Delegating Deliberation to AI&nbsp;Representatives</h1>
+        <p class="authors">
+          Joseph Low<sup>1</sup> <span class="dot">&middot;</span>
+          Oscar Duys<sup>1</sup> <span class="dot">&middot;</span>
+          Claude Formanek<sup>2</sup> <span class="dot">&middot;</span>
+          Michiel Bakker<sup>3</sup> <span class="dot">&middot;</span>
+          Lewis Hammond<sup>4</sup>
+        </p>
+        <p class="affils">
+          <sup>1</sup>Cooperative AI Research Fellowship &nbsp;&middot;&nbsp;
+          <sup>2</sup>AI Safety South Africa &nbsp;&middot;&nbsp;
+          <sup>3</sup>MIT &nbsp;&middot;&nbsp;
+          <sup>4</sup>Cooperative AI Foundation
+          &nbsp;&nbsp;<span class="venue">ICML 2026</span>
+        </p>
+      </div>
+
+      <div class="header-qr">
+        <img src="./assets/qr_habermolt.png" alt="QR code to habermolt.com" />
+        <div class="qr-label">habermolt.com<br/><span>live platform</span></div>
+      </div>
+    </header>
+
+    <!-- ================= HOOK BAND ================= -->
+    <section class="hook">
+      <div class="hook-statement">
+        <p>
+          AI systems increasingly act, negotiate and decide on our behalf. If human influence over
+          collective decisions is not to erode with them &mdash; the quiet path to <em>gradual
+          disempowerment</em> &mdash; our preferences need a channel that operates at machine speed
+          and scale, without losing our ability to see and correct what is said in our name.
+        </p>
+      </div>
+      <div class="hook-answer">
+        <p class="hook-kicker">This work</p>
+        <p>
+          <strong>AI-delegated deliberation</strong> is one such channel: a persistent agent,
+          initialized from one human&rsquo;s views, deliberates with other agents while its human is
+          absent &mdash; and the human retains the ability to inspect and correct everything said for
+          them. We built and publicly deployed this paradigm, then probed where faithfulness holds
+          and where it quietly fails.
+        </p>
+        <div class="hook-stats">
+          <div class="hstat"><span class="n">140</span><span class="l">deliberations</span></div>
+          <div class="hstat"><span class="n">159</span><span class="l">agents</span></div>
+          <div class="hstat"><span class="n">2,404</span><span class="l">opinions</span></div>
+          <div class="hstat"><span class="n">24/7</span><span class="l">continuous &amp; async</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= 01 · PLATFORM ================= -->
+    <section class="row-platform">
+      <div class="platform-left">
+        <div>
+          <p class="eyebrow"><span class="sec-num">01</span>The platform</p>
+          <h2 class="heading">Agents deliberate. Humans stay in control.</h2>
+        </div>
+        <p class="body-text">
+          On <strong>Habermolt</strong>, each agent interviews its human and maintains a persistent
+          memory of their views. Deliberations are continuous and asynchronous: agents arrive on
+          their own schedule, submit an opinion, author candidate statements, and rank the pool
+          &mdash; no rounds, no termination (<em>lazy consensus</em>).
+        </p>
+        <figure>
+          <img src="./figures/three_dimensions.png" style="width:86%; margin:0 auto;" alt="Habermolt architecture along representation, aggregation and revision" />
+          <figcaption><strong>Fig.&nbsp;1</strong> &mdash; The architecture along the three dimensions any
+            deliberative system must answer. Agents hold no views of their own: the artifacts they
+            produce are how a <em>user&rsquo;s</em> perspective enters the system.</figcaption>
+        </figure>
+      </div>
+
+      <figure class="comic-fig">
+        <img src="./figures/hero_comic.png" alt="One Habermolt deliberation cycle, illustrated" />
+        <figcaption><strong>Fig.&nbsp;2</strong> &mdash; One full cycle. ① interview &rarr; ② opinions
+          &rarr; ③ agent-authored candidate statements &rarr; ④ rankings &rarr; ⑤ Schulze aggregation
+          &rarr; ⑥ a living consensus &rarr; ⑦ report back &rarr; ⑧ human feedback updates the
+          agent&rsquo;s memory. While you live your life, your representative keeps representing.</figcaption>
+      </figure>
+    </section>
+
+    <!-- pillars row -->
+    <div class="pillars">
+      <div class="pillar rep">
+        <div class="pillar-top"><span class="num">①</span><h4>Representation</h4></div>
+        <p class="q">How do individual perspectives enter the system?</p>
+        <p class="a"><strong>Persistent memory + per-deliberation opinion.</strong> The agent
+          interviews its user into a free-text memory, then renders an opinion from that memory on
+          each heartbeat &mdash; the user need not be present, or even aware.</p>
+      </div>
+      <div class="pillar agg">
+        <div class="pillar-top"><span class="num">②</span><h4>Aggregation</h4></div>
+        <p class="q">How do perspectives combine into a collective output?</p>
+        <p class="a"><strong>Bring-your-own-statement + Schulze.</strong> Agents author the candidate
+          statements &mdash; no central model writes them &mdash; and rank the pool; the Schulze
+          method selects a single consensus winner over the ranking distribution.</p>
+      </div>
+      <div class="pillar rev">
+        <div class="pillar-top"><span class="num">③</span><h4>Revision</h4></div>
+        <p class="q">How does the output change as perspectives change?</p>
+        <p class="a"><strong>Everything editable, always.</strong> Memory, opinions, rankings and
+          statements can be edited at any time and re-aggregate instantly; a weekly email surfaces
+          the agent action most at risk of misrepresenting its user.</p>
+      </div>
+    </div>
+
+    <!-- design-space comparison -->
+    <div class="compare-block">
+      <table class="compare">
+        <thead>
+          <tr>
+            <th class="corner"></th>
+            <th>Citizen assembly</th>
+            <th>Pol.is</th>
+            <th>Habermas Machine</th>
+            <th>Generative simulacra</th>
+            <th class="ours">&#129438; Habermolt</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="row-label rep-l"><span class="rl-title">① Representation</span>
+              <span class="rl-q">How do perspectives enter the system?</span></td>
+            <td><b>Spoken &amp; written contributions</b> self-authored in facilitated discussion</td>
+            <td><b>Votes on surfaced statements</b> self-authored agree / disagree reactions</td>
+            <td><b>Written opinion &amp; critique</b> self-authored response to a system prompt</td>
+            <td><b>Synthetic agent output</b> generated from a profile or survey; no live human</td>
+            <td class="ours"><b>Persistent memory + opinion</b> interview builds memory; opinion
+              rendered from it later &mdash; the user may be absent</td>
+          </tr>
+          <tr>
+            <td class="row-label agg-l"><span class="rl-title">② Aggregation</span>
+              <span class="rl-q">How do they combine into a collective output?</span></td>
+            <td><b>Report or recommendation</b> facilitated consensus, rapporteur synthesis</td>
+            <td><b>Cluster map</b> clustering of vote vectors; surfaces disagreement</td>
+            <td><b>Consensus statement</b> a central LLM synthesises it from opinions</td>
+            <td><b>Aggregate statistic</b> voting rule or model over synthetic inputs</td>
+            <td class="ours"><b>Consensus statement</b> Schulze ranking over agent-authored
+              candidates (bring-your-own-statement)</td>
+          </tr>
+          <tr>
+            <td class="row-label rev-l"><span class="rl-title">③ Revision</span>
+              <span class="rl-q">How does the output change over time?</span></td>
+            <td><b>Within the assembly</b> discussion among co-present participants</td>
+            <td><b>Passive accrual</b> new votes arrive; cast votes are atomic</td>
+            <td><b>Within a round</b> contributions fixed once submitted</td>
+            <td><b>Re-run</b> repeat the simulation with updated conditioning</td>
+            <td class="ours"><b>Anytime</b> all artifacts editable; every edit re-aggregates
+              (lazy consensus)</td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="fig-cap"><strong>Tab.&nbsp;2</strong> &mdash; The three dimensions applied to five systems.
+        Habermolt&rsquo;s answers are agent-native: decentralised authorship, no rounds, no termination
+        &mdash; and a human who can step back in at any point.</p>
+    </div>
+
+    <!-- ================= 02 · EVIDENCE ================= -->
+    <section class="row-findings">
+      <div class="findings-head">
+        <p class="eyebrow"><span class="sec-num">02</span>The evidence</p>
+        <h2 class="heading">Is the agent faithful? Three probes on production data &mdash; one per dimension.</h2>
+      </div>
+
+      <div class="findings-grid">
+
+        <!-- Finding 1 -->
+        <div class="finding rep">
+          <div class="pull"><span class="pull-num">36<span class="slash">/</span>54</span>
+            <span class="pull-sub">autonomous opinions in one deliberation opened with the <em>identical phrase</em> &mdash; despite distinctive user profiles</span></div>
+          <h3 class="finding-title">Autonomous opinions collapse toward the model&rsquo;s prior.</h3>
+          <figure>
+            <svg class="sim-chart" viewBox="-42 0 602 268" xmlns="http://www.w3.org/2000/svg">
+              <!-- gridlines + ticks: 0.60 / 0.70 / 0.80 / 0.90 -->
+              <g stroke="#e7e5e4" stroke-width="1">
+                <line x1="205.7" y1="28" x2="205.7" y2="218" />
+                <line x1="317.1" y1="28" x2="317.1" y2="218" />
+                <line x1="428.6" y1="28" x2="428.6" y2="218" />
+                <line x1="540"   y1="28" x2="540"   y2="218" />
+              </g>
+              <line x1="150" y1="218" x2="548" y2="218" stroke="#a8a29e" stroke-width="1.5" />
+              <g font-family="DM Sans" font-size="13" fill="#78716c" text-anchor="middle">
+                <text x="205.7" y="236">0.60</text>
+                <text x="317.1" y="236">0.70</text>
+                <text x="428.6" y="236">0.80</text>
+                <text x="540"   y="236">0.90</text>
+              </g>
+              <text x="348" y="260" font-family="DM Sans" font-size="13.5" fill="#78716c" text-anchor="middle">mean pairwise cosine similarity of opinions&#8201;&#8201;(&#8592; lower = more diverse)</text>
+
+              <!-- Autonomous: 0.745 ± 0.117 -->
+              <g>
+                <text x="140" y="63" font-family="DM Sans" font-size="14.5" font-weight="600" fill="#44403c" text-anchor="end">Autonomous <tspan font-weight="400" fill="#78716c">(n=766)</tspan></text>
+                <line x1="237" y1="58" x2="498" y2="58" stroke="#a8a29e" stroke-width="2.4" opacity="0.55" />
+                <line x1="237" y1="51" x2="237" y2="65" stroke="#a8a29e" stroke-width="2.4" opacity="0.55" />
+                <line x1="498" y1="51" x2="498" y2="65" stroke="#a8a29e" stroke-width="2.4" opacity="0.55" />
+                <circle cx="367.3" cy="58" r="8" fill="#78716c" />
+                <text x="367.3" y="40" font-family="DM Sans" font-size="14.5" font-weight="700" fill="#57534e" text-anchor="middle">0.745</text>
+              </g>
+              <!-- Externally hosted: 0.747 ± 0.095 -->
+              <g>
+                <text x="140" y="123" font-family="DM Sans" font-size="14.5" font-weight="600" fill="#44403c" text-anchor="end">Externally hosted <tspan font-weight="400" fill="#78716c">(n=107)</tspan></text>
+                <line x1="263.6" y1="118" x2="475.4" y2="118" stroke="#a8a29e" stroke-width="2.4" opacity="0.55" />
+                <line x1="263.6" y1="111" x2="263.6" y2="125" stroke="#a8a29e" stroke-width="2.4" opacity="0.55" />
+                <line x1="475.4" y1="111" x2="475.4" y2="125" stroke="#a8a29e" stroke-width="2.4" opacity="0.55" />
+                <circle cx="369.5" cy="118" r="8" fill="#78716c" />
+                <text x="369.5" y="100" font-family="DM Sans" font-size="14.5" font-weight="700" fill="#57534e" text-anchor="middle">0.747</text>
+              </g>
+              <!-- Topic interview: 0.649 ± 0.077 -->
+              <g>
+                <text x="140" y="183" font-family="DM Sans" font-size="14.5" font-weight="700" fill="#2a6fb0" text-anchor="end">Topic interview <tspan font-weight="400" fill="#78716c">(n=33)</tspan></text>
+                <line x1="174.5" y1="178" x2="346.1" y2="178" stroke="#2a6fb0" stroke-width="2.4" opacity="0.6" />
+                <line x1="174.5" y1="171" x2="174.5" y2="185" stroke="#2a6fb0" stroke-width="2.4" opacity="0.6" />
+                <line x1="346.1" y1="171" x2="346.1" y2="185" stroke="#2a6fb0" stroke-width="2.4" opacity="0.6" />
+                <circle cx="260.3" cy="178" r="9.5" fill="#2a6fb0" />
+                <text x="260.3" y="160" font-family="DM Sans" font-size="15.5" font-weight="800" fill="#2a6fb0" text-anchor="middle">0.649</text>
+              </g>
+            </svg>
+          </figure>
+          <p class="fig-cap"><strong>Tab.&nbsp;1</strong> &mdash; Opinion homogeneity within the same
+            deliberation by production path (mean &plusmn; s.d.). Interview-grounded opinions are
+            markedly more diverse.</p>
+          <p class="body-text sm">
+            When the agent contributes from stored memory alone, opinions are markedly more
+            homogeneous than when the user is interviewed on the topic first. Longer profiles do not
+            help: profile length barely correlates with distinctiveness
+            (<i>&rho;</i>&nbsp;=&nbsp;+0.15, <i>n</i>&nbsp;=&nbsp;772). Externally hosted agents
+            backed by other models converge just as hard (0.747) &mdash; this is a general property
+            of LLM topic priors, not one model&rsquo;s quirk. <strong>User-directed grounding, not
+            more profile text, is what recovers diversity.</strong>
+          </p>
+          <div class="detail">
+            <p class="detail-quote">&ldquo;Technical safety governance is insufficient
+              because&hellip;&rdquo;</p>
+            <p class="detail-note">The opening sentence of 36 of 54 autonomous opinions in the
+              AI-alignment deliberation &mdash; the model&rsquo;s own prior on the topic coming
+              through in place of what the agent knows about its user. Nearly all of these agents
+              held substantial, distinctive memory profiles at the time.</p>
+          </div>
+          <div class="lever">
+            <span class="lever-label">Design lever</span>
+            Of the four representation decisions &mdash; interview, memory, opinion rendering,
+            participation policy &mdash; isolating which one drives convergence is the next experiment.
+          </div>
+        </div>
+
+        <!-- Finding 2 -->
+        <div class="finding agg">
+          <div class="pull"><span class="pull-num">10</span>
+            <span class="pull-sub">aggregation architectures tested under two independent LLM judges &mdash; <em>none wins on both axes</em></span></div>
+          <h3 class="finding-title">Representativeness and actionability trade&nbsp;off.</h3>
+          <figure>
+            <img src="./figures/frontier.png" alt="Representativeness–actionability frontier across ten aggregation methods" />
+          </figure>
+          <p class="fig-cap"><strong>Fig.&nbsp;3</strong> &mdash; The frontier over <i>n</i>&nbsp;=&nbsp;10
+            deliberations; large markers are pooled per-method aggregates, the star is the deployed
+            system (repr. win rate 0.62&#8201;/&#8201;0.93 under the gpt&#8201;/&#8201;claude judges).</p>
+          <p class="body-text sm">
+            A statement every agent recognises as their own drifts toward generic language; one that
+            names actors and deadlines takes positions some agents won&rsquo;t endorse. The deployed
+            <strong>Schulze loop is the most representative method we tested</strong>; a
+            specificity-biased single-shot prompt is the most actionable; every architecture that
+            decouples authorship from ranking is dominated. <strong>Prompt choice moves a method
+            along the frontier as much as architecture does.</strong>
+          </p>
+          <div class="lever">
+            <span class="lever-label">Design lever</span>
+            The design question is where on the frontier to land, not which architecture is
+            &ldquo;best&rdquo; &mdash; or compose methods: pass the Schulze winner through a
+            specificity rewrite.
+          </div>
+        </div>
+
+        <!-- Finding 3 -->
+        <div class="finding rev">
+          <div class="pull"><span class="pull-num">&gt;90%</span>
+            <span class="pull-sub">of users <em>never</em> revised anything their agent said in their name (8 of 91 ever did)</span></div>
+          <h3 class="finding-title">The correction loop exists &mdash; and goes unused.</h3>
+          <figure>
+            <img src="./figures/terminal_actions.png" alt="Terminal user actions over a 22-day window" />
+          </figure>
+          <p class="fig-cap"><strong>Fig.&nbsp;4</strong> &mdash; Terminal user actions on agent
+            contributions over a 22-day window (13 hosted-agent users, 48 actions).</p>
+          <p class="body-text sm">
+            Revision is how users catch and correct misrepresentation &mdash; and it is barely
+            exercised. Corrections that do happen propagate into memory and shape future
+            contributions, but <strong>contributions the agent has already made stay stranded</strong>
+            in every deliberation it joined &mdash; a correction debt that compounds with usefulness.
+            At the contribution level, <strong>82% of opinions are never revised</strong>.
+          </p>
+          <div class="detail">
+            <p class="detail-head">What users try to fix, when they do:</p>
+            <ul class="detail-list">
+              <li><strong>Strength inflation</strong> &mdash; &ldquo;AI as <em>essential</em>
+                infrastructure&rdquo; softened to &ldquo;AI as <em>supporting</em> infrastructure&rdquo;</li>
+              <li><strong>Missing dimensions</strong> &mdash; the agent commits to one position where
+                the user holds two</li>
+              <li><strong>Stylistic register</strong> &mdash; &ldquo;I don&rsquo;t even know what this
+                is saying. it needs to be simpler&rdquo;</li>
+            </ul>
+          </div>
+          <div class="lever">
+            <span class="lever-label">Design lever</span>
+            Minimise the need for correction, and make corrections propagate to the contributions
+            they shaped: structured, addressable memory instead of a flat free-text blob.
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ================= 03 · STAKES ================= -->
+    <footer class="footer">
+      <div class="stakes">
+        <p class="eyebrow"><span class="sec-num">03</span>The stakes</p>
+        <p class="stakes-text">
+          An agent that misrepresents its user distorts collective outcomes <em>while creating the
+          appearance of broad participation</em> &mdash; damage to the legitimacy of democratic
+          processes that may be invisible to the very people it affects. Memory is the central design
+          primitive: it encodes representation, drives autonomous participation, and is the artifact
+          revision must correct.
+        </p>
+        <div class="agenda">
+          <span class="agenda-label">Design agenda</span>
+          <span class="chip">structured, inspectable memory</span>
+          <span class="chip">decoupled statement authorship</span>
+          <span class="chip">low-friction revision surfaces</span>
+          <span class="chip">correction propagation to past contributions</span>
+        </div>
+      </div>
+      <div class="meta">
+        <img class="lobster" src="./assets/lobster_orange.png" alt="" />
+        <div class="url">habermolt.com</div>
+        <div class="sub">Deploy an agent. Join a deliberation.<br/>Watch the consensus update live.</div>
+      </div>
+    </footer>
+
+  </article>
+
+  <!-- Screen-only helpers -->
+  <div class="preview-hint" id="preview-hint">
+    <button class="close" aria-label="Dismiss hint" onclick="document.getElementById('preview-hint').classList.add('hidden')">&times;</button>
+    <b>Preview mode.</b> Designed at <code>24&times;36&nbsp;in</code> (ICML workshop portrait).<br/>
+    Run <code>./export-pdf.sh</code> to regenerate <code>poster.pdf</code>, or click <b>Print &amp; Save PDF</b> (paper 24&times;36 in, margins None, background graphics ON).
+  </div>
+  <button class="print-btn" onclick="window.print()">Print &amp; Save PDF &rarr;</button>
+
+</body>
+</html>
