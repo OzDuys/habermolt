@@ -3,10 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Habermolt — Delegating Deliberation to AI Representatives · ICML 2026 Poster</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300..1000;1,9..40,300..1000&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+  <title>Habermolt — Delegating Deliberation to AI Representatives · Poster</title>
   <link rel="stylesheet" href="./poster.css" />
 </head>
 <body>
@@ -14,7 +11,6 @@
 
     <!-- ================= HEADER ================= -->
     <header class="header">
-      <img class="logo-habermolt" src="./assets/habermolt_logo.png" alt="Habermolt" />
 
       <div class="title-block">
         <h1>Delegating Deliberation to AI&nbsp;Representatives</h1>
@@ -30,7 +26,6 @@
           <sup>2</sup>AI Safety South Africa &nbsp;&middot;&nbsp;
           <sup>3</sup>MIT &nbsp;&middot;&nbsp;
           <sup>4</sup>Cooperative AI Foundation
-          &nbsp;&nbsp;<span class="venue">ICML 2026</span>
         </p>
       </div>
 
@@ -44,20 +39,22 @@
     <section class="hook">
       <div class="hook-statement">
         <p>
-          AI systems increasingly act, negotiate and decide on our behalf. If human influence over
-          collective decisions is not to erode with them &mdash; the quiet path to <em>gradual
-          disempowerment</em> &mdash; our preferences need a channel that operates at machine speed
-          and scale, without losing our ability to see and correct what is said in our name.
+          AI systems may increasingly act, negotiate and decide on our behalf in the very near
+          future. If human influence over collective decisions is not to erode with them, the quiet
+          path to <em>gradual disempowerment</em>, individual preferences need a channel that
+          operates at machine speed and scale while preserving our ability to inspect and correct
+          the decisions made for us.
         </p>
       </div>
       <div class="hook-answer">
         <p class="hook-kicker">This work</p>
         <p>
-          <strong>AI-delegated deliberation</strong> is one such channel: a persistent agent,
-          initialized from one human&rsquo;s views, deliberates with other agents while its human is
-          absent &mdash; and the human retains the ability to inspect and correct everything said for
-          them. We built and publicly deployed this paradigm, then probed where faithfulness holds
-          and where it quietly fails.
+          <strong>AI-delegated deliberation</strong> is one such channel. A persistent agent,
+          initialized from a single person&rsquo;s views, deliberates with other agents while that
+          person is absent, and the person can later inspect and correct everything the agent argued
+          on their behalf. We built this paradigm and deployed it publicly with real participants
+          across a range of questions, then probed where that faithfulness holds and where it
+          quietly fails.
         </p>
         <div class="hook-stats">
           <div class="hstat"><span class="n">140</span><span class="l">deliberations</span></div>
@@ -358,8 +355,8 @@
   <!-- Screen-only helpers -->
   <div class="preview-hint" id="preview-hint">
     <button class="close" aria-label="Dismiss hint" onclick="document.getElementById('preview-hint').classList.add('hidden')">&times;</button>
-    <b>Preview mode.</b> Designed at <code>24&times;36&nbsp;in</code> (ICML workshop portrait).<br/>
-    Run <code>./export-pdf.sh</code> to regenerate <code>poster.pdf</code>, or click <b>Print &amp; Save PDF</b> (paper 24&times;36 in, margins None, background graphics ON).
+    <b>Preview mode.</b> Designed at <code>610&times;910&nbsp;mm</code> (ICML workshop portrait).<br/>
+    Run <code>./export-pdf.sh</code> to regenerate <code>poster.pdf</code>, or click <b>Print &amp; Save PDF</b> (paper 610&times;910 mm, margins None, background graphics ON).
   </div>
   <button class="print-btn" onclick="window.print()">Print &amp; Save PDF &rarr;</button>
 

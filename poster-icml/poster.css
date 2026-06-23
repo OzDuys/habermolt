@@ -1,6 +1,6 @@
 /* ============================================================
    Habermolt — ICML 2026 Poster (v2)
-   Workshop portrait · 24in × 36in (609.6mm × 914.4mm)
+   Workshop portrait · 610mm × 910mm
    Editorial system: DM Sans display, Instrument Serif for the
    hook statement, habermolt.com palette. Futura Handwritten is
    reserved for the footer URL (brand accent only).
@@ -13,6 +13,19 @@
   font-style: normal;
   font-display: swap;
 }
+
+@font-face{font-family:'DM Sans';font-style:normal;font-weight:300;src:url('./fonts/dmsans-300.woff2') format('woff2');font-display:swap;}
+@font-face{font-family:'DM Sans';font-style:normal;font-weight:400;src:url('./fonts/dmsans-400.woff2') format('woff2');font-display:swap;}
+@font-face{font-family:'DM Sans';font-style:normal;font-weight:500;src:url('./fonts/dmsans-500.woff2') format('woff2');font-display:swap;}
+@font-face{font-family:'DM Sans';font-style:normal;font-weight:600;src:url('./fonts/dmsans-600.woff2') format('woff2');font-display:swap;}
+@font-face{font-family:'DM Sans';font-style:normal;font-weight:700;src:url('./fonts/dmsans-700.woff2') format('woff2');font-display:swap;}
+@font-face{font-family:'DM Sans';font-style:normal;font-weight:800;src:url('./fonts/dmsans-800.woff2') format('woff2');font-display:swap;}
+@font-face{font-family:'DM Sans';font-style:italic;font-weight:400;src:url('./fonts/dmsans-400-italic.woff2') format('woff2');font-display:swap;}
+@font-face{font-family:'DM Sans';font-style:italic;font-weight:500;src:url('./fonts/dmsans-500-italic.woff2') format('woff2');font-display:swap;}
+@font-face{font-family:'DM Sans';font-style:italic;font-weight:600;src:url('./fonts/dmsans-600-italic.woff2') format('woff2');font-display:swap;}
+@font-face{font-family:'Instrument Serif';font-style:normal;font-weight:400;src:url('./fonts/instrument-400.woff2') format('woff2');font-display:swap;}
+@font-face{font-family:'Instrument Serif';font-style:italic;font-weight:400;src:url('./fonts/instrument-400-italic.woff2') format('woff2');font-display:swap;}
+
 
 :root {
   --background: #ffffff;
@@ -55,13 +68,13 @@ body {
 }
 
 @page {
-  size: 24in 36in;
+  size: 610mm 910mm;
   margin: 0;
 }
 
 .poster {
-  width: 24in;
-  height: 36in;
+  width: 610mm;
+  height: 910mm;
   background: var(--background);
   color: var(--foreground);
   position: relative;
@@ -78,7 +91,7 @@ body {
 /* ==============  HEADER  ==================================== */
 header.header {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 11mm;
   padding-bottom: 6mm;
@@ -329,7 +342,7 @@ figcaption em, .fig-cap em { font-style: italic; }
 }
 
 .comic-fig img {
-  box-shadow: 0 1.5mm 6mm rgba(28, 25, 23, 0.07);
+  box-shadow: none;
 }
 
 /* pillars row */
@@ -841,6 +854,45 @@ footer .meta .sub {
 
 @media print {
   html, body { background: #fff; padding: 0; }
-  .poster { box-shadow: none; width: 24in; height: 36in; }
+  .poster { box-shadow: none; width: 610mm; height: 910mm; }
   .print-btn, .preview-hint { display: none !important; }
 }
+
+/* ============================================================
+   FIT-TO-610×910mm ADJUSTMENTS
+   The fixed-canvas content ran ~40mm taller than the 910mm page,
+   collapsing the findings (1fr) track and overlapping the footer.
+   These coordinated, proportional vertical reductions reclaim the
+   space so findings fills cleanly and the footer sits below it.
+   ============================================================ */
+.poster { gap: 5.5mm; padding: 10mm 17mm 10mm; }
+.hook-statement { padding: 6mm 10mm 6mm 11mm; }
+.hook-answer { padding: 5.5mm 10mm 5.5mm 9mm; gap: 3mm; }
+.row-platform { gap: 7mm; padding-top: 0; }
+.platform-left { gap: 3.6mm; }
+.pillars { gap: 4mm; }
+.pillar { padding: 3.2mm 5mm 3.6mm; }
+.compare-block { gap: 2mm; }
+table.compare th, table.compare td { padding: 2.8mm 4.5mm; }
+table.compare th { padding-top: 3.2mm; padding-bottom: 3.2mm; }
+.row-findings { gap: 3.2mm; padding-top: 3mm; }
+.finding { gap: 2.4mm; padding-top: 2.6mm; }
+.finding figure img { max-height: 60mm; width: auto; max-width: 100%; margin: 0 auto; }
+.sim-chart { padding: 2mm 2mm 1mm; }
+footer.footer { padding-top: 4mm; }
+
+/* ============================================================
+   BOTTOM REBALANCE
+   The findings (1fr) track over-expanded, dumping ~34mm as a gap
+   above the bottom-aligned lever cards while section 3 (footer)
+   stayed cramped. Size findings to content, distribute each
+   column's slack evenly (so no single dead gap), give section 3
+   room to breathe, and pin the footer to the page bottom.
+   ============================================================ */
+.poster { grid-template-rows: repeat(7, auto); align-content: space-between; }
+.finding { justify-content: space-between; }
+.lever { margin-top: 0; }
+footer.footer { padding-top: 10mm; padding-bottom: 2mm; }
+.stakes { gap: 5mm; }
+.stakes-text { line-height: 1.44; }
+.agenda { gap: 3.2mm; }
